@@ -19,4 +19,10 @@ export class UpdateLogisticsSettingsDto {
   @IsOptional()
   @IsBoolean()
   clearApiKey?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(2048)
+  endpoint?: string;
 }

@@ -21,7 +21,7 @@ function createService(
     enabled: true,
     businessId: null,
     appKeyEncrypted: null,
-    endpoint: 'https://v1.apizero.cn/api/express',
+    endpoint: 'https://v1.apizero.cn/api/express-pro',
     requestType: 'GET',
     autoDetectType: 'AUTO',
     updatedAt: new Date('2026-08-19T00:00:00.000Z'),
@@ -31,6 +31,26 @@ function createService(
     logisticsSetting: {
       upsert: jest.fn().mockResolvedValue(settings),
     },
+    auditLog: { create: jest.fn() },
+    $transaction: jest.fn(async (callback: (tx: unknown) => unknown) =>
+      callback({
+        logisticsSetting: {
+          upsert: jest.fn(
+            async ({
+              create,
+              update,
+            }: {
+              create: Record<string, unknown>;
+              update: Record<string, unknown>;
+            }) =>
+              Object.assign({}, settings, create, update, {
+                updatedAt: new Date(),
+              }),
+          ),
+        },
+        auditLog: { create: jest.fn() },
+      }),
+    ),
   };
   const config = {
     getOrThrow: jest.fn((key: string) => {
@@ -80,7 +100,8 @@ describe('LogisticsService ApiZero adapter', () => {
       ),
     );
 
-    const result = await service.test('YT7460266600081', '圆通', '1234');
+    // com 不传，由 PRO 接口按单号自动识别快递公司。
+    const result = await service.test('YT7460266600081', '1234');
 
     expect(result).toMatchObject({
       success: true,
@@ -96,17 +117,32 @@ describe('LogisticsService ApiZero adapter', () => {
     });
     const [requestUrl, requestInit] = fetchMock.mock.calls[0];
     const url = new URL(String(requestUrl));
-    expect(url.origin + url.pathname).toBe('https://v1.apizero.cn/api/express');
+    expect(url.origin + url.pathname).toBe(
+      'https://v1.apizero.cn/api/express-pro',
+    );
     expect(url.searchParams.get('number')).toBe('YT7460266600081');
-    expect(url.searchParams.get('com')).toBe('yto');
+    expect(url.searchParams.has('com')).toBe(false);
     expect(url.searchParams.get('phone')).toBe('1234');
     expect(requestInit?.headers).toMatchObject({
       authorization: `Bearer ${apiKey}`,
     });
   });
 
-  it('supports anonymous automatic detection without com and phone', async () => {
+  it('PRO 接口没有匿名额度，缺少 API Key 时提示先配置', async () => {
     const { service } = createService();
+    const fetchMock = jest.spyOn(global, 'fetch');
+
+    await expect(service.test('YT7460266600081')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('自动识别时不带 com 和 phone，只带 number', async () => {
+    const apiKey = 'sk_test_logistics_123456789';
+    const { service } = createService({
+      appKeyEncrypted: encryptSensitiveValue(apiKey, encryptionKey),
+    });
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -131,7 +167,9 @@ describe('LogisticsService ApiZero adapter', () => {
     const url = new URL(String(requestUrl));
     expect(url.searchParams.has('com')).toBe(false);
     expect(url.searchParams.has('phone')).toBe(false);
-    expect(requestInit?.headers).not.toHaveProperty('authorization');
+    expect(requestInit?.headers).toMatchObject({
+      authorization: `Bearer ${apiKey}`,
+    });
     expect(result.stateText).toBe('暂无轨迹');
     expect(result.reason).toBe('查询结果为空，未查到物流轨迹信息');
   });
@@ -144,13 +182,18 @@ describe('LogisticsService ApiZero adapter', () => {
       BadRequestException,
     );
     await expect(
-      service.test('YT7460266600081', undefined, '12ab'),
+      service.test('YT7460266600081', '12ab'),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('从运单号里拆出手机尾号后分开提交', async () => {
-    const { service } = createService();
+    const { service } = createService({
+      appKeyEncrypted: encryptSensitiveValue(
+        'sk_test_logistics_123456789',
+        encryptionKey,
+      ),
+    });
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -199,8 +242,58 @@ describe('LogisticsService ApiZero adapter', () => {
     );
   });
 
-  it('maps non-zero ApiZero responses to a gateway error', async () => {
+  it('保存接口地址并回读，数据库不再使用固定地址', async () => {
     const { service } = createService();
+    const admin = { id: 'admin-1' } as never;
+
+    const result = await service.updateSettings(
+      {
+        enabled: true,
+        endpoint: 'https://v1.apizero.cn/api/express-pro?from=panel',
+      },
+      admin,
+      {},
+    );
+
+    expect(result.endpoint).toBe(
+      'https://v1.apizero.cn/api/express-pro?from=panel',
+    );
+  });
+
+  it('拒绝非法接口地址', async () => {
+    const { service } = createService();
+    const admin = { id: 'admin-1' } as never;
+
+    await expect(
+      service.updateSettings(
+        { enabled: true, endpoint: 'ftp://example.com/api' },
+        admin,
+        {},
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.updateSettings(
+        { enabled: true, endpoint: 'not-a-url' },
+        admin,
+        {},
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.updateSettings(
+        { enabled: true, endpoint: 'https://user:pass@example.com/api' },
+        admin,
+        {},
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('maps non-zero ApiZero responses to a gateway error', async () => {
+    const { service } = createService({
+      appKeyEncrypted: encryptSensitiveValue(
+        'sk_test_logistics_123456789',
+        encryptionKey,
+      ),
+    });
     jest.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ code: 40101, msg: 'API Key 无效' }), {
         status: 200,

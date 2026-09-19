@@ -193,8 +193,6 @@ interface LogisticsSettingsResponse {
   apiKeyConfigured: boolean;
   apiKeyMasked: string;
   endpoint: string;
-  anonymousDailyLimit: number;
-  authenticatedDailyLimit: number;
   updatedAt: string;
 }
 
@@ -239,16 +237,13 @@ const logisticsSaving = ref(false);
 const logisticsTesting = ref(false);
 const logisticsResult = ref<LogisticsResult | null>(null);
 const logisticsTestTrackingNo = ref('');
-const logisticsTestCarrierCode = ref('');
 const logisticsTestPhoneSuffix = ref('');
 const logisticsForm = reactive({
   enabled: false,
   apiKey: '',
   apiKeyConfigured: false,
   clearApiKey: false,
-  endpoint: 'https://v1.apizero.cn/api/express',
-  anonymousDailyLimit: 3,
-  authenticatedDailyLimit: 10,
+  endpoint: 'https://v1.apizero.cn/api/express-pro',
 });
 const auditLogs = ref<SystemAuditLogItem[]>([]);
 const auditPagination = reactive({
@@ -594,8 +589,6 @@ const loadLogisticsSettings = async () => {
     logisticsForm.apiKeyConfigured = response.data.apiKeyConfigured;
     logisticsForm.clearApiKey = false;
     logisticsForm.endpoint = response.data.endpoint;
-    logisticsForm.anonymousDailyLimit = response.data.anonymousDailyLimit;
-    logisticsForm.authenticatedDailyLimit = response.data.authenticatedDailyLimit;
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '物流配置加载失败'));
   } finally {
@@ -748,10 +741,12 @@ const saveLogistics = async () => {
       enabled: logisticsForm.enabled,
       apiKey: logisticsForm.apiKey.trim() || undefined,
       clearApiKey: logisticsForm.clearApiKey && !logisticsForm.apiKey.trim(),
+      endpoint: logisticsForm.endpoint.trim() || undefined,
     });
     logisticsForm.apiKey = '';
     logisticsForm.apiKeyConfigured = response.data.apiKeyConfigured;
     logisticsForm.clearApiKey = false;
+    logisticsForm.endpoint = response.data.endpoint;
     ElMessage.success('ApiZero 快递配置已保存');
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, 'ApiZero 快递配置保存失败'));
@@ -769,7 +764,6 @@ const testLogistics = async () => {
   try {
     const response = await http.post<LogisticsResult>('/admin/logistics/test', {
       trackingNo: logisticsTestTrackingNo.value.trim(),
-      carrierCode: logisticsTestCarrierCode.value.trim() || undefined,
       phoneSuffix: logisticsTestPhoneSuffix.value.trim() || undefined,
     });
     logisticsResult.value = response.data;
@@ -2157,8 +2151,11 @@ onMounted(async () => {
               ><el-icon><Van /></el-icon
             ></span>
             <div>
-              <h2>ApiZero 快递物流查询</h2>
-              <p>支持自动识别 100+ 快递公司；订单没有运单号时不显示查询图标。</p>
+              <h2>ApiZero 快递查询 PRO</h2>
+              <p>
+                支持自动识别 2000+
+                快递公司，顺丰、中通需手机号后四位；订单没有运单号时不显示查询图标。
+              </p>
             </div>
           </div>
           <el-switch v-model="logisticsForm.enabled" active-text="启用" inactive-text="停用" />
@@ -2172,17 +2169,20 @@ onMounted(async () => {
               :placeholder="
                 logisticsForm.apiKeyConfigured
                   ? '已加密保存，留空表示保持不变'
-                  : '可留空使用匿名额度，填写后使用账户额度'
+                  : 'PRO 接口必须填写，可在 apizero.cn/account/keys 获取'
               "
             />
           </el-form-item>
           <el-form-item label="接口地址" class="is-wide">
-            <el-input :model-value="logisticsForm.endpoint" readonly />
+            <el-input
+              v-model="logisticsForm.endpoint"
+              placeholder="https://v1.apizero.cn/api/express-pro"
+            />
           </el-form-item>
-          <el-form-item label="接口额度" class="is-wide">
+          <el-form-item label="计费与额度" class="is-wide">
             <div class="logistics-quota-copy">
-              <span>未填写 Key：{{ logisticsForm.anonymousDailyLimit }} 次/日</span>
-              <span>登录免费：{{ logisticsForm.authenticatedDailyLimit }} 次/日</span>
+              <span>PRO 接口按次计费，无匿名额度，必须填写 API Key</span>
+              <span>会员 1,700 / 3,500 次每日，超出按点数扣减</span>
             </div>
           </el-form-item>
           <el-form-item v-if="logisticsForm.apiKeyConfigured" label="已保存密钥">
@@ -2197,11 +2197,6 @@ onMounted(async () => {
             v-model="logisticsTestTrackingNo"
             class="logistics-test-input"
             placeholder="测试运单号"
-          />
-          <el-input
-            v-model="logisticsTestCarrierCode"
-            class="logistics-test-input"
-            placeholder="承运商编码（可空）"
           />
           <el-input
             v-model="logisticsTestPhoneSuffix"
@@ -2447,7 +2442,7 @@ onMounted(async () => {
 }
 
 .logistics-test-input {
-  width: 170px;
+  width: 190px;
 }
 
 .logistics-test-input.is-phone {

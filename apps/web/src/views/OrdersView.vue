@@ -253,7 +253,6 @@ const logisticsLoading = ref(false);
 const logisticsOrder = ref<OrderRow | null>(null);
 const logisticsKind = ref<'inbound' | 'shipment'>('shipment');
 const logisticsResult = ref<LogisticsQueryResult | null>(null);
-const logisticsCarrierCode = ref('');
 const logisticsPhoneSuffix = ref('');
 const activeQuickView = ref('all');
 let latestLoadRequest = 0;
@@ -1601,7 +1600,6 @@ const queryActiveLogistics = async () => {
       `/admin/logistics/orders/${row.id}/query`,
       {
         kind: logisticsKind.value,
-        carrierCode: logisticsCarrierCode.value.trim() || undefined,
         phoneSuffix: logisticsPhoneSuffix.value.trim() || undefined,
       },
     );
@@ -1621,7 +1619,6 @@ const openLogisticsQuery = async (row: OrderRow, kind: 'inbound' | 'shipment') =
   logisticsOrder.value = row;
   logisticsKind.value = kind;
   logisticsResult.value = null;
-  logisticsCarrierCode.value = kind === 'shipment' ? row.shipmentLink?.shipment.carrier || '' : '';
   // 运单号自带的手机尾号直接预填，无需手动再输入。
   logisticsPhoneSuffix.value = parsed.phoneSuffix;
   logisticsDialog.value = true;
@@ -2622,11 +2619,6 @@ onMounted(() => {
         </div>
         <div class="logistics-query-options">
           <el-input
-            v-model="logisticsCarrierCode"
-            clearable
-            placeholder="承运商编码（可空，默认自动识别）"
-          />
-          <el-input
             v-model="logisticsPhoneSuffix"
             clearable
             maxlength="4"
@@ -2793,7 +2785,7 @@ onMounted(() => {
 
 .logistics-query-options {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) auto;
   gap: 8px;
   margin-top: 10px;
 }

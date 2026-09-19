@@ -51,11 +51,7 @@ export class LogisticsController {
   @Post('test')
   @ApiOperation({ summary: '测试 ApiZero 快递查询' })
   test(@Body() dto: LogisticsTestDto) {
-    return this.logisticsService.test(
-      dto.trackingNo,
-      dto.carrierCode,
-      dto.phoneSuffix,
-    );
+    return this.logisticsService.test(dto.trackingNo, dto.phoneSuffix);
   }
 
   @Post('orders/:orderId/query')

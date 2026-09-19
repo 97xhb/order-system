@@ -212,7 +212,7 @@ model LogisticsSetting {
   enabled         Boolean  @default(false)
   businessId      String?  @map("business_id") @db.VarChar(100)
   appKeyEncrypted String?  @map("app_key_encrypted") @db.Text
-  endpoint        String   @default("https://v1.apizero.cn/api/express") @db.VarChar(2048)
+  endpoint        String   @default("https://v1.apizero.cn/api/express-pro") @db.VarChar(2048)
   requestType     String   @default("GET") @map("request_type") @db.VarChar(16)
   autoDetectType  String   @default("AUTO") @map("auto_detect_type") @db.VarChar(16)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

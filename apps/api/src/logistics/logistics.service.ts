@@ -17,8 +17,35 @@ import { UpdateLogisticsSettingsDto } from './dto/update-logistics-settings.dto'
 
 const SETTINGS_ID = 'default';
 const PROVIDER = 'APIZERO';
-const DEFAULT_ENDPOINT = 'https://v1.apizero.cn/api/express';
+const DEFAULT_ENDPOINT = 'https://v1.apizero.cn/api/express-pro';
 const CACHE_TTL_MS = 60_000;
+
+/**
+ * 快递查询 PRO 限速 2 req/s，这里留出余量串行化外发请求，
+ * 避免连续点击时触发 4029（调用过快）。
+ */
+const MIN_REQUEST_INTERVAL_MS = 550;
+
+/**
+ * 快递查询 PRO 业务错误码，取自官方文档「错误码」章节，
+ * 用来把接口回包翻译成管理员能直接处理的中文提示。
+ */
+const API_ZERO_ERROR_LABELS: Record<number, string> = {
+  4000: '请求参数错误',
+  4011: 'API Key 无效',
+  4013: 'API Key 已暂停',
+  4014: '当前 IP 不在 API Key 白名单',
+  4015: '该接口需要 API Key',
+  4022: '账户余额不足',
+  4029: '调用过于频繁，请稍后重试',
+  4030: '今日免费额度已用完',
+  4040: '接口已下线',
+  4041: '接口不存在',
+  5000: '接口服务器内部错误',
+  5020: '上游服务暂时不可用',
+  5021: '上游返回格式异常',
+  5030: '暂无可用节点',
+};
 
 type RequestMetadata = { ipAddress?: string; userAgent?: string };
 
@@ -68,6 +95,8 @@ export class LogisticsService {
     { expiresAt: number; result: LogisticsResult }
   >();
 
+  private nextRequestAt = 0;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -75,6 +104,55 @@ export class LogisticsService {
 
   private encryptionKey() {
     return this.config.getOrThrow<string>('DATA_ENCRYPTION_KEY');
+  }
+
+  /**
+   * 接口地址由后台自行填写和保存，需要校验为合法的 http/https 地址，
+   * 避免保存出无效地址后查询直接报错。
+   */
+  private normalizeEndpoint(value?: string | null) {
+    const input = value?.trim();
+    if (!input) throw new BadRequestException('请填写接口地址');
+    if (input.length > 2048) {
+      throw new BadRequestException('接口地址不能超过 2048 个字符');
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(input);
+    } catch {
+      throw new BadRequestException('接口地址格式不正确');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new BadRequestException('接口地址只支持 http 或 https');
+    }
+    if (parsed.username || parsed.password) {
+      throw new BadRequestException('接口地址不能包含账号或密码');
+    }
+    return parsed.toString();
+  }
+
+  /** 按 PRO 文档把业务错误码翻译成可操作的中文提示。 */
+  private describeApiZeroError(payload: ApiZeroResponse, httpStatus: number) {
+    const code = Number(payload.code);
+    const label = Number.isFinite(code)
+      ? API_ZERO_ERROR_LABELS[code]
+      : undefined;
+    const message = this.clean(payload.msg);
+    const detail = label || message;
+    if (detail) return detail;
+    return `ApiZero 快递接口返回 HTTP ${httpStatus}`;
+  }
+
+  /** PRO 接口限速 2 req/s，串行化外发请求并保留安全间隔。 */
+  private async waitForRequestSlot() {
+    const now = Date.now();
+    const scheduledAt = Math.max(now, this.nextRequestAt);
+    this.nextRequestAt = scheduledAt + MIN_REQUEST_INTERVAL_MS;
+    const wait = scheduledAt - now;
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
   }
 
   private clean(value?: string | null) {
@@ -115,6 +193,7 @@ export class LogisticsService {
     provider: string;
     enabled: boolean;
     appKeyEncrypted: string | null;
+    endpoint: string;
     updatedAt: Date;
   }) {
     return {
@@ -123,9 +202,7 @@ export class LogisticsService {
       enabled: settings.enabled,
       apiKeyConfigured: Boolean(settings.appKeyEncrypted),
       apiKeyMasked: settings.appKeyEncrypted ? '已加密保存' : '',
-      endpoint: DEFAULT_ENDPOINT,
-      anonymousDailyLimit: 3,
-      authenticatedDailyLimit: 10,
+      endpoint: settings.endpoint,
       updatedAt: settings.updatedAt,
     };
   }
@@ -140,6 +217,9 @@ export class LogisticsService {
     metadata: RequestMetadata,
   ) {
     const before = await this.loadSettings();
+    const endpoint = dto.endpoint
+      ? this.normalizeEndpoint(dto.endpoint)
+      : before.endpoint;
     const apiKey = this.clean(dto.apiKey);
     if (apiKey && dto.clearApiKey) {
       throw new BadRequestException('新 API Key 与清除密钥不能同时提交');
@@ -158,7 +238,7 @@ export class LogisticsService {
           provider: PROVIDER,
           enabled: dto.enabled,
           appKeyEncrypted: apiKeyEncrypted,
-          endpoint: DEFAULT_ENDPOINT,
+          endpoint,
           requestType: 'GET',
           autoDetectType: 'AUTO',
         },
@@ -167,7 +247,7 @@ export class LogisticsService {
           enabled: dto.enabled,
           businessId: null,
           appKeyEncrypted: apiKeyEncrypted,
-          endpoint: DEFAULT_ENDPOINT,
+          endpoint,
           requestType: 'GET',
           autoDetectType: 'AUTO',
         },
@@ -183,11 +263,13 @@ export class LogisticsService {
             provider: before.provider,
             enabled: before.enabled,
             apiKeyConfigured: Boolean(before.appKeyEncrypted),
+            endpoint: before.endpoint,
           } satisfies Prisma.InputJsonObject,
           afterData: {
             provider: setting.provider,
             enabled: setting.enabled,
             apiKeyConfigured: Boolean(setting.appKeyEncrypted),
+            endpoint: setting.endpoint,
           } satisfies Prisma.InputJsonObject,
           ipAddress: metadata.ipAddress,
           userAgent: metadata.userAgent,
@@ -213,38 +295,11 @@ export class LogisticsService {
     }
   }
 
+  /** 回包里的公司编码，PRO 自动识别后返回，直接规范成小写。 */
   private normalizeCarrierCode(value?: string | null) {
     const input = this.clean(value)?.toLowerCase();
     if (!input) return null;
-    const aliases: Record<string, string> = {
-      sf: 'sf',
-      顺丰: 'sf',
-      顺丰速运: 'sf',
-      yto: 'yto',
-      圆通: 'yto',
-      圆通快递: 'yto',
-      zto: 'zto',
-      中通: 'zto',
-      中通快递: 'zto',
-      sto: 'sto',
-      申通: 'sto',
-      申通快递: 'sto',
-      yunda: 'yunda',
-      yd: 'yunda',
-      韵达: 'yunda',
-      韵达快递: 'yunda',
-      jt: 'jt',
-      jtsd: 'jt',
-      极兔: 'jt',
-      极兔速递: 'jt',
-      jd: 'jd',
-      京东: 'jd',
-      京东物流: 'jd',
-      ems: 'ems',
-      邮政: 'ems',
-      中国邮政: 'ems',
-    };
-    return aliases[input] || (/^[a-z0-9_-]{2,20}$/.test(input) ? input : null);
+    return /^[a-z0-9_-]{2,20}$/.test(input) ? input : null;
   }
 
   private validateTrackingNo(value: string) {
@@ -294,9 +349,9 @@ export class LogisticsService {
   private normalizeResponse(value: ApiZeroResponse, trackingNo: string) {
     const data = value.data;
     if (Number(value.code) !== 0 || !data) {
-      const message =
-        this.clean(value.msg) || `接口错误 ${String(value.code ?? 'UNKNOWN')}`;
-      throw new BadGatewayException(`ApiZero 快递接口：${message}`);
+      throw new BadGatewayException(
+        `ApiZero 快递接口：${this.describeApiZeroError(value, 200)}`,
+      );
     }
     const state = String(data.status || data.state || 'UNKNOWN').toUpperCase();
     const traces = Array.isArray(data.traces)
@@ -326,18 +381,18 @@ export class LogisticsService {
   }
 
   private async request(
-    settings: { appKeyEncrypted: string | null },
+    settings: { appKeyEncrypted: string | null; endpoint: string },
     trackingNo: string,
-    carrierCode?: string | null,
     phoneSuffix?: string | null,
   ) {
-    const url = new URL(DEFAULT_ENDPOINT);
+    // PRO 文档：com 可省略，缺省由接口按单号自动识别快递公司。
+    const url = new URL(settings.endpoint);
     url.searchParams.set('number', trackingNo);
-    if (carrierCode) url.searchParams.set('com', carrierCode);
     if (phoneSuffix) url.searchParams.set('phone', phoneSuffix);
     const apiKey = this.getApiKey(settings);
 
     let response: Response;
+    await this.waitForRequestSlot();
     try {
       response = await fetch(url, {
         method: 'GET',
@@ -358,12 +413,15 @@ export class LogisticsService {
     } catch {
       throw new BadGatewayException('ApiZero 快递接口返回内容无法解析');
     }
-    if (!response.ok) {
-      const reason = this.clean(payload.msg);
+    // PRO 文档约定：HTTP 200 也要先判断业务 code === 0。
+    if (Number(payload.code) !== 0) {
       throw new BadGatewayException(
-        reason
-          ? `ApiZero 快递接口：${reason}`
-          : `ApiZero 快递接口返回 HTTP ${response.status}`,
+        `ApiZero 快递接口：${this.describeApiZeroError(payload, response.status)}`,
+      );
+    }
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `ApiZero 快递接口：${this.describeApiZeroError(payload, response.status)}`,
       );
     }
     return payload;
@@ -371,38 +429,35 @@ export class LogisticsService {
 
   private async queryTracking(
     trackingNoInput: string,
-    carrierCodeInput?: string | null,
     phoneSuffixInput?: string | null,
   ): Promise<LogisticsResult> {
     const trackingNo = this.validateTrackingNo(trackingNoInput);
-    const carrierCode = this.normalizeCarrierCode(carrierCodeInput);
     const phoneSuffix = this.validatePhoneSuffix(phoneSuffixInput);
     const settings = await this.loadSettings();
     if (!settings.enabled) {
       throw new ServiceUnavailableException('ApiZero 快递查询功能未启用');
     }
+    // 快递查询 PRO 没有匿名额度，请求必须携带 API Key。
+    if (!settings.appKeyEncrypted) {
+      throw new ServiceUnavailableException(
+        '快递查询 PRO 需要先在系统设置中填写 API Key',
+      );
+    }
 
-    const cacheKey = `${trackingNo}:${carrierCode || ''}:${phoneSuffix || ''}`;
+    const cacheKey = `${trackingNo}:${phoneSuffix || ''}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.result;
 
-    const response = await this.request(
-      settings,
-      trackingNo,
-      carrierCode,
-      phoneSuffix,
-    );
+    const response = await this.request(settings, trackingNo, phoneSuffix);
     const result = this.normalizeResponse(response, trackingNo);
-    if (carrierCode && !result.carrierCode) result.carrierCode = carrierCode;
     this.cache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, result });
     return result;
   }
 
-  async test(trackingNo: string, carrierCode?: string, phoneSuffix?: string) {
+  async test(trackingNo: string, phoneSuffix?: string) {
     const parsed = this.splitTrackingNo(trackingNo);
     return this.queryTracking(
       parsed.trackingNo,
-      carrierCode,
       phoneSuffix || parsed.phoneSuffix,
     );
   }
@@ -419,7 +474,7 @@ export class LogisticsService {
         id: true,
         inboundTrackingNo: true,
         shipmentLink: {
-          select: { shipment: { select: { trackingNo: true, carrier: true } } },
+          select: { shipment: { select: { trackingNo: true } } },
         },
       },
     });
@@ -430,12 +485,9 @@ export class LogisticsService {
         ? order.inboundTrackingNo
         : order.shipmentLink?.shipment.trackingNo;
     if (!trackingNo) throw new BadRequestException('该订单没有可查询的运单号');
-    const savedCarrier =
-      kind === 'shipment' ? order.shipmentLink?.shipment.carrier : null;
     const parsed = this.splitTrackingNo(trackingNo);
     const result = await this.queryTracking(
       parsed.trackingNo,
-      dto.carrierCode || savedCarrier,
       dto.phoneSuffix || parsed.phoneSuffix,
     );
     await this.prisma.auditLog.create({
