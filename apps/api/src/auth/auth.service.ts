@@ -4,7 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AdminStatus } from '@prisma/client';
+import { AdminStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_ADMIN_SESSION_TTL_DAYS } from './auth.constants';
 import type { AuthenticatedAdmin, RequestMetadata } from './auth.types';
@@ -52,6 +52,30 @@ export class AuthService {
       username: admin.username,
       displayName: admin.displayName,
     };
+  }
+
+  /**
+   * The same browser can send a stable device id together with a changed
+   * fingerprint, for example after switching the browser into mobile emulation.
+   * Deduplication must therefore also match on the device id, otherwise the
+   * previous session stays active and the new row collides with the
+   * active-device unique index, turning a valid login into HTTP 500.
+   */
+  private buildActiveDeviceFilters(
+    deviceIdHash: string | null,
+    deviceFingerprintHash: string | null,
+    userAgent?: string,
+  ): Prisma.AdminSessionWhereInput[] {
+    const filters: Prisma.AdminSessionWhereInput[] = [];
+    if (deviceFingerprintHash) filters.push({ deviceFingerprintHash });
+    if (deviceIdHash) filters.push({ deviceIdHash });
+    if (userAgent && deviceFingerprintHash) {
+      filters.push({ deviceFingerprintHash: null, userAgent });
+    }
+    if (userAgent && deviceIdHash) {
+      filters.push({ deviceIdHash: null, userAgent });
+    }
+    return filters;
   }
 
   async login(
@@ -123,40 +147,22 @@ export class AuthService {
           data: { deviceFingerprintHash },
         });
       }
+      const activeDeviceFilters = this.buildActiveDeviceFilters(
+        deviceIdHash,
+        deviceFingerprintHash,
+        metadata.userAgent,
+      );
       await transaction.adminSession.updateMany({
-        where: deviceFingerprintHash
-          ? {
-              adminUserId: admin.id,
-              revokedAt: null,
-              OR: [
-                { deviceFingerprintHash },
-                ...(metadata.userAgent
-                  ? [
-                      {
-                        deviceFingerprintHash: null,
-                        userAgent: metadata.userAgent,
-                      },
-                    ]
-                  : []),
-              ],
-            }
-          : deviceIdHash
-            ? {
-                adminUserId: admin.id,
-                revokedAt: null,
-                OR: [
-                  { deviceIdHash },
-                  ...(metadata.userAgent
-                    ? [{ deviceIdHash: null, userAgent: metadata.userAgent }]
-                    : []),
-                ],
-              }
+        where: {
+          adminUserId: admin.id,
+          revokedAt: null,
+          ...(activeDeviceFilters.length
+            ? { OR: activeDeviceFilters }
             : {
-                adminUserId: admin.id,
                 deviceIdHash: null,
                 userAgent: metadata.userAgent ?? null,
-                revokedAt: null,
-              },
+              }),
+        },
         data: { revokedAt: now },
       });
 
@@ -216,19 +222,41 @@ export class AuthService {
       throw new UnauthorizedException('登录已过期，请重新登录');
     }
 
-    if (
-      session.deviceFingerprintHash &&
-      hashDeviceIdentifier(deviceFingerprint) !== session.deviceFingerprintHash
-    ) {
+    const presentedDeviceIdHash = hashDeviceIdentifier(deviceId);
+    const presentedFingerprintHash = hashDeviceIdentifier(deviceFingerprint);
+    const storedDeviceIdentifiers = [
+      session.deviceIdHash,
+      session.deviceFingerprintHash,
+    ].filter((value): value is string => Boolean(value));
+    const presentedDeviceIdentifiers = [
+      presentedDeviceIdHash,
+      presentedFingerprintHash,
+    ].filter((value): value is string => Boolean(value));
+
+    // 只要浏览器给出的任一设备标识与登录时记录的标识一致就视为同一设备。
+    // 同一浏览器切换手机模拟、升级系统或改变窗口大小时指纹会变化，但稳定的
+    // 设备 ID 不变，这种情况不应把管理员强制退出。
+    const deviceMatches =
+      storedDeviceIdentifiers.length === 0 ||
+      presentedDeviceIdentifiers.some((value) =>
+        storedDeviceIdentifiers.includes(value),
+      );
+
+    if (!deviceMatches) {
       throw new UnauthorizedException('登录设备已变化，请重新登录');
     }
 
+    // 设备 ID 命中但指纹变化时，保持会话并把指纹更新为当前浏览器，
+    // 避免每次请求都重复判定。
     if (
-      !session.deviceFingerprintHash &&
-      session.deviceIdHash &&
-      hashDeviceIdentifier(deviceId) !== session.deviceIdHash
+      presentedFingerprintHash &&
+      session.deviceFingerprintHash &&
+      presentedFingerprintHash !== session.deviceFingerprintHash
     ) {
-      throw new UnauthorizedException('登录设备已变化，请重新登录');
+      await this.prisma.adminSession.update({
+        where: { id: session.id },
+        data: { deviceFingerprintHash: presentedFingerprintHash },
+      });
     }
 
     if (now.getTime() - session.lastSeenAt.getTime() > 5 * 60 * 1000) {
