@@ -100,3 +100,40 @@
 - DATA_ENCRYPTION_KEY 产生数据后不能更换，否则已加密内容无法解密。
 - 管理员初始密码只在第一次创建管理员时使用，之后在后台修改。
 - 不需要发布 3000 和 5432，外部只访问 8191 或反向代理的 80/443。
+
+八、已经部署过旧版本，怎么切换到新版本
+
+旧版本把密码写在 docker-compose.yml 顶部的 x-order-system-config 区域，
+新版本改为放在 .env.docker。切换时不要直接覆盖，按下面顺序做：
+
+1. 先备份数据库和密钥：
+
+   docker compose -f docker-compose.yml exec -T db \
+     pg_dump -U 旧数据库账号 -d 旧数据库名 -Fc > /root/order-backup.dump
+
+   记录旧版 docker-compose.yml 里的数据库账号、数据库密码、
+   数据加密 Key 和管理员账号，下面要填进 .env.docker。
+
+2. 拉取新代码，然后生成配置文件：
+
+   cp .env.docker.example .env.docker
+   chmod 600 .env.docker
+
+3. 把旧值原样填进 .env.docker，必须完全一致：
+
+   POSTGRES_DB=       旧版本 database-name
+   POSTGRES_USER=     旧版本 database-user
+   POSTGRES_PASSWORD= 旧版本 database-password
+   DATA_ENCRYPTION_KEY= 旧版本 data-encryption-key
+
+   只要这三项和旧值一致，就会继续使用同一个数据卷，业务数据不会丢。
+
+4. 用新命令重新启动：
+
+   docker compose --env-file .env.docker up -d --build
+
+5. 确认登录正常、订单数据还在，再把旧的备份文件收好。
+
+注意：数据卷名称必须是 order-system_postgres_data。如果新版本识别到的是
+另外一个空库，说明项目名或目录变了，执行 docker volume ls 对比一下，
+把新版本的项目名改回 order-system。

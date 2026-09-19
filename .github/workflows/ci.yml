@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成 Prisma Client
+        run: pnpm --filter @order-system/api prisma:generate
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/order_system?schema=public
+
+      - name: 格式检查
+        run: pnpm format:check
+
+      - name: 类型检查
+        run: pnpm -r typecheck
+
+      - name: 后端测试
+        run: pnpm --filter @order-system/api test
+
+      - name: 生产构建
+        run: pnpm -r build
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/order_system?schema=public
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验 Compose 配置
+        run: |
+          cp .env.docker.example .env.docker
+          sed -i \
+            -e 's|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=ci_only_database_password|' \
+            -e 's|^DATA_ENCRYPTION_KEY=.*|DATA_ENCRYPTION_KEY=ci_only_encryption_key_at_least_32_chars|' \
+            -e 's|^ADMIN_INITIAL_PASSWORD=.*|ADMIN_INITIAL_PASSWORD=ci_only_admin_password|' \
+            .env.docker
+          docker compose --env-file .env.docker config --quiet
+          echo "Compose 配置校验通过"

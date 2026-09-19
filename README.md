@@ -1,5 +1,8 @@
 # 下单登记与资金结算系统
 
+[![Deploy with Docker Compose](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](#一docker-compose-一键部署)
+[![License](https://img.shields.io/badge/License-Private-lightgrey)](#八安全提醒)
+
 面向下单、在线报单、寄件、收货佬回款、给下单人结算、利润统计和返利转换的一体化 Web 系统。
 
 - 前端：Vue 3 + TypeScript + Vite + Element Plus + VXE Table
@@ -45,11 +48,11 @@ Copy-Item .env.docker.example .env.docker
 
 打开 `.env.docker`，只改下面三项，其余保持默认即可：
 
-| 配置项 | 说明 |
-| --- | --- |
-| `POSTGRES_PASSWORD` | 数据库密码，只用字母、数字、点、下划线或短横线 |
-| `DATA_ENCRYPTION_KEY` | 数据加密密钥，至少 32 位；用 `openssl rand -hex 32` 生成 |
-| `ADMIN_INITIAL_PASSWORD` | 管理员首次登录密码，至少 6 位 |
+| 配置项                   | 说明                                                     |
+| ------------------------ | -------------------------------------------------------- |
+| `POSTGRES_PASSWORD`      | 数据库密码，只用字母、数字、点、下划线或短横线           |
+| `DATA_ENCRYPTION_KEY`    | 数据加密密钥，至少 32 位；用 `openssl rand -hex 32` 生成 |
+| `ADMIN_INITIAL_PASSWORD` | 管理员首次登录密码，至少 6 位                            |
 
 同时按实际访问方式填写：
 
@@ -93,7 +96,9 @@ http://你的IP:8191/login
 
 ## 二、后期源码更新后如何更新容器
 
-只需三步，数据库不会丢失。
+数据库不会丢失，`.env.docker` 不会被覆盖。
+
+### 方式 A：用 Git 部署（推荐）
 
 ```bash
 cd order-system          # 进入项目目录
@@ -101,10 +106,23 @@ git pull                 # 拉取最新源码
 sh scripts/update-docker.sh
 ```
 
-或者手动执行等价命令：
+### 方式 B：用 ZIP / 手动上传部署（飞牛 NAS 常见）
+
+飞牛等环境通常是把项目文件拷进目录，没有 git 仓库，按下面做：
+
+1. 从 GitHub 下载最新 ZIP 并解压。
+2. 用新文件覆盖旧目录中的程序文件，但**不要删除、不要覆盖 `.env.docker`**。
+3. 进入项目目录执行：
 
 ```bash
-git pull
+sh scripts/update-docker.sh
+```
+
+`update-docker.sh` 检测不到 git 时会跳过拉取，直接用当前目录重新构建。
+
+### 或者手动执行等价命令
+
+```bash
 docker compose --env-file .env.docker up -d --build
 ```
 
@@ -113,6 +131,13 @@ docker compose --env-file .env.docker up -d --build
 - `.env.docker` 不会被覆盖，密码和密钥保持不变。
 - 数据库迁移由 API 容器启动时自动执行，不需要手动操作。
 - `postgres_data` 数据卷不会被删除，业务数据完整保留。
+- 更新前建议先做一次备份：`docker compose --env-file .env.docker exec -T db pg_dump -U order_app -d order_system -Fc > order-backup.dump`
+
+### 从旧版本（密码写在 compose 顶部）升级
+
+如果你部署的是更早的版本，密码写在 `docker-compose.yml` 顶部，升级时不要直接覆盖。
+先按 [飞牛 Compose 安装说明](飞牛Compose安装.txt) 的第八节把旧值搬进 `.env.docker`，
+再启动，这样数据库卷和业务数据都会保留。
 
 ---
 
@@ -150,11 +175,11 @@ docker volume inspect order-system_postgres_data --format '{{.Mountpoint}}'
 
 主要数据卷：
 
-| 数据卷 | 内容 |
-| --- | --- |
+| 数据卷                       | 内容                    |
+| ---------------------------- | ----------------------- |
 | `order-system_postgres_data` | PostgreSQL 全部业务数据 |
-| `order-system_runtime_data` | 运行状态与开关 |
-| `order-system_caddy_data` | Web 服务数据 |
+| `order-system_runtime_data`  | 运行状态与开关          |
+| `order-system_caddy_data`    | Web 服务数据            |
 
 只删除容器或镜像不会删除数据卷。保留旧数据时必须继续使用原来的
 `POSTGRES_PASSWORD` 和 `DATA_ENCRYPTION_KEY`。

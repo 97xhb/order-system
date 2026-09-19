@@ -27,7 +27,7 @@ services:
       # 只把数据库自身需要的三个变量传进数据库容器。
       POSTGRES_DB: ${POSTGRES_DB:-order_system}
       POSTGRES_USER: ${POSTGRES_USER:-order_app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env.docker 中设置 POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?缺少 POSTGRES_PASSWORD，请用 docker compose --env-file .env.docker 启动}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
