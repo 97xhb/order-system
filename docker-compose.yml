@@ -1,0 +1,121 @@
+name: order-system
+
+# ================================================================
+# 一键部署：docker compose up -d --build
+#
+# 所有密码和密钥都放在同目录的 .env.docker 中（首次部署前复制模板）：
+#   cp .env.docker.example .env.docker
+#   vi .env.docker
+#
+# 密钥文件不进入版本库，所以以后更新源码只会覆盖本文件，
+# 不会覆盖你填好的 .env.docker，也不会影响数据库数据卷。
+# ================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *default-logging
+    environment:
+      # 只把数据库自身需要的三个变量传进数据库容器。
+      POSTGRES_DB: ${POSTGRES_DB:-order_system}
+      POSTGRES_USER: ${POSTGRES_USER:-order_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env.docker 中设置 POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      app:
+        aliases:
+          - db
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 30s
+    init: true
+    logging: *default-logging
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      API_PORT: '3000'
+      LOCAL_RUNTIME_STATE_PATH: /var/lib/order-system/runtime-control.json
+    expose:
+      - '3000'
+    volumes:
+      - runtime_data:/var/lib/order-system
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      app:
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 10s
+    init: true
+    logging: *default-logging
+    ports:
+      # 默认监听所有网卡的 8191 端口，容器内部始终是 8190。
+      # 只允许本机访问时，在 .env 中设置 WEB_BIND_ADDRESS=127.0.0.1，
+      # 并使用 docker compose --env-file .env.docker up -d --build 启动。
+      - '${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_HOST_PORT:-8191}:8190'
+    expose:
+      - '8190'
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8190/ >/dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      app:
+
+volumes:
+  postgres_data:
+  runtime_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  app:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

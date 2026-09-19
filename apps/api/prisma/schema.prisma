@@ -1,0 +1,799 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AdminStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum SubmitterStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ReviewStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrderStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum OrderSource {
+  ADMIN
+  SHARE
+  BOT
+  IMPORT
+}
+
+enum ShipmentStatus {
+  NOT_SHIPPED
+  SHIPPED
+  DELIVERED
+  EXCEPTION
+}
+
+enum SettlementStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  EXCEPTION
+}
+
+enum FundingType {
+  SELF_PAID
+  SUBMITTER_ADVANCED
+  OTHER
+}
+
+enum ShareFormStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXPIRED
+}
+
+enum PayoutMethodType {
+  WECHAT
+  ALIPAY
+  QR_CODE
+  BANK_CARD
+  DIGITAL_CNY
+  CASH
+  OTHER
+}
+
+enum PayoutMethodStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum MoneyMethod {
+  WECHAT
+  ALIPAY
+  BANK_CARD
+  DIGITAL_CNY
+  CASH
+  OTHER
+}
+
+enum CustomFieldScope {
+  ORDER
+  SHARE_FORM
+  SUBMITTER
+}
+
+enum CustomFieldType {
+  TEXT
+  LONG_TEXT
+  INTEGER
+  QUANTITY
+  MONEY
+  DATE
+  DATETIME
+  SINGLE_SELECT
+  MULTI_SELECT
+  BOOLEAN
+  LINK
+  IMAGE
+  FILE
+}
+
+enum AffiliateCommissionStatus {
+  ESTIMATED
+  PENDING
+  CONFIRMED
+  SETTLED
+  INVALID
+}
+
+enum ExternalIdentityProvider {
+  DEVICE_COOKIE
+  WECHAT_OAUTH
+  PHONE
+  PERSONAL_CODE
+}
+
+enum ExternalIdentityStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ProfitRuleScope {
+  GLOBAL
+  CATEGORY
+  SCHEME
+  FUNDING_TYPE
+}
+
+enum ProfitRuleStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum RootAccessMode {
+  NOT_FOUND
+  REDIRECT
+}
+
+model AdminUser {
+  id           String      @id @default(uuid()) @db.Uuid
+  username     String      @unique @db.VarChar(64)
+  passwordHash String      @map("password_hash") @db.VarChar(255)
+  displayName  String      @map("display_name") @db.VarChar(100)
+  status       AdminStatus @default(ACTIVE)
+  lastLoginAt  DateTime?   @map("last_login_at") @db.Timestamptz(3)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdOrders      Order[]        @relation("OrderCreator")
+  approvedOrders     Order[]        @relation("OrderApprover")
+  createdForms       ShareForm[]    @relation("ShareFormCreator")
+  createdReceipts    Receipt[]      @relation("ReceiptCreator")
+  createdPayouts     Payout[]       @relation("PayoutCreator")
+  createdProfitRules ProfitRule[]   @relation("ProfitRuleCreator")
+  sessions           AdminSession[]
+  auditLogs          AuditLog[]     @relation("AuditActor")
+
+  @@map("admin_users")
+}
+
+model AdminSession {
+  id                    String    @id @default(uuid()) @db.Uuid
+  adminUserId           String    @map("admin_user_id") @db.Uuid
+  tokenHash             String    @unique @map("token_hash") @db.VarChar(128)
+  deviceIdHash          String?   @map("device_id_hash") @db.VarChar(64)
+  deviceFingerprintHash String?   @map("device_fingerprint_hash") @db.VarChar(64)
+  deviceName            String?   @map("device_name") @db.VarChar(100)
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastSeenAt            DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz(3)
+  ipAddress             String?   @map("ip_address") @db.VarChar(64)
+  userAgent             String?   @map("user_agent") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, expiresAt])
+  @@index([adminUserId, deviceIdHash])
+  @@index([adminUserId, deviceFingerprintHash])
+  @@index([expiresAt, revokedAt])
+  @@map("admin_sessions")
+}
+
+model SystemSetting {
+  id                    String         @id @default("default") @db.VarChar(32)
+  systemName            String         @default("下单登记系统") @map("system_name") @db.VarChar(80)
+  brandMarkText         String         @default("浪姐") @map("brand_mark_text") @db.VarChar(4)
+  externalAccessEnabled Boolean        @default(true) @map("external_access_enabled")
+  allowedHosts          String[]       @default(["localhost"]) @map("allowed_hosts")
+  adminEntryPath        String?        @map("admin_entry_path") @db.VarChar(12)
+  rootAccessMode        RootAccessMode @default(NOT_FOUND) @map("root_access_mode")
+  rootRedirectUrl       String?        @map("root_redirect_url") @db.VarChar(2048)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("system_settings")
+}
+
+model LogisticsSetting {
+  id              String   @id @default("default") @db.VarChar(32)
+  provider        String   @default("APIZERO") @db.VarChar(32)
+  enabled         Boolean  @default(false)
+  businessId      String?  @map("business_id") @db.VarChar(100)
+  appKeyEncrypted String?  @map("app_key_encrypted") @db.Text
+  endpoint        String   @default("https://v1.apizero.cn/api/express") @db.VarChar(2048)
+  requestType     String   @default("GET") @map("request_type") @db.VarChar(16)
+  autoDetectType  String   @default("AUTO") @map("auto_detect_type") @db.VarChar(16)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("logistics_settings")
+}
+
+model Platform {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(50)
+  name      String   @unique @db.VarChar(100)
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  orders Order[]
+
+  @@map("platforms")
+}
+
+model Submitter {
+  id        String          @id @default(uuid()) @db.Uuid
+  code      String?         @unique @db.VarChar(50)
+  name      String          @db.VarChar(100)
+  nickname  String?         @db.VarChar(100)
+  phone     String?         @db.VarChar(32)
+  wechatId  String?         @map("wechat_id") @db.VarChar(100)
+  status    SubmitterStatus @default(ACTIVE)
+  notes     String?         @db.Text
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  payoutMethods      PayoutMethod[]
+  externalIdentities ExternalIdentity[]
+  orders             Order[]
+  payouts            Payout[]
+
+  @@index([name])
+  @@index([phone])
+  @@map("submitters")
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(100)
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  schemes     OrderScheme[]
+  orders      Order[]
+  profitRules ProfitRule[]
+
+  @@map("categories")
+}
+
+model OrderScheme {
+  id            String   @id @default(uuid()) @db.Uuid
+  categoryId    String?  @map("category_id") @db.Uuid
+  code          String   @unique @db.VarChar(64)
+  name          String   @db.VarChar(150)
+  productName   String   @map("product_name") @db.VarChar(200)
+  description   String?  @db.Text
+  defaultValues Json?    @map("default_values")
+  enabled       Boolean  @default(true)
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  shareForm   ShareForm?
+  orders      Order[]
+  profitRules ProfitRule[]
+
+  @@index([enabled, sortOrder])
+  @@map("order_schemes")
+}
+
+model ShareForm {
+  id                        String          @id @default(uuid()) @db.Uuid
+  schemeId                  String          @unique @map("scheme_id") @db.Uuid
+  publicToken               String          @unique @map("public_token") @db.VarChar(128)
+  status                    ShareFormStatus @default(DRAFT)
+  title                     String          @db.VarChar(200)
+  description               String?         @db.Text
+  fieldConfig               Json            @map("field_config")
+  allowEditBeforeApproval   Boolean         @default(true) @map("allow_edit_before_approval")
+  allowDeleteBeforeApproval Boolean         @default(false) @map("allow_delete_before_approval")
+  startsAt                  DateTime?       @map("starts_at") @db.Timestamptz(3)
+  expiresAt                 DateTime?       @map("expires_at") @db.Timestamptz(3)
+  submissionLimit           Int?            @map("submission_limit")
+  createdById               String          @map("created_by_id") @db.Uuid
+  createdAt                 DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  scheme    OrderScheme @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  createdBy AdminUser   @relation("ShareFormCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  orders    Order[]
+
+  @@index([status, expiresAt])
+  @@map("share_forms")
+}
+
+model Customer {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(120)
+  nickname  String?  @db.VarChar(120)
+  phone     String?  @db.VarChar(32)
+  address   String?  @db.Text
+  notes     String?  @db.Text
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  orders    Order[]
+  shipments Shipment[]
+  receipts  Receipt[]
+
+  @@index([name])
+  @@map("customers")
+}
+
+model ProfitRule {
+  id                          String           @id @default(uuid()) @db.Uuid
+  scope                       ProfitRuleScope
+  scopeKey                    String           @map("scope_key") @db.VarChar(100)
+  activeScopeKey              String?          @unique @map("active_scope_key") @db.VarChar(100)
+  categoryId                  String?          @map("category_id") @db.Uuid
+  schemeId                    String?          @map("scheme_id") @db.Uuid
+  fundingType                 FundingType?     @map("funding_type")
+  name                        String           @db.VarChar(150)
+  version                     Int
+  definition                  Json
+  requiresFullCustomerPayment Boolean          @default(true) @map("requires_full_customer_payment")
+  status                      ProfitRuleStatus @default(DRAFT)
+  createdById                 String?          @map("created_by_id") @db.Uuid
+  createdAt                   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt                  DateTime?        @map("archived_at") @db.Timestamptz(3)
+
+  category  Category?    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  scheme    OrderScheme? @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  createdBy AdminUser?   @relation("ProfitRuleCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  orders    Order[]
+
+  @@unique([scopeKey, version])
+  @@index([scope, status])
+  @@index([categoryId, status])
+  @@index([schemeId, status])
+  @@map("profit_rules")
+}
+
+model Order {
+  id                        String           @id @default(uuid()) @db.Uuid
+  serialNo                  Int              @unique @default(autoincrement()) @map("serial_no")
+  source                    OrderSource      @default(ADMIN)
+  reviewStatus              ReviewStatus     @default(DRAFT) @map("review_status")
+  status                    OrderStatus      @default(ACTIVE)
+  shipmentStatus            ShipmentStatus   @default(NOT_SHIPPED) @map("shipment_status")
+  receivableStatus          SettlementStatus @default(UNPAID) @map("receivable_status")
+  submitterSettlementStatus SettlementStatus @default(UNPAID) @map("submitter_settlement_status")
+
+  shareFormId        String? @map("share_form_id") @db.Uuid
+  externalIdentityId String? @map("external_identity_id") @db.Uuid
+  externalEditToken  String? @unique @map("external_edit_token") @db.VarChar(128)
+  submitterId        String  @map("submitter_id") @db.Uuid
+  platformId         String  @map("platform_id") @db.Uuid
+  categoryId         String? @map("category_id") @db.Uuid
+  schemeId           String? @map("scheme_id") @db.Uuid
+  customerId         String? @map("customer_id") @db.Uuid
+  profitRuleId       String? @map("profit_rule_id") @db.Uuid
+
+  orderedAt               DateTime    @map("ordered_at") @db.Timestamptz(3)
+  productNameSnapshot     String      @map("product_name_snapshot") @db.VarChar(200)
+  schemeNameSnapshot      String?     @map("scheme_name_snapshot") @db.VarChar(150)
+  submitterWechatNickname String?     @map("submitter_wechat_nickname") @db.VarChar(100)
+  rebateScanned           Boolean?    @map("rebate_scanned")
+  platformOrderNo         String?     @map("platform_order_no") @db.VarChar(150)
+  inboundTrackingNo       String?     @map("inbound_tracking_no") @db.VarChar(150)
+  purchaseAddress         String?     @map("purchase_address") @db.Text
+  fundingType             FundingType @map("funding_type")
+
+  orderAmount               Decimal @default(0) @map("order_amount") @db.Decimal(18, 2)
+  paymentDiscountAmount     Decimal @default(0) @map("payment_discount_amount") @db.Decimal(18, 2)
+  submitterSettlementAmount Decimal @default(0) @map("submitter_settlement_amount") @db.Decimal(18, 2)
+  scanAmount                Decimal @default(0) @map("scan_amount") @db.Decimal(18, 2)
+  platformRebateAmount      Decimal @default(0) @map("platform_rebate_amount") @db.Decimal(18, 2)
+  saleAmount                Decimal @default(0) @map("sale_amount") @db.Decimal(18, 2)
+  customerReceivedAmount    Decimal @default(0) @map("customer_received_amount") @db.Decimal(18, 2)
+  submitterPaidAmount       Decimal @default(0) @map("submitter_paid_amount") @db.Decimal(18, 2)
+  shippingCostAmount        Decimal @default(0) @map("shipping_cost_amount") @db.Decimal(18, 2)
+  serviceFeeAmount          Decimal @default(0) @map("service_fee_amount") @db.Decimal(18, 2)
+  otherIncomeAmount         Decimal @default(0) @map("other_income_amount") @db.Decimal(18, 2)
+  otherCostAmount           Decimal @default(0) @map("other_cost_amount") @db.Decimal(18, 2)
+  expectedProfit            Decimal @default(0) @map("expected_profit") @db.Decimal(18, 2)
+  settledProfit             Decimal @default(0) @map("settled_profit") @db.Decimal(18, 2)
+  profitAdjustment          Decimal @default(0) @map("profit_adjustment") @db.Decimal(18, 2)
+  profitAdjustmentReason    String? @map("profit_adjustment_reason") @db.Text
+  profitRuleVersion         Int?    @map("profit_rule_version")
+  profitRuleSnapshot        Json?   @map("profit_rule_snapshot")
+
+  notes        String?   @db.Text
+  customData   Json?     @map("custom_data")
+  approvedAt   DateTime? @map("approved_at") @db.Timestamptz(3)
+  approvedById String?   @map("approved_by_id") @db.Uuid
+  createdById  String?   @map("created_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  shareForm        ShareForm?              @relation(fields: [shareFormId], references: [id], onDelete: SetNull)
+  externalIdentity ExternalIdentity?       @relation(fields: [externalIdentityId], references: [id], onDelete: SetNull)
+  submitter        Submitter               @relation(fields: [submitterId], references: [id], onDelete: Restrict)
+  platform         Platform                @relation(fields: [platformId], references: [id], onDelete: Restrict)
+  category         Category?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  scheme           OrderScheme?            @relation(fields: [schemeId], references: [id], onDelete: SetNull)
+  customer         Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  profitRule       ProfitRule?             @relation(fields: [profitRuleId], references: [id], onDelete: SetNull)
+  approvedBy       AdminUser?              @relation("OrderApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  createdBy        AdminUser?              @relation("OrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  shipmentLink     ShipmentOrder?
+  receiptLinks     ReceiptAllocation[]
+  payoutLinks      PayoutAllocation[]
+  customValues     OrderCustomFieldValue[]
+  affiliateOrders  AffiliateOrder[]
+
+  @@unique([platformId, platformOrderNo])
+  @@index([orderedAt])
+  @@index([reviewStatus, deletedAt])
+  @@index([shipmentStatus, deletedAt])
+  @@index([receivableStatus, deletedAt])
+  @@index([submitterSettlementStatus, deletedAt])
+  @@index([submitterId, orderedAt])
+  @@index([externalIdentityId, reviewStatus])
+  @@index([customerId, orderedAt])
+  @@index([profitRuleId])
+  @@index([rebateScanned, deletedAt])
+  @@map("orders")
+}
+
+model Shipment {
+  id         String         @id @default(uuid()) @db.Uuid
+  customerId String?        @map("customer_id") @db.Uuid
+  trackingNo String         @unique @map("tracking_no") @db.VarChar(150)
+  carrier    String?        @db.VarChar(100)
+  status     ShipmentStatus @default(SHIPPED)
+  shippedAt  DateTime?      @map("shipped_at") @db.Timestamptz(3)
+  notes      String?        @db.Text
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orders   ShipmentOrder[]
+
+  @@index([customerId, shippedAt])
+  @@map("shipments")
+}
+
+model ShipmentOrder {
+  shipmentId String   @map("shipment_id") @db.Uuid
+  orderId    String   @unique @map("order_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@id([shipmentId, orderId])
+  @@map("shipment_orders")
+}
+
+model Receipt {
+  id              String      @id @default(uuid()) @db.Uuid
+  customerId      String      @map("customer_id") @db.Uuid
+  amount          Decimal     @db.Decimal(18, 2)
+  method          MoneyMethod
+  receivedAt      DateTime    @map("received_at") @db.Timestamptz(3)
+  referenceNo     String?     @map("reference_no") @db.VarChar(150)
+  proofStorageKey String?     @map("proof_storage_key") @db.VarChar(500)
+  notes           String?     @db.Text
+  createdById     String      @map("created_by_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy   AdminUser           @relation("ReceiptCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  allocations ReceiptAllocation[]
+
+  @@index([customerId, receivedAt])
+  @@map("receipts")
+}
+
+model ReceiptAllocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  receiptId String   @map("receipt_id") @db.Uuid
+  orderId   String   @map("order_id") @db.Uuid
+  amount    Decimal  @db.Decimal(18, 2)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptId, orderId])
+  @@index([orderId])
+  @@map("receipt_allocations")
+}
+
+model PayoutMethod {
+  id                    String             @id @default(uuid()) @db.Uuid
+  submitterId           String             @map("submitter_id") @db.Uuid
+  type                  PayoutMethodType
+  label                 String             @db.VarChar(100)
+  accountName           String?            @map("account_name") @db.VarChar(150)
+  accountValueEncrypted String?            @map("account_value_encrypted") @db.Text
+  bankName              String?            @map("bank_name") @db.VarChar(150)
+  qrCodeStorageKey      String?            @map("qr_code_storage_key") @db.VarChar(500)
+  isDefault             Boolean            @default(false) @map("is_default")
+  status                PayoutMethodStatus @default(PENDING)
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt             DateTime?          @map("deleted_at") @db.Timestamptz(3)
+
+  submitter Submitter @relation(fields: [submitterId], references: [id], onDelete: Cascade)
+  payouts   Payout[]
+
+  @@index([submitterId, isDefault, status])
+  @@map("payout_methods")
+}
+
+model PayoutRegistrationForm {
+  id                  String   @id @db.Uuid
+  publicToken         String   @unique @map("public_token") @db.VarChar(128)
+  enabled             Boolean  @default(true)
+  lookupPublicToken   String   @unique @map("lookup_public_token") @db.VarChar(128)
+  lookupEnabled       Boolean  @default(true) @map("lookup_enabled")
+  lookupVisibleFields Json?    @map("lookup_visible_fields")
+  lookupLockedFields  Json?    @map("lookup_locked_fields")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("payout_registration_forms")
+}
+
+model Payout {
+  id              String      @id @default(uuid()) @db.Uuid
+  submitterId     String      @map("submitter_id") @db.Uuid
+  payoutMethodId  String?     @map("payout_method_id") @db.Uuid
+  amount          Decimal     @db.Decimal(18, 2)
+  method          MoneyMethod
+  paidAt          DateTime    @map("paid_at") @db.Timestamptz(3)
+  methodSnapshot  Json        @map("method_snapshot")
+  referenceNo     String?     @map("reference_no") @db.VarChar(150)
+  proofStorageKey String?     @map("proof_storage_key") @db.VarChar(500)
+  notes           String?     @db.Text
+  createdById     String      @map("created_by_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  submitter    Submitter          @relation(fields: [submitterId], references: [id], onDelete: Restrict)
+  payoutMethod PayoutMethod?      @relation(fields: [payoutMethodId], references: [id], onDelete: SetNull)
+  createdBy    AdminUser          @relation("PayoutCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  allocations  PayoutAllocation[]
+
+  @@index([submitterId, paidAt])
+  @@map("payouts")
+}
+
+model PayoutAllocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  payoutId  String   @map("payout_id") @db.Uuid
+  orderId   String   @map("order_id") @db.Uuid
+  amount    Decimal  @db.Decimal(18, 2)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payout Payout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([payoutId, orderId])
+  @@index([orderId])
+  @@map("payout_allocations")
+}
+
+model CustomFieldDefinition {
+  id                 String           @id @default(uuid()) @db.Uuid
+  scope              CustomFieldScope
+  key                String           @db.VarChar(100)
+  label              String           @db.VarChar(150)
+  type               CustomFieldType
+  required           Boolean          @default(false)
+  showInTable        Boolean          @default(false) @map("show_in_table")
+  filterable         Boolean          @default(false)
+  externallyVisible  Boolean          @default(false) @map("externally_visible")
+  externallyEditable Boolean          @default(false) @map("externally_editable")
+  sortOrder          Int              @default(0) @map("sort_order")
+  config             Json?
+  enabled            Boolean          @default(true)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  orderValues OrderCustomFieldValue[]
+
+  @@unique([scope, key])
+  @@index([scope, enabled, sortOrder])
+  @@map("custom_field_definitions")
+}
+
+model OrderCustomFieldValue {
+  id           String @id @default(uuid()) @db.Uuid
+  orderId      String @map("order_id") @db.Uuid
+  definitionId String @map("definition_id") @db.Uuid
+  value        Json
+
+  order      Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  definition CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, definitionId])
+  @@index([definitionId])
+  @@map("order_custom_field_values")
+}
+
+model AffiliatePlatform {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  enabled   Boolean  @default(false)
+  config    Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  accounts    AffiliateAccount[]
+  conversions AffiliateLinkConversion[]
+  orders      AffiliateOrder[]
+
+  @@map("affiliate_platforms")
+}
+
+model AffiliateAccount {
+  id                   String    @id @default(uuid()) @db.Uuid
+  affiliatePlatformId  String    @map("affiliate_platform_id") @db.Uuid
+  name                 String    @db.VarChar(100)
+  credentialsEncrypted String    @map("credentials_encrypted") @db.Text
+  enabled              Boolean   @default(true)
+  tokenExpiresAt       DateTime? @map("token_expires_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  platform AffiliatePlatform           @relation(fields: [affiliatePlatformId], references: [id], onDelete: Cascade)
+  channels AffiliatePromotionChannel[]
+
+  @@index([affiliatePlatformId, enabled])
+  @@map("affiliate_accounts")
+}
+
+model AffiliatePromotionChannel {
+  id                 String   @id @default(uuid()) @db.Uuid
+  affiliateAccountId String   @map("affiliate_account_id") @db.Uuid
+  name               String   @db.VarChar(100)
+  externalCode       String   @map("external_code") @db.VarChar(150)
+  enabled            Boolean  @default(true)
+  metadata           Json?
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  account     AffiliateAccount          @relation(fields: [affiliateAccountId], references: [id], onDelete: Cascade)
+  conversions AffiliateLinkConversion[]
+  orders      AffiliateOrder[]
+
+  @@unique([affiliateAccountId, externalCode])
+  @@map("affiliate_promotion_channels")
+}
+
+model AffiliateLinkConversion {
+  id                  String    @id @default(uuid()) @db.Uuid
+  affiliatePlatformId String    @map("affiliate_platform_id") @db.Uuid
+  promotionChannelId  String?   @map("promotion_channel_id") @db.Uuid
+  originalUrl         String    @map("original_url") @db.Text
+  normalizedUrl       String?   @map("normalized_url") @db.Text
+  productExternalId   String?   @map("product_external_id") @db.VarChar(150)
+  promotionUrl        String?   @map("promotion_url") @db.Text
+  shortUrl            String?   @map("short_url") @db.Text
+  promotionText       String?   @map("promotion_text") @db.Text
+  source              String    @db.VarChar(50)
+  status              String    @db.VarChar(50)
+  errorMessage        String?   @map("error_message") @db.Text
+  expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  platform AffiliatePlatform          @relation(fields: [affiliatePlatformId], references: [id], onDelete: Restrict)
+  channel  AffiliatePromotionChannel? @relation(fields: [promotionChannelId], references: [id], onDelete: SetNull)
+
+  @@index([affiliatePlatformId, createdAt])
+  @@index([productExternalId])
+  @@map("affiliate_link_conversions")
+}
+
+model AffiliateOrder {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  affiliatePlatformId String                    @map("affiliate_platform_id") @db.Uuid
+  promotionChannelId  String?                   @map("promotion_channel_id") @db.Uuid
+  orderId             String?                   @map("order_id") @db.Uuid
+  externalOrderNo     String                    @map("external_order_no") @db.VarChar(150)
+  productExternalId   String?                   @map("product_external_id") @db.VarChar(150)
+  paidAmount          Decimal                   @default(0) @map("paid_amount") @db.Decimal(18, 2)
+  estimatedCommission Decimal                   @default(0) @map("estimated_commission") @db.Decimal(18, 2)
+  confirmedCommission Decimal                   @default(0) @map("confirmed_commission") @db.Decimal(18, 2)
+  settledCommission   Decimal                   @default(0) @map("settled_commission") @db.Decimal(18, 2)
+  commissionStatus    AffiliateCommissionStatus @default(ESTIMATED) @map("commission_status")
+  orderedAt           DateTime?                 @map("ordered_at") @db.Timestamptz(3)
+  settledAt           DateTime?                 @map("settled_at") @db.Timestamptz(3)
+  rawData             Json?                     @map("raw_data")
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  platform AffiliatePlatform          @relation(fields: [affiliatePlatformId], references: [id], onDelete: Restrict)
+  channel  AffiliatePromotionChannel? @relation(fields: [promotionChannelId], references: [id], onDelete: SetNull)
+  order    Order?                     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([affiliatePlatformId, externalOrderNo])
+  @@index([orderId])
+  @@index([commissionStatus, settledAt])
+  @@map("affiliate_orders")
+}
+
+model ExternalIdentity {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  submitterId          String?                  @map("submitter_id") @db.Uuid
+  provider             ExternalIdentityProvider
+  providerKeyHash      String?                  @map("provider_key_hash") @db.VarChar(128)
+  providerKeyEncrypted String?                  @map("provider_key_encrypted") @db.Text
+  displayCode          String                   @unique @map("display_code") @db.VarChar(32)
+  status               ExternalIdentityStatus   @default(ACTIVE)
+  metadata             Json?
+  lastSeenAt           DateTime                 @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  submitter Submitter?                @relation(fields: [submitterId], references: [id], onDelete: SetNull)
+  sessions  ExternalIdentitySession[]
+  orders    Order[]
+
+  @@unique([provider, providerKeyHash])
+  @@index([submitterId, status])
+  @@index([lastSeenAt])
+  @@map("external_identities")
+}
+
+model ExternalIdentitySession {
+  id                 String    @id @default(uuid()) @db.Uuid
+  externalIdentityId String    @map("external_identity_id") @db.Uuid
+  tokenHash          String    @unique @map("token_hash") @db.VarChar(128)
+  expiresAt          DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastSeenAt         DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt          DateTime? @map("revoked_at") @db.Timestamptz(3)
+  userAgentHash      String?   @map("user_agent_hash") @db.VarChar(128)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  externalIdentity ExternalIdentity @relation(fields: [externalIdentityId], references: [id], onDelete: Cascade)
+
+  @@index([externalIdentityId, expiresAt])
+  @@index([expiresAt, revokedAt])
+  @@map("external_identity_sessions")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorAdminId String?  @map("actor_admin_id") @db.Uuid
+  source       String   @db.VarChar(50)
+  action       String   @db.VarChar(100)
+  entityType   String   @map("entity_type") @db.VarChar(100)
+  entityId     String   @map("entity_id") @db.VarChar(100)
+  beforeData   Json?    @map("before_data")
+  afterData    Json?    @map("after_data")
+  ipAddress    String?  @map("ip_address") @db.VarChar(64)
+  userAgent    String?  @map("user_agent") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor AdminUser? @relation("AuditActor", fields: [actorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorAdminId, createdAt])
+  @@map("audit_logs")
+}

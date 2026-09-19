@@ -1,0 +1,26 @@
+(order_system_app) {
+  encode zstd gzip
+
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    X-Frame-Options "SAMEORIGIN"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+
+  @api path /api /api/*
+
+  handle @api {
+    reverse_proxy api:3000
+  }
+
+  handle {
+    root * /srv
+    try_files {path} /index.html
+    file_server
+  }
+}
+
+:8190 {
+  import order_system_app
+}

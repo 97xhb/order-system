@@ -1,0 +1,102 @@
+飞牛 NAS Docker Compose 安装说明
+
+一、准备目录
+
+1. 在飞牛“文件管理”中创建长期目录，例如：
+   /vol1/1000/docker/order-system
+2. 把本项目的全部文件放进该目录，确认能看到：
+   docker-compose.yml、.env.docker.example、apps、packages、docker
+
+不要放在下载缓存、回收站或会自动清理的临时目录。
+
+二、创建配置（只需一次）
+
+在飞牛系统设置中开启 SSH，然后连接：
+
+   ssh 你的飞牛用户名@NAS局域网IP
+   cd /vol1/1000/docker/order-system
+
+复制配置模板并生成密钥：
+
+   cp .env.docker.example .env.docker
+   chmod 600 .env.docker
+   openssl rand -hex 32
+
+用编辑器打开 .env.docker，必须修改下面三项：
+
+   POSTGRES_PASSWORD=      数据库密码，只用字母数字点下划线短横线
+   DATA_ENCRYPTION_KEY=    粘贴上面 openssl 生成的 64 位密钥
+   ADMIN_INITIAL_PASSWORD= 管理员首次登录密码，至少 6 位
+
+同时确认访问地址：
+
+   WEB_ORIGIN=http://NAS局域网IP:8191
+   INITIAL_ALLOWED_HOSTS=localhost   # 使用域名时改成你的域名
+
+.env.docker 保存密码和密钥，不会被提交到 GitHub，也不会被更新覆盖。
+升级、重新拉取代码时不要删除这个文件。
+
+三、构建并启动
+
+   docker compose --env-file .env.docker config --quiet
+   docker compose --env-file .env.docker up -d --build
+   docker compose --env-file .env.docker ps
+
+等待 db、api、web 三个容器都显示 running 或 healthy。第一次构建需要
+下载基础镜像，时间取决于 NAS 性能和网络。
+
+浏览器打开：http://NAS局域网IP:8191/login
+
+使用 .env.docker 里的 ADMIN_USERNAME 和 ADMIN_INITIAL_PASSWORD 登录。
+全新安装默认不启用后台安全入口，登录后在“系统设置 → 面板配置”里自行设置。
+
+四、域名和 HTTPS
+
+反向代理只需要一个上游：
+
+   协议：http
+   目标主机：NAS局域网IP
+   目标端口：8191
+
+证书安装在飞牛反向代理上，不要单独暴露 API 3000 或数据库 5432。
+使用域名后，把 .env.docker 的 WEB_ORIGIN 和 INITIAL_ALLOWED_HOSTS 改成域名，
+再执行：
+
+   docker compose --env-file .env.docker up -d --force-recreate api web
+
+已有数据库不会重新应用 INITIAL_ALLOWED_HOSTS，还需要在后台“系统设置”里
+把域名加入白名单。
+
+五、日常维护
+
+   # 状态
+   docker compose --env-file .env.docker ps
+   # 日志
+   docker compose --env-file .env.docker logs -f --tail=200
+   # 重启
+   docker compose --env-file .env.docker restart
+   # 停止并删除容器（保留数据库卷）
+   docker compose --env-file .env.docker down
+
+更新到新版本（保留数据）：
+
+   sh scripts/update-docker.sh
+
+或者手动执行：
+
+   git pull
+   docker compose --env-file .env.docker up -d --build
+
+六、数据卷说明
+
+- 数据保存在 Docker 卷 order-system_postgres_data，不在项目目录里。
+- 只删除容器或镜像不会删除数据库。
+- docker compose down -v 会删除数据卷，等于清空全部业务数据，谨慎使用。
+- 保留数据时必须继续使用原来的 POSTGRES_PASSWORD 和 DATA_ENCRYPTION_KEY。
+
+七、注意事项
+
+- 不要把 .env.docker 发给别人或上传到 GitHub。
+- DATA_ENCRYPTION_KEY 产生数据后不能更换，否则已加密内容无法解密。
+- 管理员初始密码只在第一次创建管理员时使用，之后在后台修改。
+- 不需要发布 3000 和 5432，外部只访问 8191 或反向代理的 80/443。

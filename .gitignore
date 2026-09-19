@@ -1,0 +1,32 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+apps/api/src/generated/
+.vite/
+.turbo/
+.local-data/
+
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+*.log
+*.tsbuildinfo
+
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+data/
+backups/
+uploads/
+release/
+
+# 第三方返利源码，不属于本系统，不进入版本库
+梨花熊返利源码.e
+
+# Docker 真实密钥文件，只保留 .env.docker.example 模板
+.env.docker

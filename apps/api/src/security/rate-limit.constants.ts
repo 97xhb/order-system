@@ -1,0 +1,3 @@
+export const RATE_LIMIT_WINDOW_MS = 60_000;
+export const API_RATE_LIMIT_REQUESTS = 300;
+export const ADMIN_LOGIN_RATE_LIMIT_REQUESTS = 5;

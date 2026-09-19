@@ -1,0 +1,18 @@
+# 统一使用 LF；Windows 上的 .cmd 使用 CRLF
+* text=auto eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary
+
+pnpm-lock.yaml -diff linguist-generated
