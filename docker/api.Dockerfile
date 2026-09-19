@@ -15,12 +15,18 @@ WORKDIR /app
 
 FROM base AS dependencies
 
+# 依赖源；访问官方源较慢时可设为 https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm config set registry "$NPM_REGISTRY" \
+    && pnpm config set fetch-retries 5 \
+    && pnpm config set fetch-timeout 600000 \
+    && pnpm install --frozen-lockfile
 
 FROM dependencies AS builder
 

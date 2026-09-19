@@ -45,6 +45,8 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
     restart: unless-stopped
     stop_grace_period: 30s
     init: true
@@ -81,6 +83,8 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
     restart: unless-stopped
     stop_grace_period: 10s
     init: true
