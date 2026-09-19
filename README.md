@@ -120,7 +120,7 @@ sh scripts/update-docker.sh
 
 `update-docker.sh` 检测不到 git 时会跳过拉取，直接用当前目录重新构建。
 
-### 或者手动执行等价命令
+新版也支持一条命令完成同样的更新（等价写法）：
 
 ```bash
 docker compose --env-file .env.docker up -d --build
@@ -136,8 +136,15 @@ docker compose --env-file .env.docker up -d --build
 ### 从旧版本（密码写在 compose 顶部）升级
 
 如果你部署的是更早的版本，密码写在 `docker-compose.yml` 顶部，升级时不要直接覆盖。
-先按 [飞牛 Compose 安装说明](飞牛Compose安装.txt) 的第八节把旧值搬进 `.env.docker`，
-再启动，这样数据库卷和业务数据都会保留。
+项目自带自动迁移脚本：
+
+```bash
+sh scripts/migrate-to-env-docker.sh /root/old-compose.yml
+docker compose --env-file .env.docker up -d --build
+```
+
+脚本读取旧配置生成 `.env.docker`，数据库卷和业务数据都会保留。
+手动步骤见 [飞牛 Compose 安装说明](飞牛Compose安装.txt) 第八节。
 
 ---
 

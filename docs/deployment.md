@@ -252,23 +252,25 @@ docker/
 scripts/
   setup-fnos-env.sh
   update-docker.sh
+  migrate-to-env-docker.sh
   build-fnos-release.ps1
 ```
 
 每个文件的作用：
 
-| 文件                           | 作用                                             |
-| ------------------------------ | ------------------------------------------------ |
-| docker-compose.yml             | 唯一的 Compose 文件，定义 db、api、web 三个容器  |
-| .env.docker.example            | 配置模板，不包含真实密码；复制为 `.env.docker`   |
-| docker/api.Dockerfile          | 构建 API 生产镜像                                |
-| docker/api-entrypoint.sh       | 检查配置、等待数据库、执行迁移、启动 API         |
-| docker/web.Dockerfile          | 构建 Vue 页面并放入 Caddy 镜像                   |
-| docker/Caddyfile               | 在内部 8190 提供静态页面，并反向代理 `/api`      |
-| .dockerignore                  | 阻止本机数据库、密钥、日志和开发产物进入镜像     |
-| scripts/setup-fnos-env.sh      | 交互式生成 `.env.docker`，自动生成随机密钥       |
-| scripts/update-docker.sh       | 拉取新代码并重新构建、重启容器，保留数据卷       |
-| scripts/build-fnos-release.ps1 | 生成并校验不含密钥、本机数据和构建产物的飞牛 ZIP |
+| 文件                             | 作用                                             |
+| -------------------------------- | ------------------------------------------------ |
+| docker-compose.yml               | 唯一的 Compose 文件，定义 db、api、web 三个容器  |
+| .env.docker.example              | 配置模板，不包含真实密码；复制为 `.env.docker`   |
+| docker/api.Dockerfile            | 构建 API 生产镜像                                |
+| docker/api-entrypoint.sh         | 检查配置、等待数据库、执行迁移、启动 API         |
+| docker/web.Dockerfile            | 构建 Vue 页面并放入 Caddy 镜像                   |
+| docker/Caddyfile                 | 在内部 8190 提供静态页面，并反向代理 `/api`      |
+| .dockerignore                    | 阻止本机数据库、密钥、日志和开发产物进入镜像     |
+| scripts/setup-fnos-env.sh        | 交互式生成 `.env.docker`，自动生成随机密钥       |
+| scripts/update-docker.sh         | 拉取新代码并重新构建、重启容器，保留数据卷       |
+| scripts/migrate-to-env-docker.sh | 把旧版 compose 顶部配置迁移到 `.env.docker`      |
+| scripts/build-fnos-release.ps1   | 生成并校验不含密钥、本机数据和构建产物的飞牛 ZIP |
 
 密码和密钥统一由 `.env.docker` 管理，`.env.docker` 不进版本库。Compose 只向宿主机发布 Web 端口，API 和数据库只在内部网络通信。
 
@@ -1196,6 +1198,14 @@ docker compose --env-file .env.docker logs --tail=100 api
 ```bash
 git pull
 ```
+
+从旧版本（密码写在 `docker-compose.yml` 顶部）升级时，先复制旧文件留底，再执行：
+
+```bash
+sh scripts/migrate-to-env-docker.sh /root/old-compose.yml
+```
+
+脚本会读取旧配置生成 `.env.docker` 并打印结果，核对后继续下一步。
 
 手动上传新代码时，不要覆盖：
 
