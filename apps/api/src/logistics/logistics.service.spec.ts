@@ -149,6 +149,49 @@ describe('LogisticsService ApiZero adapter', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('从运单号里拆出手机尾号后分开提交', async () => {
+    const { service } = createService();
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 0,
+          msg: 'ok',
+          data: { number: 'SF5137788186075', com: 'sf', traces: [] },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await service.test('SF5137788186075-1429');
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get('number')).toBe('SF5137788186075');
+    expect(url.searchParams.get('phone')).toBe('1429');
+  });
+
+  it('只在末尾是四位数字时才视为手机尾号', () => {
+    const { service } = createService();
+    const parser = service as unknown as {
+      splitTrackingNo: (value: string) => {
+        trackingNo: string;
+        phoneSuffix: string | null;
+      };
+    };
+
+    expect(parser.splitTrackingNo('SF5137788186075-1429')).toEqual({
+      trackingNo: 'SF5137788186075',
+      phoneSuffix: '1429',
+    });
+    expect(parser.splitTrackingNo('SF5137788186075')).toEqual({
+      trackingNo: 'SF5137788186075',
+      phoneSuffix: null,
+    });
+    expect(parser.splitTrackingNo('YT1234567890-2026-0012')).toEqual({
+      trackingNo: 'YT1234567890-2026',
+      phoneSuffix: '0012',
+    });
+  });
+
   it('rejects queries when the integration is disabled', async () => {
     const { service } = createService({ enabled: false });
     await expect(service.test('YT7460266600081')).rejects.toBeInstanceOf(

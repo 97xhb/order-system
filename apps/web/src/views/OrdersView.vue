@@ -177,10 +177,10 @@ const baseTableColumnOptions: TableColumnOption[] = [
     key: 'inboundTrackingNo',
     label: '平台运单号',
     field: 'inboundTrackingNo',
-    width: 175,
+    width: 215,
   },
   { key: 'purchaseAddress', label: '下单地址', field: 'purchaseAddress', minWidth: 180 },
-  { key: 'shipmentTrackingNo', label: '寄件运单号', width: 175 },
+  { key: 'shipmentTrackingNo', label: '寄件运单号', width: 215 },
   { key: 'shipmentStatus', label: '寄件状态', width: 102 },
   { key: 'fundingType', label: '支付方式', width: 108 },
   { key: 'paymentDiscountAmount', label: '支付优惠', width: 105 },
@@ -1578,6 +1578,20 @@ const quickMarkPaid = async (row: OrderRow, target: 'CUSTOMER' | 'SUBMITTER') =>
   }
 };
 
+/**
+ * 订单列表里的运单号允许写成 `运单号-手机尾号`，例如 `SF5137788186075-1429`。
+ * 顺丰、中通等快递查询时必须单独提供收件人手机号后四位，
+ * 所以展示和查询时都要把两者分开。
+ */
+const splitTrackingInput = (value?: string | null) => {
+  const raw = (value || '').trim();
+  const matched = /^(.*\S)-(\d{4})$/.exec(raw);
+  if (!matched) return { trackingNo: raw, phoneSuffix: '' };
+  return { trackingNo: matched[1].trim(), phoneSuffix: matched[2] };
+};
+
+const trackingNoOnly = (value?: string | null) => splitTrackingInput(value).trackingNo;
+
 const queryActiveLogistics = async () => {
   const row = logisticsOrder.value;
   if (!row) return;
@@ -1603,11 +1617,13 @@ const openLogisticsQuery = async (row: OrderRow, kind: 'inbound' | 'shipment') =
   const trackingNo =
     kind === 'inbound' ? row.inboundTrackingNo : row.shipmentLink?.shipment.trackingNo;
   if (!trackingNo) return;
+  const parsed = splitTrackingInput(trackingNo);
   logisticsOrder.value = row;
   logisticsKind.value = kind;
   logisticsResult.value = null;
   logisticsCarrierCode.value = kind === 'shipment' ? row.shipmentLink?.shipment.carrier || '' : '';
-  logisticsPhoneSuffix.value = '';
+  // 运单号自带的手机尾号直接预填，无需手动再输入。
+  logisticsPhoneSuffix.value = parsed.phoneSuffix;
   logisticsDialog.value = true;
   await queryActiveLogistics();
 };
@@ -2106,7 +2122,15 @@ onMounted(() => {
               </template>
               <template v-else-if="column.key === 'inboundTrackingNo'">
                 <div class="tracking-cell">
-                  <span>{{ row.inboundTrackingNo || '-' }}</span>
+                  <span class="tracking-number">
+                    {{ trackingNoOnly(row.inboundTrackingNo) || '-' }}
+                    <small
+                      v-if="splitTrackingInput(row.inboundTrackingNo).phoneSuffix"
+                      class="tracking-phone-suffix"
+                    >
+                      尾号 {{ splitTrackingInput(row.inboundTrackingNo).phoneSuffix }}
+                    </small>
+                  </span>
                   <el-button
                     v-if="row.inboundTrackingNo"
                     class="tracking-query-button"
@@ -2125,7 +2149,16 @@ onMounted(() => {
               </template>
               <template v-else-if="column.key === 'shipmentTrackingNo'">
                 <div class="tracking-cell">
-                  <span>{{ row.shipmentLink?.shipment.trackingNo || '-' }}</span>
+                  <span class="tracking-number">
+                    {{ trackingNoOnly(row.shipmentLink?.shipment.trackingNo) || '-' }}
+                    <small
+                      v-if="splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix"
+                      class="tracking-phone-suffix"
+                    >
+                      尾号
+                      {{ splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix }}
+                    </small>
+                  </span>
                   <el-button
                     v-if="row.shipmentLink?.shipment.trackingNo"
                     class="tracking-query-button"
@@ -2359,7 +2392,15 @@ onMounted(() => {
               <div>
                 <dt>平台运单号</dt>
                 <dd class="mobile-tracking-value">
-                  <span>{{ row.inboundTrackingNo || '-' }}</span>
+                  <span>
+                    {{ trackingNoOnly(row.inboundTrackingNo) || '-' }}
+                  </span>
+                  <small
+                    v-if="splitTrackingInput(row.inboundTrackingNo).phoneSuffix"
+                    class="tracking-phone-suffix"
+                  >
+                    尾号 {{ splitTrackingInput(row.inboundTrackingNo).phoneSuffix }}
+                  </small>
                   <el-button
                     v-if="row.inboundTrackingNo"
                     text
@@ -2374,7 +2415,15 @@ onMounted(() => {
               <div>
                 <dt>寄件运单号</dt>
                 <dd class="mobile-tracking-value">
-                  <span>{{ row.shipmentLink?.shipment.trackingNo || '-' }}</span>
+                  <span>
+                    {{ trackingNoOnly(row.shipmentLink?.shipment.trackingNo) || '-' }}
+                  </span>
+                  <small
+                    v-if="splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix"
+                    class="tracking-phone-suffix"
+                  >
+                    尾号 {{ splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix }}
+                  </small>
                   <el-button
                     v-if="row.shipmentLink?.shipment.trackingNo"
                     text
@@ -2560,10 +2609,12 @@ onMounted(() => {
           <span>运单号</span>
           <strong>{{
             logisticsResult?.trackingNo ||
-            (logisticsKind === 'inbound'
-              ? logisticsOrder?.inboundTrackingNo
-              : logisticsOrder?.shipmentLink?.shipment.trackingNo) ||
-            '—'
+            splitTrackingInput(
+              logisticsKind === 'inbound'
+                ? logisticsOrder?.inboundTrackingNo
+                : logisticsOrder?.shipmentLink?.shipment.trackingNo,
+            ).trackingNo ||
+            '无'
           }}</strong>
           <el-tag v-if="logisticsResult" round effect="plain" type="success">
             {{ logisticsResult.stateText }}
@@ -2672,6 +2723,24 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 运单号与手机尾号分开显示，避免混在一起被当成运单号提交给快递接口。 */
+.tracking-number {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.tracking-phone-suffix {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 6px;
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 17px;
+  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
 }
 
 .tracking-query-button {

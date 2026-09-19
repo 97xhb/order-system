@@ -263,6 +263,19 @@ export class LogisticsService {
     return phoneSuffix;
   }
 
+  /**
+   * 订单列表里的运单号允许写成 `运单号-手机尾号`，例如 `SF5137788186075-1429`。
+   * 有些快递（顺丰、中通等）查询时必须额外提供收件人手机号后四位，
+   * 因此这里把两者拆开，避免把 `运单号-尾号` 整体当成运单号提交给接口。
+   * 只把“最后一段恰好是 4 位数字”的情况视为尾号，运单号本身带短横线时不会被误拆。
+   */
+  private splitTrackingNo(value: string) {
+    const raw = value.trim();
+    const matched = /^(.*\S)-(\d{4})$/.exec(raw);
+    if (!matched) return { trackingNo: raw, phoneSuffix: null };
+    return { trackingNo: matched[1].trim(), phoneSuffix: matched[2] };
+  }
+
   private stateText(status: string, fallback?: string | null) {
     const labels: Record<string, string> = {
       EMPTY: '暂无轨迹',
@@ -386,7 +399,12 @@ export class LogisticsService {
   }
 
   async test(trackingNo: string, carrierCode?: string, phoneSuffix?: string) {
-    return this.queryTracking(trackingNo, carrierCode, phoneSuffix);
+    const parsed = this.splitTrackingNo(trackingNo);
+    return this.queryTracking(
+      parsed.trackingNo,
+      carrierCode,
+      phoneSuffix || parsed.phoneSuffix,
+    );
   }
 
   async queryOrder(
@@ -414,10 +432,11 @@ export class LogisticsService {
     if (!trackingNo) throw new BadRequestException('该订单没有可查询的运单号');
     const savedCarrier =
       kind === 'shipment' ? order.shipmentLink?.shipment.carrier : null;
+    const parsed = this.splitTrackingNo(trackingNo);
     const result = await this.queryTracking(
-      trackingNo,
+      parsed.trackingNo,
       dto.carrierCode || savedCarrier,
-      dto.phoneSuffix,
+      dto.phoneSuffix || parsed.phoneSuffix,
     );
     await this.prisma.auditLog.create({
       data: {
