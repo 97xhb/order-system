@@ -23,7 +23,7 @@ fi
 
 if [ -f .env.docker ]; then
   printf '%s' '.env.docker 已存在。输入 OVERWRITE 覆盖（会先自动备份），其他输入退出: '
-  read -r answer
+  read -r answer || answer=''
   if [ "$answer" != 'OVERWRITE' ]; then
     echo '已保留现有 .env.docker。'
     exit 0
