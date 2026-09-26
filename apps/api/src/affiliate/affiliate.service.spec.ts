@@ -61,9 +61,15 @@ describe('AffiliateService', () => {
       ],
     );
     expect(result.items[1].supportedPlatforms).toEqual([
-      { code: 'douyin', name: '抖音' },
+      { code: 'taobao', name: '淘宝' },
       { code: 'jd', name: '京东' },
       { code: 'pdd', name: '拼多多' },
+      { code: 'vipshop', name: '唯品会' },
+      { code: 'meituan', name: '美团' },
+      { code: 'douyin', name: '抖音' },
+      { code: 'kuaishou', name: '快手' },
+      { code: 'alibaba', name: '1688' },
+      { code: 'zhima', name: '知嘛' },
     ]);
     expect(result.items[2].supportedPlatforms).toEqual([
       { code: 'taobao', name: '淘宝' },

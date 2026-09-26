@@ -27,6 +27,19 @@ interface AffiliatePlatformItem {
   device: string;
 }
 
+interface AffiliateConversionEntry {
+  platformCode: string;
+  platformName: string;
+  platformNumber: number | null;
+  success: boolean;
+  itemName: string | null;
+  itemId: string | null;
+  link: string | null;
+  password: string | null;
+  command: string | null;
+  reason: string | null;
+}
+
 interface AffiliateConversionResult {
   id: string;
   platformCode: string;
@@ -40,6 +53,7 @@ interface AffiliateConversionResult {
   providerCode: string | number | null;
   providerMessage: string | null;
   rawData: unknown;
+  entries: AffiliateConversionEntry[];
   createdAt: string;
 }
 
@@ -395,7 +409,7 @@ onMounted(() => void load());
                 <span>01</span>
                 <div>
                   <strong>链接转换</strong>
-                  <small>支持商品链接或包含链接的分享文本</small>
+                  <small>一行一条，逐条独立转换，单条失败不影响其它条</small>
                 </div>
               </div>
             </div>
@@ -407,7 +421,7 @@ onMounted(() => void load());
                 :rows="8"
                 maxlength="20000"
                 resize="vertical"
-                placeholder="粘贴淘宝、京东、唯品会、拼多多、抖音、快手、美团等商品链接，或包含链接的分享文本"
+                placeholder="一行一条，可一次粘贴多条。支持淘宝、京东、拼多多、唯品会、美团、抖音、快手、1688、知嘛的商品链接或分享口令"
               />
               <div class="conversion-input-actions">
                 <span>转换记录会自动保存在本机数据库</span>
@@ -471,6 +485,33 @@ onMounted(() => void load());
                 resize="vertical"
                 readonly
               />
+              <ul v-if="conversionResult.entries.length > 1" class="conversion-entry-list">
+                <li
+                  v-for="(entry, index) in conversionResult.entries"
+                  :key="`${index}-${entry.itemId ?? entry.platformCode}`"
+                  :class="['conversion-entry', entry.command ? 'is-ok' : 'is-failed']"
+                >
+                  <span class="conversion-entry-index">{{ index + 1 }}</span>
+                  <div class="conversion-entry-body">
+                    <strong>
+                      {{ entry.itemName || entry.platformName }}
+                      <el-tag
+                        size="small"
+                        effect="light"
+                        :type="entry.command ? 'success' : 'danger'"
+                      >
+                        {{ entry.platformName }}
+                      </el-tag>
+                    </strong>
+                    <small v-if="entry.command" class="conversion-entry-command">
+                      {{ entry.command }}
+                    </small>
+                    <small v-else class="conversion-entry-reason">
+                      {{ entry.reason || '该平台暂未返回推广链接' }}
+                    </small>
+                  </div>
+                </li>
+              </ul>
               <div class="conversion-result-meta">
                 <span v-if="conversionResult.promotionUrl">
                   推广链接：{{ conversionResult.promotionUrl }}
@@ -908,6 +949,71 @@ onMounted(() => void load());
   background: var(--app-hover);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.conversion-entry-list {
+  display: grid;
+  margin: 10px 0 0;
+  padding: 0;
+  gap: 6px;
+  list-style: none;
+}
+
+.conversion-entry {
+  display: flex;
+  align-items: flex-start;
+  padding: 7px 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  gap: 8px;
+  background: color-mix(in srgb, var(--app-hover) 60%, var(--app-card-solid));
+}
+
+.conversion-entry.is-ok {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.conversion-entry.is-failed {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.conversion-entry-index {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding-top: 1px;
+  color: var(--app-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.conversion-entry-body {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.conversion-entry-body strong {
+  display: flex;
+  align-items: center;
+  color: var(--app-heading);
+  font-size: 11px;
+  font-weight: 600;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.conversion-entry-command,
+.conversion-entry-reason {
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 10px;
+  line-height: 1.55;
+  text-overflow: ellipsis;
+  word-break: break-all;
+}
+
+.conversion-entry-reason {
+  color: #ef4444;
 }
 
 .conversion-empty-state {

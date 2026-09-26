@@ -103,12 +103,18 @@ export const AFFILIATE_PLATFORM_DEFINITIONS: AffiliatePlatformDefinition[] = [
     providerType: 'THIRD_PARTY',
     adapterType: 'YOUZAI_ASSISTANT',
     description:
-      '适配有赞助手小程序接口，覆盖抖音、京东、拼多多的商品口令与链接转换。',
+      '适配有赞助手小程序接口，覆盖淘宝、京东、拼多多、唯品会、美团、抖音、快手、1688、知嘛的商品口令与链接转换。',
     defaultApiBaseUrl: 'https://appletsvr.52youzai.com',
     supportedPlatforms: [
-      { code: 'douyin', name: '抖音' },
+      { code: 'taobao', name: '淘宝' },
       { code: 'jd', name: '京东' },
       { code: 'pdd', name: '拼多多' },
+      { code: 'vipshop', name: '唯品会' },
+      { code: 'meituan', name: '美团' },
+      { code: 'douyin', name: '抖音' },
+      { code: 'kuaishou', name: '快手' },
+      { code: 'alibaba', name: '1688' },
+      { code: 'zhima', name: '知嘛' },
     ],
     credentialFields: [
       {

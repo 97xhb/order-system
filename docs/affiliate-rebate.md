@@ -5,7 +5,7 @@
 - 基础设置中的“返利平台配置”只负责接口、启用状态和凭证。
 - 左侧独立“返利转换”页面负责实际转换、结果二维码和历史记录。
 - 梨花熊聚合返利接口已经接入真实 Adapter。
-- 有赞助手聚合返利接口已经接入真实 Adapter，覆盖抖音、京东、拼多多。
+- 有赞助手聚合返利接口已经接入真实 Adapter，覆盖小程序声明支持的全部 9 个平台。
 - 淘宝联盟、京粉、唯享客等官方接口保留统一配置框架，后续逐个实现。
 
 ## 2. 统一流程
@@ -50,13 +50,17 @@ apps/api/src/affiliate/adapters/lihuaxiong.codec.ts
 apps/api/src/affiliate/adapters/youzai.adapter.ts
 ```
 
+完整协议、平台字段映射与逐条转换策略见 `docs/youzai-affiliate-protocol.md`。
+
 当前协议：
 
 - 服务地址 `https://appletsvr.52youzai.com`，转链路径 `/goods/convertLink`，全部 POST JSON。
-- 鉴权头为裸 token：`Authorization: <token>`，不带 Bearer。
-- HTTP 状态码恒为 200，必须先判断响应体 `code === 200`，401 表示令牌过期。
-- `data` 永远是数组：抖音/京东取 `itemUrl` / `middlePageUrl`，拼多多取 `authUrl` / `authLongUrl`。
-- 多平台按 `platform` 字段分支：11 抖音、1 京东、2 拼多多；淘宝只返回脏数据，不声明支持。
+- 鉴权头为裸 token：`Authorization: <token>`，不带 Bearer，无时间戳与签名。
+- HTTP 状态码恒为 200，真实业务状态在响应体 `code`，401 表示令牌过期。
+- 平台编号按 `platform` 字段分支：0 淘宝、1 京东、2 拼多多、3 唯品会、7 美团、11 抖音、12 快手、14 1688、17 知嘛。
+- 链接字段不按平台硬编码：统一按 `itemUrl` / `middlePageUrl` / `shortUrl` / `authUrl` / `authLongUrl` 顺序取第一个 http(s) 值，只接受 http(s)，避免把明文口令当成推广链接。
+- 复制内容优先取该平台口令字段（`tbPwd` / `jdPwd` / `dyPwd` / `ksPwd` / `vphPwd` / `mtPwd` / `alibabaPwd`），没有口令才退回推广链接。
+- 输入按行拆分，每行单独发一次请求，保证输入与结果严格一对一；单条失败只影响该条。
 - Authorization 支持两种来源：手动填写抓包值；填写取 token 接口地址后由服务端请求并回填。
 - 在线获取只回填前端输入框，不下库、不写明文日志；保存时与手动模式走同一套加密存储。
 - 在线接口需返回纯文本、`token`、`authorization`、`access_token` 或 `data.token`；地址禁止指向本机与内网。

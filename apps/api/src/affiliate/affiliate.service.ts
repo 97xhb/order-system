@@ -19,7 +19,10 @@ import {
   type AffiliatePlatformDefinition,
 } from './affiliate-platform.constants';
 import { LihuaXiongAffiliateAdapter } from './adapters/lihuaxiong.adapter';
-import { YouzaiAssistantAffiliateAdapter } from './adapters/youzai.adapter';
+import {
+  YouzaiAssistantAffiliateAdapter,
+  type YouzaiConversionEntry as AffiliateConversionEntry,
+} from './adapters/youzai.adapter';
 import { LIHUAXIONG_PROTOCOL } from './adapters/lihuaxiong.codec';
 import { ConvertAffiliateLinkDto } from './dto/convert-affiliate-link.dto';
 import { ListAffiliateConversionsDto } from './dto/list-affiliate-conversions.dto';
@@ -613,6 +616,7 @@ export class AffiliateService {
       providerCode: string | number | null;
       providerMessage: string | null;
       rawData: unknown;
+      entries?: AffiliateConversionEntry[];
     },
     admin: AuthenticatedAdmin,
   ) {
@@ -663,6 +667,7 @@ export class AffiliateService {
       providerCode: result.providerCode,
       providerMessage: result.providerMessage,
       rawData: result.rawData,
+      entries: result.entries ?? [],
       createdAt: conversion.createdAt,
     };
   }
