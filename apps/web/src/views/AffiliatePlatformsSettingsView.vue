@@ -70,6 +70,7 @@ const form = reactive({
   notes: '',
 });
 const tokenMode = ref<'manual' | 'online'>('manual');
+const verifyingToken = ref(false);
 const fetchingToken = ref(false);
 const credentialDraft = reactive<Record<CredentialKey, string>>({
   apiKey: '',
@@ -187,6 +188,36 @@ const fetchAuthorization = async () => {
     ElMessage.error(getApiErrorMessage(error, 'Authorization 获取失败'));
   } finally {
     fetchingToken.value = false;
+  }
+};
+
+const verifyAuthorization = async () => {
+  const selected = selectedPlatform.value;
+  if (!selected) return;
+
+  verifyingToken.value = true;
+  try {
+    const response = await http.post<{
+      valid: boolean;
+      message: string;
+      account: string | null;
+    }>(`/admin/affiliate-platforms/${selected.code}/verify-authorization`, {
+      token: credentialDraft.accessToken.trim() || undefined,
+      apiBaseUrl: selected.apiBaseUrl || undefined,
+    });
+    if (response.data.valid) {
+      ElMessage.success(
+        response.data.account
+          ? `Authorization 有效，账号：${response.data.account}`
+          : 'Authorization 有效',
+      );
+    } else {
+      ElMessage.error(`Authorization 无效：${response.data.message}`);
+    }
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, 'Authorization 校验失败'));
+  } finally {
+    verifyingToken.value = false;
   }
 };
 
@@ -363,7 +394,19 @@ onMounted(() => void load());
                 <p>敏感字段加密保存；已配置字段留空保存时会保留原值。</p>
               </div>
             </div>
-            <span class="secure-label"><Lock /> 加密存储</span>
+            <div class="credential-heading-actions">
+              <span class="secure-label"><Lock /> 加密存储</span>
+              <el-button
+                v-if="selectedPlatform.code === 'youzai_assistant'"
+                size="small"
+                round
+                plain
+                :loading="verifyingToken"
+                @click="verifyAuthorization"
+              >
+                测试 Authorization
+              </el-button>
+            </div>
           </div>
 
           <div v-if="selectedPlatform.code === 'youzai_assistant'" class="token-source-card">
@@ -846,6 +889,13 @@ onMounted(() => void load());
   color: var(--app-text);
   font-size: 12px;
   font-weight: 650;
+}
+
+.credential-heading-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .token-source-card {

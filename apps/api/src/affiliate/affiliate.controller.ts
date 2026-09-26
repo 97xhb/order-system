@@ -16,7 +16,10 @@ import { CurrentAdmin } from '../auth/current-admin.decorator';
 import { AffiliateService } from './affiliate.service';
 import { ConvertAffiliateLinkDto } from './dto/convert-affiliate-link.dto';
 import { ListAffiliateConversionsDto } from './dto/list-affiliate-conversions.dto';
-import { RefreshAffiliateTokenDto } from './dto/refresh-affiliate-token.dto';
+import {
+  RefreshAffiliateTokenDto,
+  VerifyAffiliateTokenDto,
+} from './dto/refresh-affiliate-token.dto';
 import { UpdateAffiliatePlatformDto } from './dto/update-affiliate-platform.dto';
 
 @ApiTags('affiliate platforms')
@@ -61,6 +64,16 @@ export class AffiliateController {
     @CurrentAdmin() admin: AuthenticatedAdmin,
   ) {
     return this.affiliateService.refreshAuthorization(code, dto, admin);
+  }
+
+  @Post(':code/verify-authorization')
+  @ApiOperation({ summary: '校验 Authorization 是否仍然有效' })
+  verifyAuthorization(
+    @Param('code') code: string,
+    @Body() dto: VerifyAffiliateTokenDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.affiliateService.verifyAuthorization(code, dto, admin);
   }
 
   @Post(':code/convert')

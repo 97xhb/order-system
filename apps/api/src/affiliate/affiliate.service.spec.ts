@@ -291,6 +291,77 @@ describe('AffiliateService', () => {
     expect(auditPayload).not.toContain('online-token-1234');
   });
 
+  it('verifies a stored Authorization without writing a conversion', async () => {
+    const credentialsEncrypted = encryptSensitiveValue(
+      JSON.stringify({ accessToken: 'stored-token' }),
+      encryptionKey,
+    );
+    const auditCreate = jest.fn(async (_args: unknown) => ({}));
+    const prisma = {
+      affiliatePlatform: {
+        findUnique: jest.fn(async () => ({
+          id: 'youzai-platform-id',
+          config: null,
+          accounts: [{ credentialsEncrypted }],
+        })),
+      },
+      auditLog: { create: auditCreate },
+    } as unknown as PrismaService;
+    const verifyToken = jest.fn(async () => ({
+      valid: true,
+      code: 200,
+      message: 'success',
+      account: '测试账号',
+    }));
+    const service = new AffiliateService(prisma, config, adapter, {
+      verifyToken,
+    } as unknown as YouzaiAssistantAffiliateAdapter);
+
+    const result = await service.verifyAuthorization(
+      'youzai_assistant',
+      {},
+      admin,
+    );
+
+    expect(verifyToken).toHaveBeenCalledWith(
+      'stored-token',
+      'https://appletsvr.52youzai.com',
+    );
+    expect(result).toMatchObject({ valid: true, account: '测试账号' });
+    const auditPayload = JSON.stringify(auditCreate.mock.calls[0][0]);
+    expect(auditPayload).not.toContain('stored-token');
+    expect(auditPayload).toContain('AFFILIATE_TOKEN_VERIFY');
+  });
+
+  it('verifies a candidate Authorization before it is saved', async () => {
+    const auditCreate = jest.fn(async (_args: unknown) => ({}));
+    const prisma = {
+      affiliatePlatform: { findUnique: jest.fn(async () => null) },
+      auditLog: { create: auditCreate },
+    } as unknown as PrismaService;
+    const verifyToken = jest.fn(async () => ({
+      valid: false,
+      code: 401,
+      message: '未认证: 令牌已过期',
+      account: null,
+    }));
+    const service = new AffiliateService(prisma, config, adapter, {
+      verifyToken,
+    } as unknown as YouzaiAssistantAffiliateAdapter);
+
+    const result = await service.verifyAuthorization(
+      'youzai_assistant',
+      { token: 'candidate-token' },
+      admin,
+    );
+
+    expect(verifyToken).toHaveBeenCalledWith(
+      'candidate-token',
+      'https://appletsvr.52youzai.com',
+    );
+    expect(result.valid).toBe(false);
+  });
+
   it('rejects an internal network Authorization endpoint', async () => {
     const prisma = {
       affiliatePlatform: { findUnique: jest.fn(async () => null) },

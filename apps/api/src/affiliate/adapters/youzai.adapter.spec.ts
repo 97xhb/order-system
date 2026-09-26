@@ -77,6 +77,89 @@ describe('YouzaiAssistantAffiliateAdapter', () => {
   });
 
   it('treats body code 401 as an expired Authorization', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ code: 401, msg: '未认证: 令牌已过期' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const adapter = new YouzaiAssistantAffiliateAdapter();
+
+    await expect(
+      adapter.convert({
+        content: 'https://v.douyin.com/abc/',
+        credentials: { token: 'expired-token' },
+      }),
+    ).rejects.toThrow('Authorization 已过期');
+  });
+
+  it('rejects dirty 200 responses instead of echoing msg as an error', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 200,
+          msg: 'success',
+          data: [
+            { platform: null, itemId: 'https://item.taobao.com/item.htm?id=1' },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const adapter = new YouzaiAssistantAffiliateAdapter();
+
+    await expect(
+      adapter.convert({
+        content: 'https://item.taobao.com/item.htm?id=1',
+        credentials: { token: 'token-value' },
+      }),
+    ).rejects.toThrow('当前仅支持抖音、京东、拼多多');
+  });
+
+  it('explains when no item could be parsed at all', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ code: 200, msg: 'success', data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const adapter = new YouzaiAssistantAffiliateAdapter();
+
+    await expect(
+      adapter.convert({
+        content: 'hello world',
+        credentials: { token: 'token-value' },
+      }),
+    ).rejects.toThrow('请确认粘贴内容里包含完整的商品链接或口令');
+  });
+
+  it('verifies an Authorization through /user/get', async () => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 200,
+          msg: 'success',
+          data: { userId: '2099309414589894656', nickName: '测试账号' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const adapter = new YouzaiAssistantAffiliateAdapter();
+
+    const result = await adapter.verifyToken('valid-token');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://appletsvr.52youzai.com/user/get');
+    expect((init?.headers as Record<string, string>).Authorization).toBe(
+      'valid-token',
+    );
+    expect(result).toMatchObject({
+      valid: true,
+      account: '测试账号',
+    });
+  });
+
+  it('reports an expired Authorization as invalid', async () => {
     jest
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(
@@ -87,12 +170,10 @@ describe('YouzaiAssistantAffiliateAdapter', () => {
       );
     const adapter = new YouzaiAssistantAffiliateAdapter();
 
-    await expect(
-      adapter.convert({
-        content: 'https://v.douyin.com/abc/',
-        credentials: { token: 'expired-token' },
-      }),
-    ).rejects.toThrow('Authorization 已过期');
+    const result = await adapter.verifyToken('expired-token');
+
+    expect(result.valid).toBe(false);
+    expect(result.message).toContain('令牌已过期');
   });
 
   it('prefers itemUrl over a dirty itemId for jd results', async () => {

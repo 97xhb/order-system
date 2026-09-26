@@ -23,7 +23,10 @@ import { YouzaiAssistantAffiliateAdapter } from './adapters/youzai.adapter';
 import { LIHUAXIONG_PROTOCOL } from './adapters/lihuaxiong.codec';
 import { ConvertAffiliateLinkDto } from './dto/convert-affiliate-link.dto';
 import { ListAffiliateConversionsDto } from './dto/list-affiliate-conversions.dto';
-import { RefreshAffiliateTokenDto } from './dto/refresh-affiliate-token.dto';
+import {
+  RefreshAffiliateTokenDto,
+  VerifyAffiliateTokenDto,
+} from './dto/refresh-affiliate-token.dto';
 import {
   AffiliateCredentialsDto,
   UpdateAffiliatePlatformDto,
@@ -448,6 +451,80 @@ export class AffiliateService {
       if (found) return found;
     }
     return null;
+  }
+
+  /**
+   * 校验 Authorization：已保存的、或前端刚填/刚在线取到的值都能测。
+   * 只调用 /user/get 做鉴权探测，不落库、不写转换历史。
+   */
+  async verifyAuthorization(
+    code: string,
+    dto: VerifyAffiliateTokenDto,
+    admin: AuthenticatedAdmin,
+  ) {
+    const definition = this.definition(code);
+    if (definition.adapterType !== 'YOUZAI_ASSISTANT') {
+      throw new BadRequestException(
+        `${definition.name}暂不支持 Authorization 校验`,
+      );
+    }
+
+    const platform = await this.prisma.affiliatePlatform.findUnique({
+      where: { code: definition.code },
+      include: {
+        accounts: { orderBy: { createdAt: 'asc' }, take: 1 },
+      },
+    });
+    const storedConfig = this.storedConfig(definition, platform?.config);
+
+    let token = this.clean(dto.token);
+    if (!token) {
+      const credentials = this.readCredentials(
+        platform?.accounts[0]?.credentialsEncrypted,
+      );
+      if (!credentials.readable) {
+        throw new BadRequestException('已保存的密钥读取失败，请重新填写并保存');
+      }
+      token = credentials.values.accessToken ?? null;
+    }
+    if (!token) {
+      throw new BadRequestException('请先填写 Authorization 再测试');
+    }
+
+    let result: Awaited<
+      ReturnType<YouzaiAssistantAffiliateAdapter['verifyToken']>
+    >;
+    try {
+      result = await this.youzaiAssistantAdapter.verifyToken(
+        token,
+        this.clean(dto.apiBaseUrl) ??
+          storedConfig.apiBaseUrl ??
+          definition.defaultApiBaseUrl,
+      );
+    } catch (error) {
+      throw new BadGatewayException(
+        error instanceof Error ? error.message : 'Authorization 校验失败',
+      );
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorAdminId: admin.id,
+        source: 'ADMIN_WEB',
+        action: 'AFFILIATE_TOKEN_VERIFY',
+        entityType: 'AffiliatePlatform',
+        entityId: platform?.id ?? definition.code,
+        afterData: {
+          code: definition.code,
+          valid: result.valid,
+          providerCode: result.code,
+          providerMessage: result.message,
+          tokenLength: token.length,
+        },
+      },
+    });
+
+    return result;
   }
 
   async refreshAuthorization(

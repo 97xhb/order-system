@@ -44,7 +44,14 @@ interface YouzaiEnvelope {
 export const YOUZAI_ASSISTANT_PROTOCOL = {
   defaultBaseUrl: 'https://appletsvr.52youzai.com',
   convertPath: '/goods/convertLink',
+  userPath: '/user/get',
 } as const;
+
+const PLATFORM_NAMES: Record<string, string> = {
+  '1': '京东',
+  '2': '拼多多',
+  '11': '抖音',
+};
 
 const clean = (value?: string | null) => {
   const normalized = value?.trim();
@@ -56,12 +63,13 @@ const extractFirstUrl = (value: string) => {
   return match?.[0]?.replace(/[),，。；;]+$/u, '') ?? null;
 };
 
-const resolveEndpoint = (configured?: string | null) => {
+const resolveEndpoint = (
+  configured: string | null | undefined,
+  path: string,
+) => {
   const raw = configured?.trim() || YOUZAI_ASSISTANT_PROTOCOL.defaultBaseUrl;
   const url = new URL(raw);
-  if (!url.pathname || url.pathname === '/') {
-    url.pathname = YOUZAI_ASSISTANT_PROTOCOL.convertPath;
-  }
+  if (!url.pathname || url.pathname === '/') url.pathname = path;
   return url.toString();
 };
 
@@ -75,7 +83,10 @@ export class YouzaiAssistantAffiliateAdapter {
     input: YouzaiAssistantConversionInput,
   ): Promise<YouzaiAssistantConversionResult> {
     const content = input.content.trim();
-    const endpoint = resolveEndpoint(input.apiBaseUrl);
+    const endpoint = resolveEndpoint(
+      input.apiBaseUrl,
+      YOUZAI_ASSISTANT_PROTOCOL.convertPath,
+    );
 
     let response: Response;
     try {
@@ -123,9 +134,26 @@ export class YouzaiAssistantAffiliateAdapter {
     }
 
     const items = Array.isArray(envelope.data) ? envelope.data : [];
+    // 上游失败时会返回 code:200 + msg:success 的脏数据，
+    // 必须按平台字段校验真实链接，不能再把 msg 当成错误提示透出。
     const usable = items.filter((item) => Boolean(this.itemLink(item)));
+    if (!items.length) {
+      throw new Error(
+        '有赞助手没有解析出商品，请确认粘贴内容里包含完整的商品链接或口令',
+      );
+    }
     if (!usable.length) {
-      throw new Error(message ?? '有赞助手接口没有返回可用的转换结果');
+      const detected = [
+        ...new Set(
+          items
+            .map((item) => PLATFORM_NAMES[String(item.platform ?? '')])
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ];
+      const scope = detected.length ? `（识别到 ${detected.join('、')}）` : '';
+      throw new Error(
+        `有赞助手没有返回可用推广链接${scope}，当前仅支持抖音、京东、拼多多`,
+      );
     }
 
     const primary = usable[0];
@@ -154,18 +182,93 @@ export class YouzaiAssistantAffiliateAdapter {
     };
   }
 
+  /**
+   * 只在已知平台且拿到该平台对应的推广链接时才算可用。
+   * 不再回退到 itemId：淘宝等不支持平台会把原始链接塞进 itemId，
+   * 回退会把脏数据误判成转换成功。
+   */
   private itemLink(item: YouzaiConvertItem) {
     const platform = String(item.platform ?? '');
+    if (!PLATFORM_NAMES[platform]) return null;
     if (platform === '2') {
       return clean(item.authUrl) || clean(item.authLongUrl);
     }
-    return (
-      clean(item.itemUrl) ||
-      clean(item.middlePageUrl) ||
-      clean(item.authUrl) ||
-      clean(item.authLongUrl) ||
-      (clean(item.itemId) && extractFirstUrl(String(item.itemId))) ||
-      null
+    return clean(item.itemUrl) || clean(item.middlePageUrl);
+  }
+
+  /** 用 /user/get 校验 Authorization 是否仍然有效，不写入任何业务数据。 */
+  async verifyToken(token: string, apiBaseUrl?: string | null) {
+    const endpoint = resolveEndpoint(
+      apiBaseUrl,
+      YOUZAI_ASSISTANT_PROTOCOL.userPath,
     );
+
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          Authorization: token,
+        },
+        body: JSON.stringify({}),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      throw new Error('有赞助手接口连接失败');
+    }
+
+    let envelope: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(await response.text());
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('bad payload');
+      }
+      envelope = parsed as Record<string, unknown>;
+    } catch {
+      throw new Error('有赞助手接口返回格式不正确');
+    }
+
+    const code = envelope.code ?? null;
+    const message =
+      typeof envelope.msg === 'string' && envelope.msg.trim()
+        ? envelope.msg.trim()
+        : null;
+    if (String(code) === '401') {
+      return {
+        valid: false,
+        code,
+        message: message ?? '未认证: 令牌已过期',
+        account: null,
+      };
+    }
+    if (String(code) !== '200') {
+      return {
+        valid: false,
+        code,
+        message: message ?? `有赞助手接口返回异常（code ${String(code)}）`,
+        account: null,
+      };
+    }
+
+    const data =
+      envelope.data &&
+      typeof envelope.data === 'object' &&
+      !Array.isArray(envelope.data)
+        ? (envelope.data as Record<string, unknown>)
+        : {};
+    const pick = (key: string) =>
+      typeof data[key] === 'string' && (data[key] as string).trim()
+        ? (data[key] as string).trim()
+        : null;
+
+    return {
+      valid: true,
+      code,
+      message: message ?? 'Authorization 有效',
+      account: pick('nickName') ?? pick('nickname') ?? pick('userId'),
+    };
   }
 }
