@@ -19,6 +19,7 @@ interface AffiliatePlatformItem {
   code: string;
   name: string;
   description: string;
+  providerType: 'THIRD_PARTY' | 'OFFICIAL';
   supportedPlatforms: Array<{ code: string; name: string }>;
   enabled: boolean;
   configured: boolean;
@@ -64,7 +65,9 @@ const historyLoading = ref(false);
 const clearingHistory = ref(false);
 const deletingHistoryId = ref('');
 const loadError = ref('');
+const platforms = ref<AffiliatePlatformItem[]>([]);
 const platform = ref<AffiliatePlatformItem | null>(null);
+const selectedCode = ref('third_party_aggregator');
 const conversionInput = ref('');
 const conversionResult = ref<AffiliateConversionResult | null>(null);
 const qrDataUrl = ref('');
@@ -77,7 +80,11 @@ const historyPagination = reactive({
   totalPages: 0,
 });
 
-const supportedPlatformText = '淘宝 京东 唯品会 拼多多 抖音 快手 美团 闪购 团购等';
+const supportedPlatformText = computed(() =>
+  platform.value
+    ? platform.value.supportedPlatforms.map((item) => item.name).join(' ') || '未声明支持平台'
+    : '',
+);
 const conversionQrContent = computed(() => {
   return conversionResult.value?.outputText.trim() || '';
 });
@@ -89,11 +96,16 @@ const load = async () => {
     const response = await http.get<{ items: AffiliatePlatformItem[] }>(
       '/admin/affiliate-platforms',
     );
-    platform.value =
-      response.data.items.find((item) => item.code === 'third_party_aggregator') ?? null;
-    if (!platform.value) {
-      loadError.value = '没有找到梨花熊返利接口配置';
+    platforms.value = response.data.items.filter((item) => item.providerType === 'THIRD_PARTY');
+    const selected =
+      platforms.value.find((item) => item.code === selectedCode.value) ??
+      platforms.value[0] ??
+      null;
+    platform.value = selected;
+    if (!selected) {
+      loadError.value = '没有找到可用的第三方返利接口配置，请先到接口配置中启用';
     } else {
+      selectedCode.value = selected.code;
       await loadHistory(1);
     }
   } catch (error) {
@@ -114,7 +126,7 @@ const loadHistory = async (page = historyPagination.page) => {
         total: number;
         totalPages: number;
       };
-    }>('/admin/affiliate-platforms/third_party_aggregator/conversions', {
+    }>(`/admin/affiliate-platforms/${selectedCode.value}/conversions`, {
       params: { page, pageSize: historyPagination.pageSize },
     });
     historyItems.value = response.data.items;
@@ -151,7 +163,7 @@ const convertLink = async () => {
     return;
   }
   if (!selected.enabled) {
-    ElMessage.warning('梨花熊接口尚未启用，请先到返利平台配置中启用');
+    ElMessage.warning(`${selected.name}尚未启用，请先到返利平台配置中启用`);
     return;
   }
   if (!content) {
@@ -232,7 +244,7 @@ const deleteHistory = async (item: AffiliateConversionHistoryItem) => {
       },
     );
     deletingHistoryId.value = item.id;
-    await http.delete(`/admin/affiliate-platforms/third_party_aggregator/conversions/${item.id}`);
+    await http.delete(`/admin/affiliate-platforms/${selectedCode.value}/conversions/${item.id}`);
     const nextPage =
       historyItems.value.length === 1 && historyPagination.page > 1
         ? historyPagination.page - 1
@@ -260,7 +272,7 @@ const clearHistory = async () => {
       },
     );
     clearingHistory.value = true;
-    await http.delete('/admin/affiliate-platforms/third_party_aggregator/conversions');
+    await http.delete(`/admin/affiliate-platforms/${selectedCode.value}/conversions`);
     conversionResult.value = null;
     qrDataUrl.value = '';
     qrContent.value = '';
@@ -272,6 +284,16 @@ const clearHistory = async () => {
   } finally {
     clearingHistory.value = false;
   }
+};
+
+const selectPlatform = async (item: AffiliatePlatformItem) => {
+  if (item.code === selectedCode.value) return;
+  selectedCode.value = item.code;
+  platform.value = item;
+  conversionResult.value = null;
+  qrDataUrl.value = '';
+  qrContent.value = '';
+  await loadHistory(1);
 };
 
 const openSettings = () => void router.push('/admin/settings/affiliate-platforms');
@@ -295,7 +317,7 @@ onMounted(() => void load());
       <div>
         <span class="page-kicker">AFFILIATE TOOLS</span>
         <h1>返利转换</h1>
-        <p>日常转换商品返利链接，转换结果可直接复制并在右侧生成二维码。</p>
+        <p>日常转换商品返利链接，可在下方切换已接入的第三方接口，结果可复制或生成二维码。</p>
       </div>
       <div class="heading-actions">
         <el-button round :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
@@ -319,13 +341,37 @@ onMounted(() => void load());
                 {{ platform.enabled ? '接口已启用' : '接口未启用' }}
               </el-tag>
             </div>
-            <p>支持平台：{{ supportedPlatformText }} · Device：{{ platform.device || 'pcweb' }}</p>
+            <p>
+              支持平台：{{ supportedPlatformText }}
+              <template v-if="platform.device"> · Device：{{ platform.device }}</template>
+            </p>
           </div>
         </div>
-        <button class="config-shortcut" type="button" @click="openSettings">
-          <span>{{ platform.configuredCredentialFields.length }}</span>
-          <small>已配置密钥</small>
-        </button>
+        <div class="status-actions">
+          <div
+            v-if="platforms.length > 1"
+            class="platform-switch"
+            role="radiogroup"
+            aria-label="选择返利接口"
+          >
+            <button
+              v-for="item in platforms"
+              :key="item.code"
+              type="button"
+              class="card-choice platform-switch-option"
+              :class="{ 'is-selected': item.code === selectedCode }"
+              role="radio"
+              :aria-checked="item.code === selectedCode"
+              @click="selectPlatform(item)"
+            >
+              {{ item.name }}
+            </button>
+          </div>
+          <button class="config-shortcut" type="button" @click="openSettings">
+            <span>{{ platform.configuredCredentialFields.length }}</span>
+            <small>已配置密钥</small>
+          </button>
+        </div>
       </section>
 
       <section class="surface-card conversion-workbench">
@@ -636,6 +682,28 @@ onMounted(() => void load());
   margin: 4px 0 0;
   color: var(--app-muted);
   font-size: 11px;
+}
+
+.status-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.platform-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--app-border);
+  border-radius: 13px;
+  background: var(--app-hover);
+  gap: 4px;
+}
+
+.platform-switch-option {
+  padding: 7px 12px;
+  border-radius: 10px;
+  font-size: 12px;
 }
 
 .config-shortcut {
@@ -1093,6 +1161,11 @@ onMounted(() => void load());
   .conversion-panels {
     grid-template-columns: 1fr;
   }
+
+  .status-actions {
+    align-self: stretch;
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1132,6 +1205,21 @@ onMounted(() => void load());
     width: min(220px, 100%);
     height: auto;
     align-self: center;
+  }
+
+  .status-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .platform-switch {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .platform-switch-option {
+    flex: 1;
   }
 
   .config-shortcut {

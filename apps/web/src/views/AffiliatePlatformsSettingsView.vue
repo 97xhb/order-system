@@ -26,6 +26,7 @@ interface AffiliatePlatformItem {
   enabled: boolean;
   accountName: string;
   apiBaseUrl: string;
+  tokenEndpoint: string;
   device: string;
   notes: string;
   configured: boolean;
@@ -64,9 +65,12 @@ const form = reactive({
   enabled: false,
   accountName: '',
   apiBaseUrl: '',
+  tokenEndpoint: '',
   device: 'pcweb',
   notes: '',
 });
+const tokenMode = ref<'manual' | 'online'>('manual');
+const fetchingToken = ref(false);
 const credentialDraft = reactive<Record<CredentialKey, string>>({
   apiKey: '',
   apiSecret: '',
@@ -86,6 +90,7 @@ const hydrateForm = (item: AffiliatePlatformItem | null) => {
   form.enabled = item?.enabled ?? false;
   form.accountName = item?.accountName ?? '';
   form.apiBaseUrl = item?.apiBaseUrl ?? '';
+  form.tokenEndpoint = item?.tokenEndpoint ?? '';
   form.device = item?.device || 'pcweb';
   form.notes = item?.notes ?? '';
   credentialDraft.apiKey = '';
@@ -96,6 +101,7 @@ const hydrateForm = (item: AffiliatePlatformItem | null) => {
 
 const selectPlatform = (item: AffiliatePlatformItem) => {
   selectedCode.value = item.code;
+  tokenMode.value = 'manual';
   hydrateForm(item);
 };
 
@@ -143,6 +149,7 @@ const save = async () => {
         enabled: form.enabled,
         accountName: form.accountName,
         apiBaseUrl: form.apiBaseUrl,
+        tokenEndpoint: form.tokenEndpoint,
         device: form.device,
         notes: form.notes,
         credentials,
@@ -156,6 +163,30 @@ const save = async () => {
     ElMessage.error(getApiErrorMessage(error, '返利平台配置保存失败'));
   } finally {
     saving.value = false;
+  }
+};
+
+const fetchAuthorization = async () => {
+  const selected = selectedPlatform.value;
+  if (!selected) return;
+  const endpoint = form.tokenEndpoint.trim();
+  if (!endpoint) {
+    ElMessage.warning('请先填写在线获取 Authorization 的接口地址');
+    return;
+  }
+
+  fetchingToken.value = true;
+  try {
+    const response = await http.post<{ authorization: string; endpoint: string }>(
+      `/admin/affiliate-platforms/${selected.code}/refresh-authorization`,
+      { endpoint },
+    );
+    credentialDraft.accessToken = response.data.authorization;
+    ElMessage.success('Authorization 已获取，确认无误后点击保存');
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, 'Authorization 获取失败'));
+  } finally {
+    fetchingToken.value = false;
   }
 };
 
@@ -173,9 +204,9 @@ onMounted(() => void load());
         <div>
           <div class="overview-title-row">
             <strong>返利平台接口</strong>
-            <el-tag type="success" size="small" effect="light">梨花熊转换已接入</el-tag>
+            <el-tag type="success" size="small" effect="light">2 个第三方接口已接入</el-tag>
           </div>
-          <p>梨花熊接口已经适配现有易语言签名和响应解密协议；官方联盟接口后续逐个平台接入。</p>
+          <p>梨花熊与有赞助手均已接入真实转换；官方联盟接口后续逐个平台接入。</p>
         </div>
       </div>
       <div class="overview-stats">
@@ -333,6 +364,58 @@ onMounted(() => void load());
               </div>
             </div>
             <span class="secure-label"><Lock /> 加密存储</span>
+          </div>
+
+          <div v-if="selectedPlatform.code === 'youzai_assistant'" class="token-source-card">
+            <div class="token-source-head">
+              <div>
+                <strong>Authorization 获取方式</strong>
+                <p>手动填写抓包值，或配置一个接口地址由系统自动取回。</p>
+              </div>
+              <div
+                class="token-source-options"
+                role="radiogroup"
+                aria-label="Authorization 获取方式"
+              >
+                <button
+                  type="button"
+                  class="card-choice token-source-option"
+                  :class="{ 'is-selected': tokenMode === 'manual' }"
+                  role="radio"
+                  :aria-checked="tokenMode === 'manual'"
+                  @click="tokenMode = 'manual'"
+                >
+                  手动获取
+                </button>
+                <button
+                  type="button"
+                  class="card-choice token-source-option"
+                  :class="{ 'is-selected': tokenMode === 'online' }"
+                  role="radio"
+                  :aria-checked="tokenMode === 'online'"
+                  @click="tokenMode = 'online'"
+                >
+                  在线获取
+                </button>
+              </div>
+            </div>
+
+            <div v-if="tokenMode === 'online'" class="token-endpoint-row">
+              <el-input
+                v-model="form.tokenEndpoint"
+                maxlength="1000"
+                clearable
+                placeholder="填写返回 Authorization 的接口地址，例如 https://example.com/api/token"
+              />
+              <el-button type="primary" round :loading="fetchingToken" @click="fetchAuthorization">
+                获取并回填
+              </el-button>
+            </div>
+            <p class="protocol-field-hint">
+              在线接口需返回纯文本 token 或 JSON 的
+              <b>token</b> / <b>authorization</b> /
+              <b>data.token</b>；取回后只会回填到下方输入框，保存后才加密入库。
+            </p>
           </div>
 
           <div class="credential-grid">
@@ -763,6 +846,71 @@ onMounted(() => void load());
   color: var(--app-text);
   font-size: 12px;
   font-weight: 650;
+}
+
+.token-source-card {
+  margin: 2px 0 14px;
+  padding: 12px 13px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-hover);
+}
+
+.token-source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.token-source-head strong {
+  color: var(--app-heading);
+  font-size: 13px;
+}
+
+.token-source-head p {
+  margin: 3px 0 0;
+  color: var(--app-muted);
+  font-size: 11px;
+}
+
+.token-source-options {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.token-source-option {
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.token-endpoint-row {
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+  gap: 10px;
+}
+
+.token-endpoint-row :deep(.el-input) {
+  flex: 1;
+}
+
+@media (max-width: 680px) {
+  .token-source-head,
+  .token-endpoint-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .token-source-option {
+    flex: 1;
+  }
+
+  .token-endpoint-row :deep(.el-button) {
+    width: 100%;
+  }
 }
 
 .credential-section-heading {

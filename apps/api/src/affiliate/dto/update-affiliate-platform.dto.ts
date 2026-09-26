@@ -67,6 +67,16 @@ export class UpdateAffiliatePlatformDto {
   @MaxLength(2_000)
   notes?: string;
 
+  @ApiPropertyOptional({
+    description:
+      '在线获取 Authorization 的接口地址，返回值或 data.token 会回填输入框',
+    example: 'https://example.com/api/youzai-token',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1_000)
+  tokenEndpoint?: string;
+
   @ApiPropertyOptional({ type: AffiliateCredentialsDto })
   @IsOptional()
   @ValidateNested()

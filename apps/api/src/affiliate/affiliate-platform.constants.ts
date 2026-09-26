@@ -1,6 +1,7 @@
 export type AffiliateProviderType = 'THIRD_PARTY' | 'OFFICIAL';
 
-export type AffiliateAdapterType = 'LIHUA_XIONG' | 'NOT_IMPLEMENTED';
+export type AffiliateAdapterType =
+  'LIHUA_XIONG' | 'YOUZAI_ASSISTANT' | 'NOT_IMPLEMENTED';
 
 export type AffiliateCredentialKey =
   'apiKey' | 'apiSecret' | 'accessToken' | 'promotionId';
@@ -92,6 +93,29 @@ export const AFFILIATE_PLATFORM_DEFINITIONS: AffiliatePlatformDefinition[] = [
         key: 'promotionId',
         label: '渠道号',
         placeholder: '选填，后续用于渠道归因',
+      },
+    ],
+  },
+  {
+    code: 'youzai_assistant',
+    name: '有赞助手聚合返利接口',
+    shortName: '赞',
+    providerType: 'THIRD_PARTY',
+    adapterType: 'YOUZAI_ASSISTANT',
+    description:
+      '适配有赞助手小程序接口，覆盖抖音、京东、拼多多的商品口令与链接转换。',
+    defaultApiBaseUrl: 'https://appletsvr.52youzai.com',
+    supportedPlatforms: [
+      { code: 'douyin', name: '抖音' },
+      { code: 'jd', name: '京东' },
+      { code: 'pdd', name: '拼多多' },
+    ],
+    credentialFields: [
+      {
+        key: 'accessToken',
+        label: 'Authorization',
+        placeholder:
+          '填写有赞助手小程序抓取到的 Authorization 值（32 位，不带 Bearer）',
       },
     ],
   },

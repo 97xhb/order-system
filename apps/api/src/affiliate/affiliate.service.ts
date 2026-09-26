@@ -19,9 +19,11 @@ import {
   type AffiliatePlatformDefinition,
 } from './affiliate-platform.constants';
 import { LihuaXiongAffiliateAdapter } from './adapters/lihuaxiong.adapter';
+import { YouzaiAssistantAffiliateAdapter } from './adapters/youzai.adapter';
 import { LIHUAXIONG_PROTOCOL } from './adapters/lihuaxiong.codec';
 import { ConvertAffiliateLinkDto } from './dto/convert-affiliate-link.dto';
 import { ListAffiliateConversionsDto } from './dto/list-affiliate-conversions.dto';
+import { RefreshAffiliateTokenDto } from './dto/refresh-affiliate-token.dto';
 import {
   AffiliateCredentialsDto,
   UpdateAffiliatePlatformDto,
@@ -32,6 +34,7 @@ type StoredAffiliateConfig = {
   providerType: AffiliatePlatformDefinition['providerType'];
   supportedPlatformCodes: string[];
   apiBaseUrl: string | null;
+  tokenEndpoint: string | null;
   device: string | null;
   notes: string | null;
 };
@@ -55,6 +58,7 @@ export class AffiliateService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly lihuaXiongAdapter: LihuaXiongAffiliateAdapter,
+    private readonly youzaiAssistantAdapter: YouzaiAssistantAffiliateAdapter,
   ) {}
 
   private encryptionKey() {
@@ -90,6 +94,10 @@ export class AffiliateService {
       ),
       apiBaseUrl:
         typeof config.apiBaseUrl === 'string' ? config.apiBaseUrl : null,
+      tokenEndpoint:
+        typeof config.tokenEndpoint === 'string'
+          ? this.clean(config.tokenEndpoint)
+          : null,
       device:
         typeof config.device === 'string' ? this.clean(config.device) : null,
       notes: typeof config.notes === 'string' ? config.notes : null,
@@ -179,6 +187,7 @@ export class AffiliateService {
       enabled: record?.enabled ?? false,
       accountName: account?.name ?? `${definition.name}默认接口`,
       apiBaseUrl: storedConfig.apiBaseUrl ?? definition.defaultApiBaseUrl ?? '',
+      tokenEndpoint: storedConfig.tokenEndpoint ?? '',
       device:
         definition.adapterType === 'LIHUA_XIONG'
           ? (storedConfig.device ?? LIHUAXIONG_PROTOCOL.device)
@@ -251,6 +260,10 @@ export class AffiliateService {
         dto.apiBaseUrl === undefined
           ? existingConfig.apiBaseUrl
           : this.clean(dto.apiBaseUrl),
+      tokenEndpoint:
+        dto.tokenEndpoint === undefined
+          ? existingConfig.tokenEndpoint
+          : this.clean(dto.tokenEndpoint),
       device:
         definition.adapterType === 'LIHUA_XIONG'
           ? dto.device === undefined
@@ -324,6 +337,7 @@ export class AffiliateService {
                 enabled: existing.enabled,
                 accountName: existingAccount?.name ?? null,
                 apiBaseUrl: existingConfig.apiBaseUrl,
+                tokenEndpoint: existingConfig.tokenEndpoint,
                 device: existingConfig.device,
                 notes: existingConfig.notes,
                 configuredCredentialFields: this.configuredFields(
@@ -336,6 +350,7 @@ export class AffiliateService {
             enabled: savedPlatform.enabled,
             accountName,
             apiBaseUrl: storedConfig.apiBaseUrl,
+            tokenEndpoint: storedConfig.tokenEndpoint,
             device: storedConfig.device,
             notes: storedConfig.notes,
             configuredCredentialFields,
@@ -358,13 +373,256 @@ export class AffiliateService {
     return this.toView(definition, refreshed);
   }
 
+  /**
+   * 在线获取 Authorization：后台填写一个取 token 的接口地址，由服务端代请求，
+   * 解析出的值只回填到前端输入框，管理员确认后再走保存流程落库。
+   */
+  private assertTokenEndpoint(value: string) {
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new BadRequestException('Authorization 获取接口地址格式不正确');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new BadRequestException(
+        'Authorization 获取接口地址只支持 http 或 https',
+      );
+    }
+    if (parsed.username || parsed.password) {
+      throw new BadRequestException(
+        'Authorization 获取接口地址不能包含账号或密码',
+      );
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^[|]$/g, '');
+    const blocked =
+      host === 'localhost' ||
+      host === '::1' ||
+      host === '0.0.0.0' ||
+      host.endsWith('.localhost') ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    if (blocked) {
+      throw new BadRequestException(
+        'Authorization 获取接口地址不能指向本机或内网地址',
+      );
+    }
+    return parsed.toString();
+  }
+
+  private pickToken(value: unknown, depth = 0): string | null {
+    if (depth > 4 || value === null || value === undefined) return null;
+    if (typeof value === 'string') {
+      const normalized = value
+        .trim()
+        .replace(/^Bearer\s+/i, '')
+        .replace(/^["']|["']$/g, '')
+        .trim();
+      return /^[A-Za-z0-9._-]{8,512}$/.test(normalized) ? normalized : null;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = this.pickToken(item, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (typeof value !== 'object') return null;
+
+    const record = value as Record<string, unknown>;
+    const preferred = [
+      'authorization',
+      'token',
+      'access_token',
+      'accessToken',
+      'value',
+      'data',
+      'result',
+    ];
+    for (const key of preferred) {
+      if (!(key in record)) continue;
+      const found = this.pickToken(record[key], depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  async refreshAuthorization(
+    code: string,
+    dto: RefreshAffiliateTokenDto,
+    admin: AuthenticatedAdmin,
+  ) {
+    const definition = this.definition(code);
+    const platform = await this.prisma.affiliatePlatform.findUnique({
+      where: { code: definition.code },
+      select: { id: true, config: true },
+    });
+    const storedConfig = this.storedConfig(definition, platform?.config);
+    const endpoint = this.clean(dto.endpoint) ?? storedConfig.tokenEndpoint;
+    if (!endpoint) {
+      throw new BadRequestException(
+        '请先填写在线获取 Authorization 的接口地址',
+      );
+    }
+    const target = this.assertTokenEndpoint(endpoint);
+
+    let response: Response;
+    try {
+      response = await fetch(target, {
+        method: 'GET',
+        redirect: 'error',
+        headers: { accept: 'application/json, text/plain, */*' },
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      throw new BadGatewayException('Authorization 获取接口连接失败');
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `Authorization 获取接口返回 HTTP ${response.status}`,
+      );
+    }
+
+    let parsed: unknown = text;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+    const authorization = this.pickToken(parsed);
+    if (!authorization) {
+      throw new BadGatewayException(
+        'Authorization 获取接口没有返回可用值，请检查接口返回字段',
+      );
+    }
+
+    if (platform?.id) {
+      await this.prisma.auditLog.create({
+        data: {
+          actorAdminId: admin.id,
+          source: 'ADMIN_WEB',
+          action: 'AFFILIATE_TOKEN_FETCH',
+          entityType: 'AffiliatePlatform',
+          entityId: platform.id,
+          afterData: {
+            code: definition.code,
+            endpoint: target,
+            tokenLength: authorization.length,
+          },
+        },
+      });
+    }
+
+    return {
+      authorization,
+      endpoint: target,
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
+  private async persistConversion(
+    definition: AffiliatePlatformDefinition,
+    platformId: string,
+    content: string,
+    result: {
+      normalizedUrl: string | null;
+      productExternalId: string | null;
+      promotionUrl: string | null;
+      shortUrl: string | null;
+      outputText: string;
+      providerCode: string | number | null;
+      providerMessage: string | null;
+      rawData: unknown;
+    },
+    admin: AuthenticatedAdmin,
+  ) {
+    const conversion = await this.prisma.$transaction(async (transaction) => {
+      const saved = await transaction.affiliateLinkConversion.create({
+        data: {
+          affiliatePlatformId: platformId,
+          originalUrl: content,
+          normalizedUrl: result.normalizedUrl,
+          productExternalId: result.productExternalId?.slice(0, 150),
+          promotionUrl: result.promotionUrl,
+          shortUrl: result.shortUrl,
+          promotionText: result.outputText,
+          source: 'ADMIN_WEB',
+          status: 'SUCCESS',
+        },
+      });
+
+      await transaction.auditLog.create({
+        data: {
+          actorAdminId: admin.id,
+          source: 'ADMIN_WEB',
+          action: 'CREATE',
+          entityType: 'AffiliateLinkConversion',
+          entityId: saved.id,
+          afterData: {
+            platformCode: definition.code,
+            status: 'SUCCESS',
+            normalizedUrl: result.normalizedUrl,
+            promotionUrl: result.promotionUrl,
+            shortUrl: result.shortUrl,
+          },
+        },
+      });
+      return saved;
+    });
+
+    return {
+      id: conversion.id,
+      platformCode: definition.code,
+      platformName: definition.name,
+      status: conversion.status,
+      outputText: result.outputText,
+      normalizedUrl: result.normalizedUrl,
+      productExternalId: result.productExternalId,
+      promotionUrl: result.promotionUrl,
+      shortUrl: result.shortUrl,
+      providerCode: result.providerCode,
+      providerMessage: result.providerMessage,
+      rawData: result.rawData,
+      createdAt: conversion.createdAt,
+    };
+  }
+
+  private async recordFailedConversion(
+    platformId: string,
+    content: string,
+    errorMessage: string,
+  ) {
+    try {
+      await this.prisma.affiliateLinkConversion.create({
+        data: {
+          affiliatePlatformId: platformId,
+          originalUrl: content,
+          normalizedUrl: content.match(/https?:\/\/[^\s<>"']+/i)?.[0],
+          source: 'ADMIN_WEB',
+          status: 'FAILED',
+          errorMessage,
+        },
+      });
+    } catch {
+      // 转换错误优先返回给管理员，历史写入失败由应用日志继续定位。
+    }
+  }
+
   async convert(
     code: string,
     dto: ConvertAffiliateLinkDto,
     admin: AuthenticatedAdmin,
   ) {
     const definition = this.definition(code);
-    if (definition.adapterType !== 'LIHUA_XIONG') {
+    if (
+      definition.adapterType !== 'LIHUA_XIONG' &&
+      definition.adapterType !== 'YOUZAI_ASSISTANT'
+    ) {
       throw new BadRequestException(`${definition.name}转换适配器尚未接入`);
     }
 
@@ -377,6 +635,52 @@ export class AffiliateService {
         },
       },
     });
+    const content = dto.content.trim();
+
+    if (definition.adapterType === 'YOUZAI_ASSISTANT') {
+      if (!platform?.enabled) {
+        throw new BadRequestException(`请先保存并启用${definition.name}`);
+      }
+      const account = platform.accounts[0];
+      if (!account?.enabled) {
+        throw new BadRequestException(`${definition.name}默认接口账号尚未启用`);
+      }
+
+      const credentials = this.readCredentials(account.credentialsEncrypted);
+      if (!credentials.readable) {
+        throw new BadRequestException(
+          `${definition.name}密钥读取失败，请重新填写并保存`,
+        );
+      }
+      const token = credentials.values.accessToken;
+      if (!token) {
+        throw new BadRequestException(
+          '请先在返利平台配置中填写并保存 Authorization',
+        );
+      }
+
+      const storedConfig = this.storedConfig(definition, platform.config);
+      try {
+        const result = await this.youzaiAssistantAdapter.convert({
+          content,
+          apiBaseUrl: storedConfig.apiBaseUrl ?? definition.defaultApiBaseUrl,
+          credentials: { token },
+        });
+        return await this.persistConversion(
+          definition,
+          platform.id,
+          content,
+          result,
+          admin,
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : '有赞助手接口转换失败';
+        await this.recordFailedConversion(platform.id, content, errorMessage);
+        throw new BadGatewayException(errorMessage);
+      }
+    }
+
     if (!platform?.enabled) {
       throw new BadRequestException('请先保存并启用梨花熊聚合返利接口');
     }
@@ -406,7 +710,6 @@ export class AffiliateService {
       );
     }
 
-    const content = dto.content.trim();
     const storedConfig = this.storedConfig(definition, platform.config);
     try {
       const result = await this.lihuaXiongAdapter.convert({
@@ -420,73 +723,17 @@ export class AffiliateService {
           promotionId: credentials.values.promotionId,
         },
       });
-
-      const conversion = await this.prisma.$transaction(async (transaction) => {
-        const saved = await transaction.affiliateLinkConversion.create({
-          data: {
-            affiliatePlatformId: platform.id,
-            originalUrl: content,
-            normalizedUrl: result.normalizedUrl,
-            productExternalId: result.productExternalId?.slice(0, 150),
-            promotionUrl: result.promotionUrl,
-            shortUrl: result.shortUrl,
-            promotionText: result.outputText,
-            source: 'ADMIN_WEB',
-            status: 'SUCCESS',
-          },
-        });
-
-        await transaction.auditLog.create({
-          data: {
-            actorAdminId: admin.id,
-            source: 'ADMIN_WEB',
-            action: 'CREATE',
-            entityType: 'AffiliateLinkConversion',
-            entityId: saved.id,
-            afterData: {
-              platformCode: definition.code,
-              status: 'SUCCESS',
-              normalizedUrl: result.normalizedUrl,
-              promotionUrl: result.promotionUrl,
-              shortUrl: result.shortUrl,
-            },
-          },
-        });
-        return saved;
-      });
-
-      return {
-        id: conversion.id,
-        platformCode: definition.code,
-        platformName: definition.name,
-        status: conversion.status,
-        outputText: result.outputText,
-        normalizedUrl: result.normalizedUrl,
-        productExternalId: result.productExternalId,
-        promotionUrl: result.promotionUrl,
-        shortUrl: result.shortUrl,
-        providerCode: result.providerCode,
-        providerMessage: result.providerMessage,
-        rawData: result.rawData,
-        createdAt: conversion.createdAt,
-      };
+      return await this.persistConversion(
+        definition,
+        platform.id,
+        content,
+        result,
+        admin,
+      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : '梨花熊接口转换失败';
-      try {
-        await this.prisma.affiliateLinkConversion.create({
-          data: {
-            affiliatePlatformId: platform.id,
-            originalUrl: content,
-            normalizedUrl: content.match(/https?:\/\/[^\s<>"']+/i)?.[0],
-            source: 'ADMIN_WEB',
-            status: 'FAILED',
-            errorMessage,
-          },
-        });
-      } catch {
-        // 转换错误优先返回给管理员，历史写入失败由应用日志继续定位。
-      }
+      await this.recordFailedConversion(platform.id, content, errorMessage);
       throw new BadGatewayException(errorMessage);
     }
   }

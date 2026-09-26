@@ -16,6 +16,7 @@ import { CurrentAdmin } from '../auth/current-admin.decorator';
 import { AffiliateService } from './affiliate.service';
 import { ConvertAffiliateLinkDto } from './dto/convert-affiliate-link.dto';
 import { ListAffiliateConversionsDto } from './dto/list-affiliate-conversions.dto';
+import { RefreshAffiliateTokenDto } from './dto/refresh-affiliate-token.dto';
 import { UpdateAffiliatePlatformDto } from './dto/update-affiliate-platform.dto';
 
 @ApiTags('affiliate platforms')
@@ -48,6 +49,18 @@ export class AffiliateController {
     @CurrentAdmin() admin: AuthenticatedAdmin,
   ) {
     return this.affiliateService.update(code, dto, admin);
+  }
+
+  @Post(':code/refresh-authorization')
+  @ApiOperation({
+    summary: '通过自定义接口在线获取 Authorization，仅回填前端输入框',
+  })
+  refreshAuthorization(
+    @Param('code') code: string,
+    @Body() dto: RefreshAffiliateTokenDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.affiliateService.refreshAuthorization(code, dto, admin);
   }
 
   @Post(':code/convert')

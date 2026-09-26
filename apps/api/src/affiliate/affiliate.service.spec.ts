@@ -6,6 +6,7 @@ import {
   encryptSensitiveValue,
 } from '../security/sensitive-value';
 import { LihuaXiongAffiliateAdapter } from './adapters/lihuaxiong.adapter';
+import { YouzaiAssistantAffiliateAdapter } from './adapters/youzai.adapter';
 import { AffiliateService } from './affiliate.service';
 
 describe('AffiliateService', () => {
@@ -19,17 +20,24 @@ describe('AffiliateService', () => {
     getOrThrow: jest.fn(() => encryptionKey),
   } as unknown as ConfigService;
   const adapter = new LihuaXiongAffiliateAdapter();
+  const youzaiAdapter = new YouzaiAssistantAffiliateAdapter();
 
   it('returns the third-party and official provider framework in fixed order', async () => {
     const prisma = {
       affiliatePlatform: { findMany: jest.fn(async () => []) },
     } as unknown as PrismaService;
-    const service = new AffiliateService(prisma, config, adapter);
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
 
     const result = await service.list();
 
     expect(result.items.map((item) => item.code)).toEqual([
       'third_party_aggregator',
+      'youzai_assistant',
       'taobao_union',
       'jingfen',
       'weixiangke',
@@ -53,12 +61,17 @@ describe('AffiliateService', () => {
       ],
     );
     expect(result.items[1].supportedPlatforms).toEqual([
-      { code: 'taobao', name: '淘宝' },
+      { code: 'douyin', name: '抖音' },
+      { code: 'jd', name: '京东' },
+      { code: 'pdd', name: '拼多多' },
     ]);
     expect(result.items[2].supportedPlatforms).toEqual([
-      { code: 'jd', name: '京东' },
+      { code: 'taobao', name: '淘宝' },
     ]);
     expect(result.items[3].supportedPlatforms).toEqual([
+      { code: 'jd', name: '京东' },
+    ]);
+    expect(result.items[4].supportedPlatforms).toEqual([
       { code: 'vipshop', name: '唯品会' },
     ]);
   });
@@ -116,7 +129,12 @@ describe('AffiliateService', () => {
           callback(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new AffiliateService(prisma, config, adapter);
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
 
     const result = await service.update(
       'taobao_union',
@@ -205,7 +223,12 @@ describe('AffiliateService', () => {
           callback(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new AffiliateService(prisma, config, adapter);
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
 
     await service.update(
       'jingfen',
@@ -216,6 +239,179 @@ describe('AffiliateService', () => {
     expect(
       JSON.parse(decryptSensitiveValue(updatedEncrypted, encryptionKey)),
     ).toEqual({ apiKey: 'existing-key', apiSecret: 'existing-secret' });
+  });
+
+  it('parses an online Authorization endpoint response and only returns the token', async () => {
+    const auditCreate = jest.fn(async (_args: unknown) => ({}));
+    const prisma = {
+      affiliatePlatform: {
+        findUnique: jest.fn(async () => ({
+          id: 'affiliate-platform-id',
+          config: {
+            schemaVersion: 1,
+            providerType: 'THIRD_PARTY',
+            supportedPlatformCodes: ['douyin'],
+            apiBaseUrl: null,
+            tokenEndpoint: null,
+            device: null,
+            notes: null,
+          },
+        })),
+      },
+      auditLog: { create: auditCreate },
+    } as unknown as PrismaService;
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ code: 0, data: { token: 'online-token-1234' } }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
+
+    const result = await service.refreshAuthorization(
+      'youzai_assistant',
+      { endpoint: 'https://token.example.test/api/token' },
+      admin,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://token.example.test/api/token',
+      expect.objectContaining({ method: 'GET', redirect: 'error' }),
+    );
+    expect(result.authorization).toBe('online-token-1234');
+    const auditPayload = JSON.stringify(auditCreate.mock.calls[0][0]);
+    expect(auditPayload).not.toContain('online-token-1234');
+  });
+
+  it('rejects an internal network Authorization endpoint', async () => {
+    const prisma = {
+      affiliatePlatform: { findUnique: jest.fn(async () => null) },
+      auditLog: { create: jest.fn() },
+    } as unknown as PrismaService;
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
+
+    await expect(
+      service.refreshAuthorization(
+        'youzai_assistant',
+        { endpoint: 'http://192.168.1.10:8080/token' },
+        admin,
+      ),
+    ).rejects.toThrow('不能指向本机或内网地址');
+  });
+
+  it('converts through the Youzai adapter and saves conversion history', async () => {
+    const credentialsEncrypted = encryptSensitiveValue(
+      JSON.stringify({ accessToken: 'youzai-token' }),
+      encryptionKey,
+    );
+    const platform = {
+      id: 'youzai-platform-id',
+      code: 'youzai_assistant',
+      name: '有赞助手聚合返利接口',
+      enabled: true,
+      config: {
+        schemaVersion: 1,
+        providerType: 'THIRD_PARTY',
+        supportedPlatformCodes: ['douyin', 'jd', 'pdd'],
+        apiBaseUrl: null,
+        tokenEndpoint: null,
+        device: null,
+        notes: null,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      accounts: [
+        {
+          id: 'youzai-account-id',
+          affiliatePlatformId: 'youzai-platform-id',
+          name: '默认账号',
+          enabled: true,
+          credentialsEncrypted,
+          tokenExpiresAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    };
+    const conversion = {
+      id: 'youzai-conversion-id',
+      affiliatePlatformId: platform.id,
+      promotionChannelId: null,
+      originalUrl: 'https://v.douyin.com/abc/',
+      normalizedUrl: 'https://v.douyin.com/abc/',
+      productExternalId: '3832635966917575063',
+      promotionUrl: 'https://v.buydouke.com/abc/',
+      shortUrl: null,
+      promotionText: 'https://v.buydouke.com/abc/',
+      source: 'ADMIN_WEB',
+      status: 'SUCCESS',
+      errorMessage: null,
+      expiresAt: null,
+      createdAt: new Date(),
+    };
+    const conversionCreate = jest.fn(async () => conversion);
+    const transaction = {
+      affiliateLinkConversion: { create: conversionCreate },
+      auditLog: { create: jest.fn(async () => ({})) },
+    };
+    const prisma = {
+      affiliatePlatform: { findUnique: jest.fn(async () => platform) },
+      affiliateLinkConversion: { create: jest.fn() },
+      $transaction: jest.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const convert = jest.fn(async () => ({
+      normalizedUrl: 'https://v.douyin.com/abc/',
+      productExternalId: '3832635966917575063',
+      promotionUrl: 'https://v.buydouke.com/abc/',
+      shortUrl: null,
+      promotionText: 'https://v.buydouke.com/abc/',
+      outputText: 'https://v.buydouke.com/abc/',
+      providerCode: 200,
+      providerMessage: 'success',
+      rawData: { code: 200 },
+    }));
+    const youzaiAdapterMock = {
+      convert,
+    } as unknown as YouzaiAssistantAffiliateAdapter;
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapterMock,
+    );
+
+    const result = await service.convert(
+      'youzai_assistant',
+      { content: 'https://v.douyin.com/abc/' },
+      admin,
+    );
+
+    expect(convert).toHaveBeenCalledWith({
+      content: 'https://v.douyin.com/abc/',
+      apiBaseUrl: 'https://appletsvr.52youzai.com',
+      credentials: { token: 'youzai-token' },
+    });
+    expect(result).toMatchObject({
+      platformCode: 'youzai_assistant',
+      promotionUrl: 'https://v.buydouke.com/abc/',
+      status: 'SUCCESS',
+    });
   });
 
   it('converts through the LihuaXiong adapter and saves conversion history', async () => {
@@ -299,7 +495,12 @@ describe('AffiliateService', () => {
     const conversionAdapter = {
       convert,
     } as unknown as LihuaXiongAffiliateAdapter;
-    const service = new AffiliateService(prisma, config, conversionAdapter);
+    const service = new AffiliateService(
+      prisma,
+      config,
+      conversionAdapter,
+      youzaiAdapter,
+    );
 
     const result = await service.convert(
       'third_party_aggregator',
@@ -362,7 +563,12 @@ describe('AffiliateService', () => {
         count: jest.fn(async () => 21),
       },
     } as unknown as PrismaService;
-    const service = new AffiliateService(prisma, config, adapter);
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
 
     const result = await service.listConversions('third_party_aggregator', {
       page: 2,
@@ -420,7 +626,12 @@ describe('AffiliateService', () => {
           callback(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new AffiliateService(prisma, config, adapter);
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
 
     await service.deleteConversion(
       'third_party_aggregator',
@@ -455,7 +666,12 @@ describe('AffiliateService', () => {
           callback(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new AffiliateService(prisma, config, adapter);
+    const service = new AffiliateService(
+      prisma,
+      config,
+      adapter,
+      youzaiAdapter,
+    );
 
     const result = await service.clearConversions(
       'third_party_aggregator',
