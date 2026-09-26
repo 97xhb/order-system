@@ -501,22 +501,20 @@ export class AffiliateService {
       );
     }
 
-    if (platform?.id) {
-      await this.prisma.auditLog.create({
-        data: {
-          actorAdminId: admin.id,
-          source: 'ADMIN_WEB',
-          action: 'AFFILIATE_TOKEN_FETCH',
-          entityType: 'AffiliatePlatform',
-          entityId: platform.id,
-          afterData: {
-            code: definition.code,
-            endpoint: target,
-            tokenLength: authorization.length,
-          },
+    await this.prisma.auditLog.create({
+      data: {
+        actorAdminId: admin.id,
+        source: 'ADMIN_WEB',
+        action: 'AFFILIATE_TOKEN_FETCH',
+        entityType: 'AffiliatePlatform',
+        entityId: platform?.id ?? definition.code,
+        afterData: {
+          code: definition.code,
+          endpoint: target,
+          tokenLength: authorization.length,
         },
-      });
-    }
+      },
+    });
 
     return {
       authorization,
