@@ -255,6 +255,25 @@ const logisticsKind = ref<'inbound' | 'shipment'>('shipment');
 const logisticsResult = ref<LogisticsQueryResult | null>(null);
 const logisticsPhoneSuffix = ref('');
 const activeQuickView = ref('all');
+const batchEditVisible = ref(false);
+const batchEditSaving = ref(false);
+const batchEditForm = reactive({
+  purchaseAddress: '',
+  inboundTrackingNo: '',
+  orderAmount: null as number | null,
+  submitterSettlementAmount: null as number | null,
+  saleAmount: null as number | null,
+});
+const batchEditFields = computed(() => [
+  { key: 'purchaseAddress', label: '下单地址', value: batchEditForm.purchaseAddress.trim() },
+  { key: 'inboundTrackingNo', label: '寄件单号', value: batchEditForm.inboundTrackingNo.trim() },
+  { key: 'orderAmount', label: '下单金额', value: batchEditForm.orderAmount },
+  { key: 'submitterSettlementAmount', label: '结算金额', value: batchEditForm.submitterSettlementAmount },
+  { key: 'saleAmount', label: '回款金额', value: batchEditForm.saleAmount },
+] as const);
+const batchEditCount = computed(
+  () => batchEditFields.value.filter((item) => item.value !== '' && item.value !== null).length,
+);
 let latestLoadRequest = 0;
 const visibleColumnKeys = ref<string[]>([...baseDefaultVisibleColumnKeys]);
 const columnOrderKeys = ref<string[]>([...baseDefaultVisibleColumnKeys]);
@@ -1486,6 +1505,57 @@ const batchMarkPaid = async (target: 'CUSTOMER' | 'SUBMITTER') => {
   }
 };
 
+const openBatchEdit = () => {
+  if (!selectedRows.value.length) {
+    ElMessage.warning("请先勾选需要批量修改的订单");
+    return;
+  }
+  batchEditVisible.value = true;
+};
+
+const batchEdit = async () => {
+  if (!selectedRows.value.length) return;
+  if (!batchEditCount.value) {
+    ElMessage.warning("请至少填写一个要修改的字段");
+    return;
+  }
+  const payload: Record<string, string | number> = {};
+  const labels: string[] = [];
+  for (const item of batchEditFields.value) {
+    if (item.value === "" || item.value === null) continue;
+    payload[item.key] = item.value;
+    labels.push(item.label);
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定将 ${selectedRows.value.length} 笔订单的 ${labels.join("、")} 统一修改为填写值吗？`,
+      "批量修改订单",
+      { type: "warning", confirmButtonText: "确认修改", cancelButtonText: "取消" },
+    );
+    batchEditSaving.value = true;
+    const results = await Promise.allSettled(
+      selectedRows.value.map((row) =>
+        http.patch(`/admin/orders/${row.id}/progress`, { ...payload, reason: "订单列表批量修改字段" }),
+      ),
+    );
+    const failedCount = results.filter((result) => result.status === "rejected").length;
+    const successCount = results.length - failedCount;
+    if (failedCount) {
+      ElMessage.warning(`已成功修改 ${successCount} 笔，另有 ${failedCount} 笔修改失败，请重新筛选核对`);
+    } else {
+      ElMessage.success(`已批量修改 ${successCount} 笔订单的 ${labels.join("、")}`);
+    }
+    batchEditVisible.value = false;
+    selectedRows.value = [];
+    await load();
+  } catch (error) {
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(getApiErrorMessage(error, "批量修改订单失败"));
+  } finally {
+    batchEditSaving.value = false;
+  }
+};
+
 const quickView = (type: string) => {
   resetFilters();
   if (type === 'shipped-unpaid') {
@@ -1955,6 +2025,16 @@ onMounted(() => {
             </div>
           </el-popover>
           <div class="batch-payment-actions">
+            <el-button
+              class="batch-payment-button"
+              round
+              :disabled="!selectedRows.length"
+              :loading="batchEditSaving"
+              @click="openBatchEdit"
+            >
+              批量修改
+              <span v-if="selectedRows.length">{{ selectedRows.length }} 笔</span>
+            </el-button>
             <el-popover
               v-model:visible="copyPopoverVisible"
               placement="bottom-end"
@@ -2543,6 +2623,37 @@ onMounted(() => {
         @change="load"
       />
     </section>
+
+    <el-dialog
+      v-model="batchEditVisible"
+      title="批量修改所选订单"
+      width="520px"
+    >
+      <el-form label-width="92px">
+        <el-form-item label="已选订单">
+          <span>{{ selectedRows.length }} 笔</span>
+        </el-form-item>
+        <el-form-item label="下单地址">
+          <el-input v-model="batchEditForm.purchaseAddress" type="textarea" :rows="2" placeholder="留空不修改" />
+        </el-form-item>
+        <el-form-item label="寄件单号">
+          <el-input v-model="batchEditForm.inboundTrackingNo" placeholder="留空不修改" />
+        </el-form-item>
+        <el-form-item label="下单金额">
+          <el-input-number v-model="batchEditForm.orderAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+        </el-form-item>
+        <el-form-item label="结算金额">
+          <el-input-number v-model="batchEditForm.submitterSettlementAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+        </el-form-item>
+        <el-form-item label="回款金额">
+          <el-input-number v-model="batchEditForm.saleAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchEditVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!batchEditCount" :loading="batchEditSaving" @click="batchEdit">确认修改</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="batchCreateDialog"
@@ -3231,6 +3342,10 @@ onMounted(() => {
   font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
+.batch-edit-money {
+  width: 100%;
+}
+
 .selected-orders-summary {
   border-color: color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
   background: color-mix(in srgb, var(--app-primary-soft) 54%, var(--app-card-solid));

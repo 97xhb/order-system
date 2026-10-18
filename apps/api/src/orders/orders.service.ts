@@ -1321,6 +1321,17 @@ export class OrdersService {
     const saleAmount = new Prisma.Decimal(
       dto.saleAmount ?? existing.saleAmount,
     );
+    const orderAmount = new Prisma.Decimal(
+      dto.orderAmount ?? existing.orderAmount,
+    );
+    const inboundTrackingNo =
+      dto.inboundTrackingNo === undefined
+        ? undefined
+        : this.clean(dto.inboundTrackingNo);
+    const purchaseAddress =
+      dto.purchaseAddress === undefined
+        ? undefined
+        : this.clean(dto.purchaseAddress);
     const submitterSettlementAmount = new Prisma.Decimal(
       dto.submitterSettlementAmount ?? existing.submitterSettlementAmount,
     );
@@ -1371,6 +1382,7 @@ export class OrdersService {
     const profit = this.profitDataFromSnapshot({
       ...existing,
       saleAmount,
+      orderAmount,
       customerReceivedAmount,
       submitterSettlementAmount,
       submitterPaidAmount,
@@ -1383,6 +1395,9 @@ export class OrdersService {
         data: {
           shipmentStatus,
           saleAmount,
+          ...(dto.orderAmount !== undefined ? { orderAmount } : {}),
+          ...(inboundTrackingNo !== undefined ? { inboundTrackingNo } : {}),
+          ...(purchaseAddress !== undefined ? { purchaseAddress } : {}),
           customerReceivedAmount,
           receivableStatus,
           submitterSettlementAmount,
@@ -1412,6 +1427,9 @@ export class OrdersService {
           entityId: id,
           beforeData: {
             shipmentStatus: existing.shipmentStatus,
+            orderAmount: existing.orderAmount.toString(),
+            inboundTrackingNo: existing.inboundTrackingNo,
+            purchaseAddress: existing.purchaseAddress,
             saleAmount: existing.saleAmount.toString(),
             customerReceivedAmount: existing.customerReceivedAmount.toString(),
             receivableStatus: existing.receivableStatus,
@@ -1423,6 +1441,9 @@ export class OrdersService {
           },
           afterData: {
             shipmentStatus: order.shipmentStatus,
+            orderAmount: order.orderAmount.toString(),
+            inboundTrackingNo: order.inboundTrackingNo,
+            purchaseAddress: order.purchaseAddress,
             saleAmount: order.saleAmount.toString(),
             customerReceivedAmount: order.customerReceivedAmount.toString(),
             receivableStatus: order.receivableStatus,

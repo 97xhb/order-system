@@ -14,6 +14,26 @@ import {
 import { ORDER_SETTLEMENT_STATUSES } from '../order-statuses';
 
 export class UpdateOrderProgressDto {
+  @ApiPropertyOptional({ description: '下单金额' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1_000_000_000_000)
+  orderAmount?: number;
+
+  @ApiPropertyOptional({ description: '寄件单号，传空字符串表示清空' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  inboundTrackingNo?: string;
+
+  @ApiPropertyOptional({ description: '下单地址，传空字符串表示清空' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  purchaseAddress?: string;
+
   @ApiPropertyOptional({ enum: ShipmentStatus })
   @IsOptional()
   @IsEnum(ShipmentStatus)
