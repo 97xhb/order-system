@@ -263,7 +263,15 @@ const batchEditForm = reactive({
   orderAmount: null as number | null,
   submitterSettlementAmount: null as number | null,
   saleAmount: null as number | null,
+  shipmentStatus: null as ShipmentStatus | null,
+  receivableStatus: null as SettlementStatus | null,
+  submitterSettlementStatus: null as SettlementStatus | null,
 });
+const batchEditStatusFields = computed(() => [
+  { key: "shipmentStatus", label: "寄件状态", value: batchEditForm.shipmentStatus },
+  { key: "receivableStatus", label: "回款状态", value: batchEditForm.receivableStatus },
+  { key: "submitterSettlementStatus", label: "结算状态", value: batchEditForm.submitterSettlementStatus },
+] as const);
 const batchEditFields = computed(() => [
   { key: 'purchaseAddress', label: '下单地址', value: batchEditForm.purchaseAddress.trim() },
   { key: 'inboundTrackingNo', label: '寄件单号', value: batchEditForm.inboundTrackingNo.trim() },
@@ -272,7 +280,9 @@ const batchEditFields = computed(() => [
   { key: 'saleAmount', label: '回款金额', value: batchEditForm.saleAmount },
 ] as const);
 const batchEditCount = computed(
-  () => batchEditFields.value.filter((item) => item.value !== '' && item.value !== null).length,
+  () =>
+    batchEditFields.value.filter((item) => item.value !== '' && item.value !== null).length +
+    batchEditStatusFields.value.filter((item) => item.value !== null).length,
 );
 let latestLoadRequest = 0;
 const visibleColumnKeys = ref<string[]>([...baseDefaultVisibleColumnKeys]);
@@ -1505,6 +1515,13 @@ const batchMarkPaid = async (target: 'CUSTOMER' | 'SUBMITTER') => {
   }
 };
 
+watch(
+  () => batchEditForm.inboundTrackingNo,
+  (value) => {
+    if (value.trim()) batchEditForm.shipmentStatus = 'SHIPPED';
+  },
+);
+
 const openBatchEdit = () => {
   if (!selectedRows.value.length) {
     ElMessage.warning("请先勾选需要批量修改的订单");
@@ -1523,6 +1540,11 @@ const batchEdit = async () => {
   const labels: string[] = [];
   for (const item of batchEditFields.value) {
     if (item.value === "" || item.value === null) continue;
+    payload[item.key] = item.value;
+    labels.push(item.label);
+  }
+  for (const item of batchEditStatusFields.value) {
+    if (item.value === null) continue;
     payload[item.key] = item.value;
     labels.push(item.label);
   }
@@ -2629,26 +2651,59 @@ onMounted(() => {
       title="批量修改所选订单"
       width="520px"
     >
-      <el-form label-width="92px">
-        <el-form-item label="已选订单">
-          <span>{{ selectedRows.length }} 笔</span>
-        </el-form-item>
-        <el-form-item label="下单地址">
-          <el-input v-model="batchEditForm.purchaseAddress" type="textarea" :rows="2" placeholder="留空不修改" />
-        </el-form-item>
-        <el-form-item label="寄件单号">
-          <el-input v-model="batchEditForm.inboundTrackingNo" placeholder="留空不修改" />
-        </el-form-item>
-        <el-form-item label="下单金额">
-          <el-input-number v-model="batchEditForm.orderAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
-        </el-form-item>
-        <el-form-item label="结算金额">
-          <el-input-number v-model="batchEditForm.submitterSettlementAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
-        </el-form-item>
-        <el-form-item label="回款金额">
-          <el-input-number v-model="batchEditForm.saleAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
-        </el-form-item>
-      </el-form>
+      <div class="batch-edit-form">
+        <div class="batch-edit-summary">
+          <span>已选 <b>{{ selectedRows.length }}</b> 笔订单</span>
+          <span>将修改 <b>{{ batchEditCount }}</b> 项</span>
+        </div>
+        <div class="batch-edit-grid">
+          <label class="batch-edit-field batch-edit-field--wide">
+            <span class="batch-edit-label">下单地址</span>
+            <el-input v-model="batchEditForm.purchaseAddress" type="textarea" :rows="2" placeholder="留空不修改" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">寄件单号</span>
+            <el-input v-model="batchEditForm.inboundTrackingNo" placeholder="留空不修改，填单号自动改为已寄出" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">寄件状态</span>
+            <el-select v-model="batchEditForm.shipmentStatus" clearable placeholder="留空不修改">
+              <el-option label="未寄出" value="NOT_SHIPPED" />
+              <el-option label="已寄出" value="SHIPPED" />
+              <el-option label="已签收" value="DELIVERED" />
+              <el-option label="异常" value="EXCEPTION" />
+            </el-select>
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">回款状态</span>
+            <el-select v-model="batchEditForm.receivableStatus" clearable placeholder="留空不修改">
+              <el-option label="未回款" value="UNPAID" />
+              <el-option label="已回款" value="PAID" />
+              <el-option label="异常" value="EXCEPTION" />
+            </el-select>
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">结算状态</span>
+            <el-select v-model="batchEditForm.submitterSettlementStatus" clearable placeholder="留空不修改">
+              <el-option label="未结算" value="UNPAID" />
+              <el-option label="已结算" value="PAID" />
+              <el-option label="异常" value="EXCEPTION" />
+            </el-select>
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">下单金额</span>
+            <el-input-number v-model="batchEditForm.orderAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">结算金额</span>
+            <el-input-number v-model="batchEditForm.submitterSettlementAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">回款金额</span>
+            <el-input-number v-model="batchEditForm.saleAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+          </label>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="batchEditVisible = false">取消</el-button>
         <el-button type="primary" :disabled="!batchEditCount" :loading="batchEditSaving" @click="batchEdit">确认修改</el-button>
@@ -3342,6 +3397,55 @@ onMounted(() => {
   font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
+.batch-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.batch-edit-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-primary-soft) 40%, transparent);
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
+.batch-edit-summary b {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.batch-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.batch-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.batch-edit-field--wide {
+  grid-column: 1 / -1;
+}
+
+.batch-edit-label {
+  font-size: 13px;
+  color: var(--app-text-secondary);
+}
+
+.batch-edit-hint {
+  font-size: 12px;
+  color: var(--app-primary);
+}
+
 .batch-edit-money {
   width: 100%;
 }
