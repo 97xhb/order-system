@@ -46,6 +46,29 @@ export class OrdersService {
     return normalized ? normalized : null;
   }
 
+  private amountFormulas(value: Record<string, string> | undefined) {
+    if (!value) return undefined;
+    const allowed = new Set([
+      'orderAmount',
+      'paymentDiscountAmount',
+      'submitterSettlementAmount',
+      'scanAmount',
+      'saleAmount',
+    ]);
+    const formulas: Record<string, string> = {};
+    for (const [key, formula] of Object.entries(value)) {
+      if (!allowed.has(key) || typeof formula !== 'string') continue;
+      const normalized = formula.trim();
+      if (!normalized) {
+        formulas[key] = '';
+        continue;
+      }
+      if (!normalized.startsWith('=') || normalized.length > 500) continue;
+      formulas[key] = normalized;
+    }
+    return formulas;
+  }
+
   private auditReason(value: Prisma.JsonValue | null) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return null;
@@ -471,9 +494,21 @@ export class OrdersService {
             profitRuleVersion: profit.profitRuleVersion,
             profitRuleSnapshot: profit.profitRuleSnapshot,
             notes: this.clean(dto.notes),
-            customData: fundingTypeOther
-              ? ({ fundingTypeOther } as Prisma.InputJsonValue)
-              : undefined,
+            customData: (() => {
+              const formulas = this.amountFormulas(dto.amountFormulas);
+              const savedFormulas = Object.fromEntries(
+                Object.entries(formulas ?? {}).filter(([, formula]) => formula),
+              );
+              const customData = {
+                ...(fundingTypeOther ? { fundingTypeOther } : {}),
+                ...(Object.keys(savedFormulas).length
+                  ? { amountFormulas: savedFormulas }
+                  : {}),
+              };
+              return Object.keys(customData).length
+                ? (customData as Prisma.InputJsonValue)
+                : undefined;
+            })(),
             approvedAt: new Date(),
             approvedById: admin.id,
             createdById: admin.id,
@@ -749,6 +784,21 @@ export class OrdersService {
         if (fundingTypeOther)
           existingCustomData.fundingTypeOther = fundingTypeOther;
         else delete existingCustomData.fundingTypeOther;
+        if (dto.amountFormulas !== undefined) {
+          const formulas = this.amountFormulas(dto.amountFormulas);
+          const current =
+            existingCustomData.amountFormulas &&
+            typeof existingCustomData.amountFormulas === 'object' &&
+            !Array.isArray(existingCustomData.amountFormulas)
+              ? { ...(existingCustomData.amountFormulas as Record<string, string>) }
+              : {};
+          for (const [key, formula] of Object.entries(formulas ?? {})) {
+            if (formula) current[key] = formula;
+            else delete current[key];
+          }
+          if (Object.keys(current).length) existingCustomData.amountFormulas = current;
+          else delete existingCustomData.amountFormulas;
+        }
 
         const order = await transaction.order.update({
           where: { id },
@@ -1388,6 +1438,27 @@ export class OrdersService {
       submitterPaidAmount,
       receivableStatus,
     });
+    const customData =
+      existing.customData &&
+      typeof existing.customData === 'object' &&
+      !Array.isArray(existing.customData)
+        ? { ...(existing.customData as Record<string, unknown>) }
+        : {};
+    if (dto.amountFormulas !== undefined) {
+      const formulas = this.amountFormulas(dto.amountFormulas);
+      const current =
+        customData.amountFormulas &&
+        typeof customData.amountFormulas === 'object' &&
+        !Array.isArray(customData.amountFormulas)
+          ? { ...(customData.amountFormulas as Record<string, string>) }
+          : {};
+      for (const [key, formula] of Object.entries(formulas ?? {})) {
+        if (formula) current[key] = formula;
+        else delete current[key];
+      }
+      if (Object.keys(current).length) customData.amountFormulas = current;
+      else delete customData.amountFormulas;
+    }
 
     return this.prisma.$transaction(async (transaction) => {
       const order = await transaction.order.update({
@@ -1405,6 +1476,13 @@ export class OrdersService {
           submitterSettlementStatus,
           expectedProfit: profit.expectedProfit,
           settledProfit: profit.settledProfit,
+          ...(dto.amountFormulas !== undefined
+            ? {
+                customData: Object.keys(customData).length
+                  ? (customData as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
+              }
+            : {}),
         },
       });
       if (shipmentStatus !== undefined && existing.shipmentLink) {

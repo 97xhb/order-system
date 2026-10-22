@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsIn,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -86,4 +87,12 @@ export class UpdateOrderProgressDto {
   @IsString()
   @MaxLength(2_000)
   reason?: string;
+
+  @ApiPropertyOptional({
+    description: '金额字段的原始公式，例如 {"orderAmount":"=100+5"}',
+    type: Object,
+  })
+  @IsOptional()
+  @IsObject()
+  amountFormulas?: Record<string, string>;
 }

@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsEnum,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -193,4 +194,12 @@ export class CreateAdminOrderDto {
   @IsString()
   @MaxLength(5_000)
   notes?: string;
+
+  @ApiPropertyOptional({
+    description: '金额字段的原始公式，例如 {"orderAmount":"=100+5"}',
+    type: Object,
+  })
+  @IsOptional()
+  @IsObject()
+  amountFormulas?: Record<string, string>;
 }

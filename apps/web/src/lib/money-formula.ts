@@ -79,3 +79,13 @@ export const evaluateMoneyFormula = (input: string): number | null => {
   if (result === null || cursor !== tokens.length || !Number.isFinite(result)) return null;
   return roundMoney(result);
 };
+
+export const parseMoneyInput = (input: string): number | null => {
+  const value = input.trim();
+  if (!value) return null;
+  if (value.startsWith('=')) return evaluateMoneyFormula(value);
+  if (!/^\d+(?:\.\d{0,2})?$/.test(value)) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return roundMoney(number);
+};

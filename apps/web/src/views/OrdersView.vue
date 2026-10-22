@@ -264,6 +264,7 @@ const batchEditForm = reactive({
   orderAmount: null as number | null,
   submitterSettlementAmount: null as number | null,
   saleAmount: null as number | null,
+  amountFormulas: {} as Record<string, string>,
   shipmentStatus: null as ShipmentStatus | null,
   receivableStatus: null as SettlementStatus | null,
   submitterSettlementStatus: null as SettlementStatus | null,
@@ -1528,6 +1529,17 @@ const openBatchEdit = () => {
     ElMessage.warning("请先勾选需要批量修改的订单");
     return;
   }
+  Object.assign(batchEditForm, {
+    purchaseAddress: "",
+    inboundTrackingNo: "",
+    orderAmount: null,
+    submitterSettlementAmount: null,
+    saleAmount: null,
+    shipmentStatus: null,
+    receivableStatus: null,
+    submitterSettlementStatus: null,
+    amountFormulas: {},
+  });
   batchEditVisible.value = true;
 };
 
@@ -1537,7 +1549,7 @@ const batchEdit = async () => {
     ElMessage.warning("请至少填写一个要修改的字段");
     return;
   }
-  const payload: Record<string, string | number> = {};
+  const payload: Record<string, unknown> = {};
   const labels: string[] = [];
   for (const item of batchEditFields.value) {
     if (item.value === "" || item.value === null) continue;
@@ -1549,6 +1561,11 @@ const batchEdit = async () => {
     payload[item.key] = item.value;
     labels.push(item.label);
   }
+  payload.amountFormulas = {
+    orderAmount: batchEditForm.amountFormulas.orderAmount ?? '',
+    submitterSettlementAmount: batchEditForm.amountFormulas.submitterSettlementAmount ?? '',
+    saleAmount: batchEditForm.amountFormulas.saleAmount ?? '',
+  };
   try {
     await ElMessageBox.confirm(
       `确定将 ${selectedRows.value.length} 笔订单的 ${labels.join("、")} 统一修改为填写值吗？`,
@@ -2693,15 +2710,30 @@ onMounted(() => {
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">下单金额</span>
-            <MoneyFormulaInput v-model="batchEditForm.orderAmount" class="batch-edit-money" placeholder="留空不修改，可写 =100+5" />
+            <MoneyFormulaInput
+              v-model="batchEditForm.orderAmount"
+              v-model:formula="batchEditForm.amountFormulas.orderAmount"
+              class="batch-edit-money"
+              placeholder="留空不修改，可写 =100+5"
+            />
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">结算金额</span>
-            <MoneyFormulaInput v-model="batchEditForm.submitterSettlementAmount" class="batch-edit-money" placeholder="留空不修改，可写 =100+5" />
+            <MoneyFormulaInput
+              v-model="batchEditForm.submitterSettlementAmount"
+              v-model:formula="batchEditForm.amountFormulas.submitterSettlementAmount"
+              class="batch-edit-money"
+              placeholder="留空不修改，可写 =100+5"
+            />
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">回款金额</span>
-            <MoneyFormulaInput v-model="batchEditForm.saleAmount" class="batch-edit-money" placeholder="留空不修改，可写 =100+5" />
+            <MoneyFormulaInput
+              v-model="batchEditForm.saleAmount"
+              v-model:formula="batchEditForm.amountFormulas.saleAmount"
+              class="batch-edit-money"
+              placeholder="留空不修改，可写 =100+5"
+            />
           </label>
         </div>
       </div>

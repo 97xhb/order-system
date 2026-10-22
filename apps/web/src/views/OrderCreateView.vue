@@ -89,6 +89,7 @@ interface OrderDraft {
   shipmentTrackingNo: string;
   receivableStatus: SettlementStatus;
   submitterSettlementStatus: SettlementStatus;
+  amountFormulas: Record<string, string>;
   editReason: string;
   notes: string;
 }
@@ -160,6 +161,7 @@ const createEmptyDraft = (): OrderDraft => ({
   shipmentTrackingNo: '',
   receivableStatus: 'UNPAID',
   submitterSettlementStatus: 'UNPAID',
+  amountFormulas: {},
   editReason: '',
   notes: '',
 });
@@ -185,6 +187,24 @@ const fundingTypeOtherFromOrder = (order: EditableOrder) => {
   }
   const value = (order.customData as Record<string, unknown>).fundingTypeOther;
   return typeof value === 'string' ? value : '';
+};
+
+const amountFormulasFromOrder = (order: EditableOrder) => {
+  if (
+    !order.customData ||
+    typeof order.customData !== 'object' ||
+    Array.isArray(order.customData)
+  ) {
+    return {};
+  }
+  const value = (order.customData as Record<string, unknown>).amountFormulas;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' && entry[1].trim().startsWith('='),
+    ),
+  );
 };
 
 const scanAmountFromOrder = (order: EditableOrder) => {
@@ -222,6 +242,7 @@ const applyOrder = (order: EditableOrder | null | undefined) => {
     shipmentTrackingNo: order.shipmentLink?.shipment.trackingNo ?? '',
     receivableStatus: editableSettlementStatus(order.receivableStatus),
     submitterSettlementStatus: editableSettlementStatus(order.submitterSettlementStatus),
+    amountFormulas: amountFormulasFromOrder(order),
     editReason: '',
     notes: order.notes ?? '',
   });
@@ -283,6 +304,7 @@ const reusePreviousAmounts = () => {
   form.rebateScanned = previous.rebateScanned ?? false;
   form.scanAmount = previous.scanAmount ?? 0;
   form.saleAmount = previous.saleAmount;
+  form.amountFormulas = { ...(previous.amountFormulas ?? {}) };
   ElMessage.success('已复制上一单金额，请核对后再保存');
 };
 
@@ -303,6 +325,7 @@ const clearMoney = () => {
   form.rebateScanned = false;
   form.scanAmount = 0;
   form.saleAmount = undefined;
+  form.amountFormulas = {};
   if (isEditMode.value) {
     form.receivableStatus = 'UNPAID';
     form.submitterSettlementStatus = 'UNPAID';
@@ -313,6 +336,7 @@ const setScanStatus = (scanned: boolean) => {
   form.rebateScanned = scanned;
   if (!scanned) {
     form.scanAmount = 0;
+    delete form.amountFormulas.scanAmount;
   }
 };
 
@@ -372,6 +396,7 @@ const submitOrder = async () => {
       platformRebateAmount: scanRebateAmount.value,
       rebateScanned: form.rebateScanned,
       saleAmount: form.saleAmount,
+      amountFormulas: form.amountFormulas,
       notes: form.notes,
       ...(isEditMode.value
         ? {
@@ -708,22 +733,32 @@ onMounted(async () => {
             </div>
           </el-form-item>
           <el-form-item label="下单金额" class="field-half">
-            <MoneyFormulaInput v-model="form.orderAmount" placeholder="数字或 =100+5" />
+            <MoneyFormulaInput
+              v-model="form.orderAmount"
+              v-model:formula="form.amountFormulas.orderAmount"
+              placeholder="数字或 =100+5"
+            />
           </el-form-item>
           <el-form-item label="支付优惠" class="field-half">
             <MoneyFormulaInput
               v-model="form.paymentDiscountAmount"
+              v-model:formula="form.amountFormulas.paymentDiscountAmount"
               placeholder="数字或 =100+5"
             />
           </el-form-item>
           <el-form-item label="结算金额" class="field-half">
             <MoneyFormulaInput
               v-model="form.submitterSettlementAmount"
+              v-model:formula="form.amountFormulas.submitterSettlementAmount"
               placeholder="数字或 =100+5"
             />
           </el-form-item>
           <el-form-item label="回款金额" class="field-half">
-            <MoneyFormulaInput v-model="form.saleAmount" placeholder="数字或 =100+5" />
+            <MoneyFormulaInput
+              v-model="form.saleAmount"
+              v-model:formula="form.amountFormulas.saleAmount"
+              placeholder="数字或 =100+5"
+            />
           </el-form-item>
           <el-form-item label="扫码返利" class="field-full scan-item">
             <div class="scan-rebate-editor">
@@ -764,6 +799,7 @@ onMounted(async () => {
                   <span>原始扫码金额</span>
                   <MoneyFormulaInput
                     v-model="form.scanAmount"
+                    v-model:formula="form.amountFormulas.scanAmount"
                     :disabled="!isScanned"
                     placeholder="数字或 =100+5"
                   />
