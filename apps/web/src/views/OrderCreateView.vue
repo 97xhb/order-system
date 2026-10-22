@@ -5,6 +5,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
+import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
 type ShipmentStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'DELIVERED' | 'EXCEPTION';
@@ -707,26 +708,22 @@ onMounted(async () => {
             </div>
           </el-form-item>
           <el-form-item label="下单金额" class="field-half">
-            <el-input-number v-model="form.orderAmount" :min="0" :precision="2" :controls="false" />
+            <MoneyFormulaInput v-model="form.orderAmount" placeholder="数字或 =100+5" />
           </el-form-item>
           <el-form-item label="支付优惠" class="field-half">
-            <el-input-number
+            <MoneyFormulaInput
               v-model="form.paymentDiscountAmount"
-              :min="0"
-              :precision="2"
-              :controls="false"
+              placeholder="数字或 =100+5"
             />
           </el-form-item>
           <el-form-item label="结算金额" class="field-half">
-            <el-input-number
+            <MoneyFormulaInput
               v-model="form.submitterSettlementAmount"
-              :min="0"
-              :precision="2"
-              :controls="false"
+              placeholder="数字或 =100+5"
             />
           </el-form-item>
           <el-form-item label="回款金额" class="field-half">
-            <el-input-number v-model="form.saleAmount" :min="0" :precision="2" :controls="false" />
+            <MoneyFormulaInput v-model="form.saleAmount" placeholder="数字或 =100+5" />
           </el-form-item>
           <el-form-item label="扫码返利" class="field-full scan-item">
             <div class="scan-rebate-editor">
@@ -765,13 +762,10 @@ onMounted(async () => {
               <div class="scan-money-stack">
                 <label class="scan-amount-field">
                   <span>原始扫码金额</span>
-                  <el-input-number
+                  <MoneyFormulaInput
                     v-model="form.scanAmount"
-                    :min="0"
-                    :precision="2"
-                    :controls="false"
                     :disabled="!isScanned"
-                    placeholder="填写原始扫码金额"
+                    placeholder="数字或 =100+5"
                   />
                 </label>
                 <div class="scan-rebate-result" :class="{ 'is-disabled': !isScanned }">
@@ -1038,7 +1032,8 @@ onMounted(async () => {
 }
 .form-grid :deep(.el-select),
 .form-grid :deep(.el-date-editor),
-.form-grid :deep(.el-input-number) {
+.form-grid :deep(.el-input-number),
+.form-grid :deep(.money-formula-input) {
   width: 100%;
 }
 .field-third {
@@ -1283,7 +1278,8 @@ onMounted(async () => {
   font-weight: 750;
   overflow-wrap: anywhere;
 }
-.scan-amount-field :deep(.el-input-number) {
+.scan-amount-field :deep(.el-input-number),
+.scan-amount-field :deep(.money-formula-input) {
   width: 100%;
   min-width: 0;
   grid-row: 1 / span 2;

@@ -20,6 +20,7 @@ import type { SheetData } from 'write-excel-file/browser';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
+import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 import OrderBatchCreateView from './OrderBatchCreateView.vue';
 import OrderCreateView from './OrderCreateView.vue';
 
@@ -2692,15 +2693,15 @@ onMounted(() => {
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">下单金额</span>
-            <el-input-number v-model="batchEditForm.orderAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+            <MoneyFormulaInput v-model="batchEditForm.orderAmount" class="batch-edit-money" placeholder="留空不修改，可写 =100+5" />
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">结算金额</span>
-            <el-input-number v-model="batchEditForm.submitterSettlementAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+            <MoneyFormulaInput v-model="batchEditForm.submitterSettlementAmount" class="batch-edit-money" placeholder="留空不修改，可写 =100+5" />
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">回款金额</span>
-            <el-input-number v-model="batchEditForm.saleAmount" :min="0" :precision="2" :controls="false" class="batch-edit-money" placeholder="留空不修改" />
+            <MoneyFormulaInput v-model="batchEditForm.saleAmount" class="batch-edit-money" placeholder="留空不修改，可写 =100+5" />
           </label>
         </div>
       </div>
