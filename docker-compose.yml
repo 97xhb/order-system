@@ -111,6 +111,29 @@ services:
     networks:
       app:
 
+  updater:
+    build:
+      context: .
+      dockerfile: docker/updater.Dockerfile
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      UPDATE_PROJECT_DIR: /workspace
+      UPDATE_RUNTIME_DIR: /runtime
+      TZ: Asia/Shanghai
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/workspace
+      - runtime_data:/runtime
+    healthcheck:
+      test: ['CMD-SHELL', 'test -f /runtime/update-status.json']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      app:
+
 volumes:
   postgres_data:
   runtime_data:

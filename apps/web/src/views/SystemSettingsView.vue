@@ -22,7 +22,7 @@ import {
   Warning,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { APP_BUILD_TIME, APP_VERSION } from '../lib/app-version';
@@ -207,6 +207,28 @@ interface LogisticsResult {
   traces: Array<{ time: string; station: string; remark: string; action: string }>;
 }
 
+interface OnlineUpdateStatus {
+  currentVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  release: {
+    version: string;
+    releasedAt?: string;
+    title?: string;
+    notes: string[];
+  } | null;
+  error: string | null;
+  updaterAvailable: boolean;
+  requestPending: boolean;
+  status: {
+    state?: 'IDLE' | 'REQUESTED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+    version?: string | null;
+    message?: string | null;
+    startedAt?: string | null;
+    updatedAt?: string | null;
+  };
+}
+
 const system = useSystemStore();
 const route = useRoute();
 const router = useRouter();
@@ -222,6 +244,10 @@ const hostInput = ref('');
 const data = ref<SystemSettingsResponse | null>(null);
 const apiResponseTimeMs = ref<number | null>(null);
 const runtimeCheckedAt = ref<Date | null>(null);
+const updateInfo = ref<OnlineUpdateStatus | null>(null);
+const updateLoading = ref(false);
+const updateRequesting = ref(false);
+let updatePollTimer: ReturnType<typeof setTimeout> | null = null;
 const auditLoading = ref(false);
 const auditClearing = ref(false);
 const backupExporting = ref(false);
@@ -549,12 +575,80 @@ const load = async () => {
       rootRedirectUrl: response.data.settings.rootRedirectUrl,
     });
     void loadLogisticsSettings();
+    void loadUpdate();
   } catch (error) {
     apiResponseTimeMs.value = null;
     runtimeCheckedAt.value = new Date();
     ElMessage.error(getApiErrorMessage(error, '系统设置加载失败'));
   } finally {
     loading.value = false;
+  }
+};
+
+const stopUpdatePolling = () => {
+  if (updatePollTimer) clearTimeout(updatePollTimer);
+  updatePollTimer = null;
+};
+
+let updatePollAttempts = 0;
+const scheduleUpdatePolling = () => {
+  const state = updateInfo.value?.status.state;
+  if (state !== 'REQUESTED' && state !== 'RUNNING') return;
+  if (updatePollAttempts >= 80) return;
+  updatePollAttempts += 1;
+  stopUpdatePolling();
+  updatePollTimer = setTimeout(async () => {
+    await loadUpdate(true);
+    scheduleUpdatePolling();
+  }, 3000);
+};
+
+const loadUpdate = async (silent = false) => {
+  if (!silent) updateLoading.value = true;
+  try {
+    const response = await http.get<OnlineUpdateStatus>('/admin/system/update', {
+      timeout: 15_000,
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    updateInfo.value = response.data;
+    const state = response.data.status.state;
+    if (state === 'SUCCESS' || state === 'FAILED') {
+      stopUpdatePolling();
+    } else {
+      scheduleUpdatePolling();
+    }
+  } catch (error) {
+    if (!silent) ElMessage.error(getApiErrorMessage(error, '在线版本检查失败'));
+    if (
+      updateInfo.value?.status.state === 'REQUESTED' ||
+      updateInfo.value?.status.state === 'RUNNING'
+    ) {
+      scheduleUpdatePolling();
+    }
+  } finally {
+    if (!silent) updateLoading.value = false;
+  }
+};
+
+const requestOnlineUpdate = async () => {
+  if (!updateInfo.value?.updateAvailable || !updateInfo.value.latestVersion) return;
+  try {
+    await ElMessageBox.confirm(
+      `确定更新到 v${updateInfo.value.latestVersion} 吗？系统会先备份数据库，然后重新构建并重启 Web/API，期间页面可能短暂断开。`,
+      '在线更新',
+      { type: 'warning', confirmButtonText: '开始更新', cancelButtonText: '取消' },
+    );
+    updateRequesting.value = true;
+    updatePollAttempts = 0;
+    await http.post('/admin/system/update');
+    ElMessage.success('更新请求已提交，正在连接在线更新执行器');
+    await loadUpdate(true);
+    scheduleUpdatePolling();
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(getApiErrorMessage(error, '在线更新提交失败'));
+  } finally {
+    updateRequesting.value = false;
   }
 };
 
@@ -1202,6 +1296,8 @@ onMounted(async () => {
   if (activeSystemSection.value === 'logs') await loadAuditLogs();
   void resumePendingWebRestart();
 });
+
+onBeforeUnmount(stopUpdatePolling);
 </script>
 
 <template>
@@ -1557,6 +1653,84 @@ onMounted(async () => {
           <i></i>
         </article>
       </div>
+
+      <section
+        class="online-update-card"
+        :class="[
+          updateInfo?.status.state ? `is-${updateInfo.status.state.toLowerCase()}` : '',
+          { 'has-update': updateInfo?.updateAvailable },
+        ]"
+      >
+        <div class="online-update-heading">
+          <span class="runtime-system-info-icon"
+            ><el-icon><Refresh /></el-icon
+          ></span>
+          <div>
+            <strong>在线更新</strong>
+            <small>
+              当前 v{{ updateInfo?.currentVersion ?? APP_VERSION }}
+              <template v-if="updateInfo?.latestVersion">
+                · 最新 v{{ updateInfo.latestVersion }}
+              </template>
+            </small>
+          </div>
+          <span class="online-update-state">
+            {{
+              updateInfo?.status.state === 'RUNNING'
+                ? '更新中'
+                : updateInfo?.status.state === 'SUCCESS'
+                  ? '更新完成'
+                  : updateInfo?.status.state === 'FAILED'
+                    ? '更新失败'
+                    : updateInfo?.updateAvailable
+                      ? '有新版本'
+                      : updateInfo
+                        ? '已是最新'
+                        : '尚未检查'
+            }}
+          </span>
+        </div>
+        <p v-if="updateInfo?.error" class="online-update-error">{{ updateInfo.error }}</p>
+        <div v-if="updateInfo?.release" class="online-update-release">
+          <div>
+            <strong>{{ updateInfo.release.title || '版本更新' }}</strong>
+            <span>
+              v{{ updateInfo.release.version }}
+              <template v-if="updateInfo.release.releasedAt">
+                · {{ updateInfo.release.releasedAt }}
+              </template>
+            </span>
+          </div>
+          <ul v-if="updateInfo.release.notes.length">
+            <li v-for="note in updateInfo.release.notes" :key="note">{{ note }}</li>
+          </ul>
+        </div>
+        <p v-if="updateInfo?.status.message" class="online-update-message">
+          {{ updateInfo.status.message }}
+        </p>
+        <div class="online-update-actions">
+          <span v-if="updateInfo && !updateInfo.updaterAvailable" class="online-update-hint">
+            在线更新执行器未运行
+          </span>
+          <el-button round :icon="Refresh" :loading="updateLoading" @click="loadUpdate()">
+            检查更新
+          </el-button>
+          <el-button
+            type="primary"
+            round
+            :icon="Download"
+            :loading="updateRequesting || updateInfo?.status.state === 'RUNNING'"
+            :disabled="
+              !updateInfo?.updateAvailable ||
+              !updateInfo.updaterAvailable ||
+              updateInfo?.status.state === 'RUNNING'
+            "
+            @click="requestOnlineUpdate"
+          >
+            立即更新
+          </el-button>
+        </div>
+      </section>
 
       <div class="runtime-system-info-grid">
         <article class="runtime-system-info-item is-wide">
@@ -2985,6 +3159,145 @@ onMounted(async () => {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-color) 12%, transparent);
 }
 
+.online-update-card {
+  display: flex;
+  margin-top: 11px;
+  padding: 15px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--app-control) 72%, transparent);
+  gap: 12px;
+}
+
+.online-update-card.has-update {
+  border-color: color-mix(in srgb, var(--app-primary) 40%, var(--app-border));
+  background: color-mix(in srgb, var(--app-primary-soft) 42%, var(--app-control));
+}
+
+.online-update-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.online-update-heading > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.online-update-heading strong {
+  color: var(--app-heading);
+  font-size: 15px;
+}
+
+.online-update-heading small {
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.online-update-state {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--app-muted);
+  background: var(--app-card-solid);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.online-update-card.has-update .online-update-state,
+.online-update-card.is-success .online-update-state {
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
+}
+
+.online-update-card.is-running .online-update-state {
+  color: var(--app-warning);
+  background: color-mix(in srgb, var(--app-warning) 12%, transparent);
+}
+
+.online-update-card.is-failed .online-update-state {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 12%, transparent);
+}
+
+.online-update-release {
+  display: flex;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  flex-direction: column;
+  background: var(--app-card-solid);
+  gap: 8px;
+}
+
+.online-update-release > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.online-update-release strong {
+  color: var(--app-heading);
+  font-size: 13px;
+}
+
+.online-update-release span,
+.online-update-error,
+.online-update-message,
+.online-update-hint {
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.online-update-release ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: 6px;
+}
+
+.online-update-release li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.online-update-release li::before {
+  position: absolute;
+  top: 7px;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--app-primary);
+  content: '';
+}
+
+.online-update-card.is-failed .online-update-message,
+.online-update-error {
+  color: var(--app-danger);
+}
+
+.online-update-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.online-update-hint {
+  margin-right: auto;
+}
+
 .runtime-system-info-grid {
   display: grid;
   grid-template-columns: minmax(280px, 1.35fr) repeat(3, minmax(180px, 1fr));
@@ -3542,6 +3855,15 @@ onMounted(async () => {
 
   .runtime-system-info-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .online-update-actions {
+    flex-wrap: wrap;
+  }
+
+  .online-update-hint {
+    width: 100%;
+    margin-right: 0;
   }
 
   .audit-log-meta {

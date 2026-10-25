@@ -235,6 +235,7 @@ docker-compose.yml       唯一 Compose 文件
 - [产品需求](docs/requirements.md)
 - [系统 UI 规范](docs/ui-guidelines.md)
 - [系统架构](docs/architecture.md)
+- [版本发布与在线更新](docs/release-process.md)
 - [本机开发说明](docs/development.md)
 - [返利平台与链接转换](docs/affiliate-rebate.md)
 - [有赞助手接口对接说明](docs/youzai-affiliate-protocol.md)

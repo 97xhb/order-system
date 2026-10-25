@@ -7,11 +7,22 @@ import {
 import { SystemSettingsService } from './system-settings.service';
 import { RuntimeControlService } from './runtime-control.service';
 import { BackupService } from './backup.service';
+import { UpdateService } from './update.service';
 
 @Module({
   imports: [AuthModule],
   controllers: [PublicSystemSettingsController, AdminSystemSettingsController],
-  providers: [SystemSettingsService, RuntimeControlService, BackupService],
-  exports: [SystemSettingsService, RuntimeControlService, BackupService],
+  providers: [
+    SystemSettingsService,
+    RuntimeControlService,
+    BackupService,
+    UpdateService,
+  ],
+  exports: [
+    SystemSettingsService,
+    RuntimeControlService,
+    BackupService,
+    UpdateService,
+  ],
 })
 export class SystemSettingsModule {}

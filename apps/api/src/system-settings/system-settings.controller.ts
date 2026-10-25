@@ -35,6 +35,7 @@ import {
 import { RuntimeControlService } from './runtime-control.service';
 import { SystemSettingsService } from './system-settings.service';
 import { BackupService } from './backup.service';
+import { UpdateService } from './update.service';
 
 @ApiTags('system')
 @Controller('system')
@@ -71,6 +72,7 @@ export class AdminSystemSettingsController {
     private readonly systemSettingsService: SystemSettingsService,
     private readonly runtimeControlService: RuntimeControlService,
     private readonly backupService: BackupService,
+    private readonly updateService: UpdateService,
   ) {}
 
   @Get('settings')
@@ -268,6 +270,25 @@ export class AdminSystemSettingsController {
     @CurrentAdmin() admin: AuthenticatedAdmin,
   ) {
     return this.runtimeControlService.scheduleWebRestart(
+      admin,
+      this.systemSettingsService.getRequestMetadata(request),
+    );
+  }
+
+  @Get('update')
+  @ApiOperation({ summary: '检查 GitHub 最新版本与在线更新状态' })
+  getUpdateStatus() {
+    return this.updateService.getStatus();
+  }
+
+  @Post('update')
+  @HttpCode(202)
+  @ApiOperation({ summary: '提交在线更新请求，由部署机更新器执行' })
+  requestUpdate(
+    @Req() request: Request,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.updateService.requestUpdate(
       admin,
       this.systemSettingsService.getRequestMetadata(request),
     );
