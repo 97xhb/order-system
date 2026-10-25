@@ -17,6 +17,7 @@ import { ElMessage } from 'element-plus';
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
+import { APP_BUILD_TIME, APP_VERSION } from '../lib/app-version';
 import { http } from '../lib/http';
 import { useAuthStore } from '../stores/auth';
 import { useSystemStore } from '../stores/system';
@@ -48,6 +49,7 @@ const activeMenu = computed(() =>
       : route.path,
 );
 const isDark = computed(() => theme.value === 'dark');
+const buildDate = APP_BUILD_TIME.slice(0, 10);
 const navigationItems = [
   { path: '/admin/dashboard', label: '业务总览', icon: DataAnalysis },
   { path: '/admin/orders', label: '订单列表', icon: Document },
@@ -174,6 +176,9 @@ const changePassword = async () => {
           </div>
         </div>
         <div class="topbar-actions">
+          <span class="version-chip" :title="`构建时间 ${APP_BUILD_TIME}`">
+            v{{ APP_VERSION }} <small>{{ buildDate }}</small>
+          </span>
           <el-tooltip :content="isDark ? '切换为亮色' : '切换为暗色'" placement="bottom">
             <button
               class="icon-chip"
@@ -456,6 +461,28 @@ const changePassword = async () => {
 .topbar-actions {
   gap: 8px;
 }
+.version-chip {
+  display: flex;
+  min-height: 38px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  color: var(--app-heading);
+  background: var(--app-control);
+  box-shadow: var(--app-shadow-sm);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.version-chip small {
+  margin-top: 2px;
+  color: var(--app-muted);
+  font-size: 9px;
+  font-weight: 500;
+}
 .icon-chip,
 .admin-chip {
   padding: 7px 11px;
@@ -560,6 +587,15 @@ const changePassword = async () => {
 
   .topbar-actions {
     gap: 6px;
+  }
+
+  .version-chip {
+    min-height: 38px;
+    padding-inline: 8px;
+  }
+
+  .version-chip small {
+    display: none;
   }
 
   .admin-chip {

@@ -25,6 +25,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
+import { APP_BUILD_TIME, APP_VERSION } from '../lib/app-version';
 import { http } from '../lib/http';
 import { useSystemStore } from '../stores/system';
 
@@ -1565,6 +1566,15 @@ onMounted(async () => {
           <span>
             <small>API 基础地址</small>
             <strong class="is-code">{{ apiBaseUrl }}</strong>
+          </span>
+        </article>
+        <article class="runtime-system-info-item">
+          <span class="runtime-system-info-icon is-primary"
+            ><el-icon><Setting /></el-icon
+          ></span>
+          <span>
+            <small>系统版本</small>
+            <strong>v{{ APP_VERSION }} · {{ formatDateTime(APP_BUILD_TIME) }}</strong>
           </span>
         </article>
         <article class="runtime-system-info-item">
