@@ -1358,7 +1358,7 @@ export class OrdersService {
       include: {
         shipmentLink: {
           include: {
-            shipment: { select: { id: true, shippedAt: true } },
+            shipment: { select: { id: true, trackingNo: true, shippedAt: true } },
           },
         },
       },
@@ -1378,6 +1378,10 @@ export class OrdersService {
       dto.inboundTrackingNo === undefined
         ? undefined
         : this.clean(dto.inboundTrackingNo);
+    const shipmentTrackingNo =
+      dto.shipmentTrackingNo === undefined
+        ? undefined
+        : this.clean(dto.shipmentTrackingNo);
     const purchaseAddress =
       dto.purchaseAddress === undefined
         ? undefined
@@ -1421,6 +1425,7 @@ export class OrdersService {
       (receivableChanged || dto.shipmentStatus !== undefined)
         ? ShipmentStatus.DELIVERED
         : dto.shipmentStatus;
+    const savedShipmentStatus = shipmentStatus ?? existing.shipmentStatus;
     const submitterSettlementStatus =
       requestedSubmitterSettlementStatus ??
       (submitterSettlementChanged
@@ -1485,7 +1490,39 @@ export class OrdersService {
             : {}),
         },
       });
-      if (shipmentStatus !== undefined && existing.shipmentLink) {
+      if (dto.shipmentTrackingNo !== undefined) {
+        if (shipmentTrackingNo) {
+          const existingShipment = await transaction.shipment.findUnique({
+            where: { trackingNo: shipmentTrackingNo },
+          });
+          const shipment = existingShipment
+            ? await transaction.shipment.update({
+                where: { id: existingShipment.id },
+                data: {
+                  status: savedShipmentStatus,
+                  shippedAt: this.hasBeenShipped(savedShipmentStatus)
+                    ? (existingShipment.shippedAt ?? new Date())
+                    : null,
+                },
+              })
+            : await transaction.shipment.create({
+                data: {
+                  trackingNo: shipmentTrackingNo,
+                  status: savedShipmentStatus,
+                  shippedAt: this.hasBeenShipped(savedShipmentStatus)
+                    ? new Date()
+                    : null,
+                },
+              });
+          await transaction.shipmentOrder.upsert({
+            where: { orderId: id },
+            update: { shipmentId: shipment.id },
+            create: { orderId: id, shipmentId: shipment.id },
+          });
+        } else {
+          await transaction.shipmentOrder.deleteMany({ where: { orderId: id } });
+        }
+      } else if (shipmentStatus !== undefined && existing.shipmentLink) {
         await transaction.shipment.update({
           where: { id: existing.shipmentLink.shipment.id },
           data: {
@@ -1505,6 +1542,8 @@ export class OrdersService {
           entityId: id,
           beforeData: {
             shipmentStatus: existing.shipmentStatus,
+            shipmentTrackingNo:
+              existing.shipmentLink?.shipment.trackingNo ?? null,
             orderAmount: existing.orderAmount.toString(),
             inboundTrackingNo: existing.inboundTrackingNo,
             purchaseAddress: existing.purchaseAddress,
@@ -1519,6 +1558,10 @@ export class OrdersService {
           },
           afterData: {
             shipmentStatus: order.shipmentStatus,
+            shipmentTrackingNo:
+              dto.shipmentTrackingNo === undefined
+                ? (existing.shipmentLink?.shipment.trackingNo ?? null)
+                : shipmentTrackingNo,
             orderAmount: order.orderAmount.toString(),
             inboundTrackingNo: order.inboundTrackingNo,
             purchaseAddress: order.purchaseAddress,

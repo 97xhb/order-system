@@ -260,7 +260,7 @@ const batchEditVisible = ref(false);
 const batchEditSaving = ref(false);
 const batchEditForm = reactive({
   purchaseAddress: '',
-  inboundTrackingNo: '',
+  shipmentTrackingNo: '',
   orderAmount: null as number | null,
   submitterSettlementAmount: null as number | null,
   saleAmount: null as number | null,
@@ -274,9 +274,28 @@ const batchEditStatusFields = computed(() => [
   { key: "receivableStatus", label: "回款状态", value: batchEditForm.receivableStatus },
   { key: "submitterSettlementStatus", label: "结算状态", value: batchEditForm.submitterSettlementStatus },
 ] as const);
+const batchShipmentStatusOptions: Array<{ label: string; value: ShipmentStatus | null }> = [
+  { label: '不修改', value: null },
+  { label: '未寄出', value: 'NOT_SHIPPED' },
+  { label: '已寄出', value: 'SHIPPED' },
+  { label: '已签收', value: 'DELIVERED' },
+  { label: '异常', value: 'EXCEPTION' },
+];
+const batchReceivableStatusOptions: Array<{ label: string; value: SettlementStatus | null }> = [
+  { label: '不修改', value: null },
+  { label: '未回款', value: 'UNPAID' },
+  { label: '已回款', value: 'PAID' },
+  { label: '异常', value: 'EXCEPTION' },
+];
+const batchSettlementStatusOptions: Array<{ label: string; value: SettlementStatus | null }> = [
+  { label: '不修改', value: null },
+  { label: '未结算', value: 'UNPAID' },
+  { label: '已结算', value: 'PAID' },
+  { label: '异常', value: 'EXCEPTION' },
+];
 const batchEditFields = computed(() => [
   { key: 'purchaseAddress', label: '下单地址', value: batchEditForm.purchaseAddress.trim() },
-  { key: 'inboundTrackingNo', label: '寄件单号', value: batchEditForm.inboundTrackingNo.trim() },
+  { key: 'shipmentTrackingNo', label: '寄件运单号', value: batchEditForm.shipmentTrackingNo.trim() },
   { key: 'orderAmount', label: '下单金额', value: batchEditForm.orderAmount },
   { key: 'submitterSettlementAmount', label: '结算金额', value: batchEditForm.submitterSettlementAmount },
   { key: 'saleAmount', label: '回款金额', value: batchEditForm.saleAmount },
@@ -1518,7 +1537,7 @@ const batchMarkPaid = async (target: 'CUSTOMER' | 'SUBMITTER') => {
 };
 
 watch(
-  () => batchEditForm.inboundTrackingNo,
+  () => batchEditForm.shipmentTrackingNo,
   (value) => {
     if (value.trim()) batchEditForm.shipmentStatus = 'SHIPPED';
   },
@@ -1531,7 +1550,7 @@ const openBatchEdit = () => {
   }
   Object.assign(batchEditForm, {
     purchaseAddress: "",
-    inboundTrackingNo: "",
+    shipmentTrackingNo: "",
     orderAmount: null,
     submitterSettlementAmount: null,
     saleAmount: null,
@@ -2667,7 +2686,7 @@ onMounted(() => {
     <el-dialog
       v-model="batchEditVisible"
       title="批量修改所选订单"
-      width="520px"
+      width="min(760px, 96vw)"
     >
       <div class="batch-edit-form">
         <div class="batch-edit-summary">
@@ -2680,34 +2699,60 @@ onMounted(() => {
             <el-input v-model="batchEditForm.purchaseAddress" type="textarea" :rows="2" placeholder="留空不修改" />
           </label>
           <label class="batch-edit-field">
-            <span class="batch-edit-label">寄件单号</span>
-            <el-input v-model="batchEditForm.inboundTrackingNo" placeholder="留空不修改，填单号自动改为已寄出" />
+            <span class="batch-edit-label">寄件运单号</span>
+            <el-input v-model="batchEditForm.shipmentTrackingNo" placeholder="留空不修改，填单号自动改为已寄出" />
           </label>
-          <label class="batch-edit-field">
+          <div class="batch-edit-field batch-edit-field--wide">
             <span class="batch-edit-label">寄件状态</span>
-            <el-select v-model="batchEditForm.shipmentStatus" clearable placeholder="留空不修改">
-              <el-option label="未寄出" value="NOT_SHIPPED" />
-              <el-option label="已寄出" value="SHIPPED" />
-              <el-option label="已签收" value="DELIVERED" />
-              <el-option label="异常" value="EXCEPTION" />
-            </el-select>
-          </label>
-          <label class="batch-edit-field">
+            <div class="batch-status-options" role="radiogroup" aria-label="寄件状态">
+              <button
+                v-for="item in batchShipmentStatusOptions"
+                :key="item.label"
+                type="button"
+                class="card-choice batch-status-choice"
+                :class="{ 'is-selected': batchEditForm.shipmentStatus === item.value }"
+                :aria-checked="batchEditForm.shipmentStatus === item.value"
+                role="radio"
+                @click="batchEditForm.shipmentStatus = item.value"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </div>
+          <div class="batch-edit-field batch-edit-field--wide">
             <span class="batch-edit-label">回款状态</span>
-            <el-select v-model="batchEditForm.receivableStatus" clearable placeholder="留空不修改">
-              <el-option label="未回款" value="UNPAID" />
-              <el-option label="已回款" value="PAID" />
-              <el-option label="异常" value="EXCEPTION" />
-            </el-select>
-          </label>
-          <label class="batch-edit-field">
+            <div class="batch-status-options" role="radiogroup" aria-label="回款状态">
+              <button
+                v-for="item in batchReceivableStatusOptions"
+                :key="item.label"
+                type="button"
+                class="card-choice batch-status-choice"
+                :class="{ 'is-selected': batchEditForm.receivableStatus === item.value }"
+                :aria-checked="batchEditForm.receivableStatus === item.value"
+                role="radio"
+                @click="batchEditForm.receivableStatus = item.value"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </div>
+          <div class="batch-edit-field batch-edit-field--wide">
             <span class="batch-edit-label">结算状态</span>
-            <el-select v-model="batchEditForm.submitterSettlementStatus" clearable placeholder="留空不修改">
-              <el-option label="未结算" value="UNPAID" />
-              <el-option label="已结算" value="PAID" />
-              <el-option label="异常" value="EXCEPTION" />
-            </el-select>
-          </label>
+            <div class="batch-status-options" role="radiogroup" aria-label="结算状态">
+              <button
+                v-for="item in batchSettlementStatusOptions"
+                :key="item.label"
+                type="button"
+                class="card-choice batch-status-choice"
+                :class="{ 'is-selected': batchEditForm.submitterSettlementStatus === item.value }"
+                :aria-checked="batchEditForm.submitterSettlementStatus === item.value"
+                role="radio"
+                @click="batchEditForm.submitterSettlementStatus = item.value"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </div>
           <label class="batch-edit-field">
             <span class="batch-edit-label">下单金额</span>
             <MoneyFormulaInput
@@ -3474,6 +3519,22 @@ onMounted(() => {
   color: var(--app-text-secondary);
 }
 
+.batch-status-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.batch-status-choice {
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  text-align: center;
+}
+
 .batch-edit-hint {
   font-size: 12px;
   color: var(--app-primary);
@@ -3924,6 +3985,12 @@ onMounted(() => {
   }
 }
 @media (max-width: 760px) {
+  .batch-edit-grid {
+    grid-template-columns: 1fr;
+  }
+  .batch-status-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .order-workbar,
   .table-card {
     padding: 12px;
