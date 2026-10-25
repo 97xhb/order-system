@@ -1,9 +1,14 @@
 #!/bin/bash
 set -u
 
-PROJECT_DIR="${UPDATE_PROJECT_DIR:-/workspace}"
-RUNTIME_DIR="${UPDATE_RUNTIME_DIR:-/runtime}"
+PROJECT_DIR="${PROJECT_DIR:-/vol1/1000/docker/order-system}"
+RUNTIME_DIR="${RUNTIME_DIR:-}"
 REPO_URL="${UPDATE_REPO_URL:-https://codeload.github.com/97xhb/order-system/tar.gz/refs/heads/main}"
+
+if [ -z "$RUNTIME_DIR" ]; then
+  RUNTIME_DIR="$(docker volume inspect order-system_runtime_data --format '{{.Mountpoint}}')"
+fi
+
 REQUEST_PATH="$RUNTIME_DIR/update-request.json"
 PROCESSING_PATH="$RUNTIME_DIR/update-request.processing.json"
 STATUS_PATH="$RUNTIME_DIR/update-status.json"
@@ -38,46 +43,46 @@ run_update() {
   backup_path="$PROJECT_DIR/backups/pre-update-online-$stamp.dump"
   tarball="/tmp/order-system-$stamp.tar.gz"
 
-  exec >>"$log_path" 2>&1
-  echo "==> online update $version started at $stamp"
   cd "$PROJECT_DIR"
-
-  if [ ! -f docker-compose.yml ] || [ ! -f .env.docker ]; then
-    echo "missing docker-compose.yml or .env.docker"
-    return 1
-  fi
-
-  echo "==> backup database"
-  docker compose --env-file .env.docker exec -T db \
-    sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_path"
-
-  echo "==> download source"
-  curl -fL --retry 3 --connect-timeout 15 -o "$tarball" "$REPO_URL"
-  tar -xzf "$tarball" -C "$PROJECT_DIR" --strip-components=1
-  rm -f "$tarball"
-
-  echo "==> build api web"
-  docker compose --env-file .env.docker build api web
-
-  echo "==> restart api web"
-  docker compose --env-file .env.docker up -d api web
-
-  echo "==> wait for services"
-  for _ in $(seq 1 60); do
-    running="$(docker compose --env-file .env.docker ps --status running --format '{{.Service}}' 2>/dev/null || true)"
-    if printf '%s\n' "$running" | grep -qx api &&
-      printf '%s\n' "$running" | grep -qx web; then
-      echo "update completed"
-      return 0
+  {
+    echo "==> online update $version started at $stamp"
+    if [ ! -f docker-compose.yml ] || [ ! -f .env.docker ]; then
+      echo "missing docker-compose.yml or .env.docker"
+      return 1
     fi
-    sleep 2
-  done
-  echo "services did not become ready in time"
-  return 1
+
+    echo "==> backup database"
+    docker compose --env-file .env.docker exec -T db \
+      sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_path"
+
+    echo "==> download source"
+    curl -fL --retry 3 --connect-timeout 15 -o "$tarball" "$REPO_URL"
+    tar -xzf "$tarball" -C "$PROJECT_DIR" --strip-components=1
+    rm -f "$tarball"
+
+    echo "==> build api web"
+    docker compose --env-file .env.docker build api web
+
+    echo "==> restart api web"
+    docker compose --env-file .env.docker up -d api web
+
+    echo "==> wait for services"
+    for _ in $(seq 1 90); do
+      running="$(docker compose --env-file .env.docker ps --status running --format '{{.Service}}' 2>/dev/null || true)"
+      if printf '%s\n' "$running" | grep -qx api &&
+        printf '%s\n' "$running" | grep -qx web; then
+        echo "update completed"
+        return 0
+      fi
+      sleep 2
+    done
+    echo "services did not become ready in time"
+    return 1
+  } >> "$log_path" 2>&1
 }
 
 write_status IDLE
-echo "order-system updater ready"
+echo "order-system host updater ready"
 
 while true; do
   if [ -f "$REQUEST_PATH" ] && [ ! -f "$PROCESSING_PATH" ]; then

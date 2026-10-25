@@ -36,7 +36,7 @@ export class UpdateService {
   private readonly requestPath: string;
   private readonly statusPath: string;
   private readonly releaseUrl =
-    'https://cdn.jsdelivr.net/gh/97xhb/order-system@main/release.json';
+    'https://github.com/97xhb/order-system/raw/refs/heads/main/release.json';
 
   constructor(
     private readonly config: ConfigService,

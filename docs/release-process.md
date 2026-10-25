@@ -11,10 +11,18 @@
 ## 在线更新结构
 
 - Web/API 容器不直接持有 Docker 权限。
-- 独立 `updater` 容器持有 Docker Socket，只读取固定更新请求文件。
-- 更新器只执行固定流程：备份数据库、下载固定 GitHub 分支、构建 `api web`、重启 `api web`。
+- 主机 systemd 服务 `order-system-online-updater` 读取固定更新请求文件，不向 Web/API 容器暴露 Docker 权限。
+- 主机更新器只执行固定流程：备份数据库、下载固定 GitHub 分支、构建 `api web`、重启 `api web`。
 - 更新日志写入项目 `backups/online-update-*.log`。
 - 更新失败不会删除数据库卷，也不会覆盖 `.env.docker`。
+
+## 安装或更新主机更新服务
+
+在 NAS 项目目录执行：
+
+```bash
+sudo bash scripts/install-online-updater.sh
+```
 
 ## 版本文件示例
 
