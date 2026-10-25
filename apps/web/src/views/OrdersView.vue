@@ -2702,55 +2702,72 @@ onMounted(() => {
             <span class="batch-edit-label">寄件运单号</span>
             <el-input v-model="batchEditForm.shipmentTrackingNo" placeholder="留空不修改，填单号自动改为已寄出" />
           </label>
-          <div class="batch-edit-field batch-edit-field--wide">
-            <span class="batch-edit-label">寄件状态</span>
-            <div class="batch-status-options" role="radiogroup" aria-label="寄件状态">
-              <button
-                v-for="item in batchShipmentStatusOptions"
-                :key="item.label"
-                type="button"
-                class="card-choice batch-status-choice"
-                :class="{ 'is-selected': batchEditForm.shipmentStatus === item.value }"
-                :aria-checked="batchEditForm.shipmentStatus === item.value"
-                role="radio"
-                @click="batchEditForm.shipmentStatus = item.value"
-              >
-                {{ item.label }}
-              </button>
+          <div class="status-grid batch-status-grid">
+            <div class="status-card">
+              <div class="status-card-heading">
+                <strong>货物寄件</strong><span>填写运单号时可自动标记为已寄出</span>
+              </div>
+              <div class="status-options status-options--three" role="radiogroup" aria-label="寄件状态">
+                <button
+                  v-for="item in batchShipmentStatusOptions"
+                  :key="item.label"
+                  type="button"
+                  class="card-choice status-choice"
+                  :class="[
+                    `status-${item.value?.toLowerCase() ?? 'none'}`,
+                    { 'is-selected': batchEditForm.shipmentStatus === item.value },
+                  ]"
+                  :aria-checked="batchEditForm.shipmentStatus === item.value"
+                  role="radio"
+                  @click="batchEditForm.shipmentStatus = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
             </div>
-          </div>
-          <div class="batch-edit-field batch-edit-field--wide">
-            <span class="batch-edit-label">回款状态</span>
-            <div class="batch-status-options" role="radiogroup" aria-label="回款状态">
-              <button
-                v-for="item in batchReceivableStatusOptions"
-                :key="item.label"
-                type="button"
-                class="card-choice batch-status-choice"
-                :class="{ 'is-selected': batchEditForm.receivableStatus === item.value }"
-                :aria-checked="batchEditForm.receivableStatus === item.value"
-                role="radio"
-                @click="batchEditForm.receivableStatus = item.value"
-              >
-                {{ item.label }}
-              </button>
+            <div class="status-card">
+              <div class="status-card-heading">
+                <strong>收货佬给我回款</strong><span>批量选择回款结果</span>
+              </div>
+              <div class="status-options status-options--three" role="radiogroup" aria-label="回款状态">
+                <button
+                  v-for="item in batchReceivableStatusOptions"
+                  :key="item.label"
+                  type="button"
+                  class="card-choice status-choice"
+                  :class="[
+                    `status-${item.value?.toLowerCase() ?? 'none'}`,
+                    { 'is-selected': batchEditForm.receivableStatus === item.value },
+                  ]"
+                  :aria-checked="batchEditForm.receivableStatus === item.value"
+                  role="radio"
+                  @click="batchEditForm.receivableStatus = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
             </div>
-          </div>
-          <div class="batch-edit-field batch-edit-field--wide">
-            <span class="batch-edit-label">结算状态</span>
-            <div class="batch-status-options" role="radiogroup" aria-label="结算状态">
-              <button
-                v-for="item in batchSettlementStatusOptions"
-                :key="item.label"
-                type="button"
-                class="card-choice batch-status-choice"
-                :class="{ 'is-selected': batchEditForm.submitterSettlementStatus === item.value }"
-                :aria-checked="batchEditForm.submitterSettlementStatus === item.value"
-                role="radio"
-                @click="batchEditForm.submitterSettlementStatus = item.value"
-              >
-                {{ item.label }}
-              </button>
+            <div class="status-card">
+              <div class="status-card-heading">
+                <strong>我给下单人结算</strong><span>批量选择结算结果</span>
+              </div>
+              <div class="status-options status-options--three" role="radiogroup" aria-label="结算状态">
+                <button
+                  v-for="item in batchSettlementStatusOptions"
+                  :key="item.label"
+                  type="button"
+                  class="card-choice status-choice"
+                  :class="[
+                    `status-${item.value?.toLowerCase() ?? 'none'}`,
+                    { 'is-selected': batchEditForm.submitterSettlementStatus === item.value },
+                  ]"
+                  :aria-checked="batchEditForm.submitterSettlementStatus === item.value"
+                  role="radio"
+                  @click="batchEditForm.submitterSettlementStatus = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
             </div>
           </div>
           <label class="batch-edit-field">
@@ -3519,20 +3536,8 @@ onMounted(() => {
   color: var(--app-text-secondary);
 }
 
-.batch-status-options {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.batch-status-choice {
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 13px;
-  text-align: center;
+.batch-status-grid {
+  grid-column: 1 / -1;
 }
 
 .batch-edit-hint {
@@ -3988,8 +3993,8 @@ onMounted(() => {
   .batch-edit-grid {
     grid-template-columns: 1fr;
   }
-  .batch-status-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .batch-status-grid {
+    grid-template-columns: 1fr;
   }
   .order-workbar,
   .table-card {
