@@ -22,7 +22,7 @@ import {
   Warning,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { APP_BUILD_TIME, APP_VERSION } from '../lib/app-version';
@@ -218,15 +218,6 @@ interface OnlineUpdateStatus {
     notes: string[];
   } | null;
   error: string | null;
-  updaterAvailable: boolean;
-  requestPending: boolean;
-  status: {
-    state?: 'IDLE' | 'REQUESTED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
-    version?: string | null;
-    message?: string | null;
-    startedAt?: string | null;
-    updatedAt?: string | null;
-  };
 }
 
 const system = useSystemStore();
@@ -246,8 +237,6 @@ const apiResponseTimeMs = ref<number | null>(null);
 const runtimeCheckedAt = ref<Date | null>(null);
 const updateInfo = ref<OnlineUpdateStatus | null>(null);
 const updateLoading = ref(false);
-const updateRequesting = ref(false);
-let updatePollTimer: ReturnType<typeof setTimeout> | null = null;
 const auditLoading = ref(false);
 const auditClearing = ref(false);
 const backupExporting = ref(false);
@@ -585,24 +574,6 @@ const load = async () => {
   }
 };
 
-const stopUpdatePolling = () => {
-  if (updatePollTimer) clearTimeout(updatePollTimer);
-  updatePollTimer = null;
-};
-
-let updatePollAttempts = 0;
-const scheduleUpdatePolling = () => {
-  const state = updateInfo.value?.status.state;
-  if (state !== 'REQUESTED' && state !== 'RUNNING') return;
-  if (updatePollAttempts >= 80) return;
-  updatePollAttempts += 1;
-  stopUpdatePolling();
-  updatePollTimer = setTimeout(async () => {
-    await loadUpdate(true);
-    scheduleUpdatePolling();
-  }, 3000);
-};
-
 const loadUpdate = async (silent = false) => {
   if (!silent) updateLoading.value = true;
   try {
@@ -611,44 +582,10 @@ const loadUpdate = async (silent = false) => {
       headers: { 'Cache-Control': 'no-cache' },
     });
     updateInfo.value = response.data;
-    const state = response.data.status.state;
-    if (state === 'SUCCESS' || state === 'FAILED') {
-      stopUpdatePolling();
-    } else {
-      scheduleUpdatePolling();
-    }
   } catch (error) {
     if (!silent) ElMessage.error(getApiErrorMessage(error, '在线版本检查失败'));
-    if (
-      updateInfo.value?.status.state === 'REQUESTED' ||
-      updateInfo.value?.status.state === 'RUNNING'
-    ) {
-      scheduleUpdatePolling();
-    }
   } finally {
     if (!silent) updateLoading.value = false;
-  }
-};
-
-const requestOnlineUpdate = async () => {
-  if (!updateInfo.value?.updateAvailable || !updateInfo.value.latestVersion) return;
-  try {
-    await ElMessageBox.confirm(
-      `确定更新到 v${updateInfo.value.latestVersion} 吗？系统会先备份数据库，然后重新构建并重启 Web/API，期间页面可能短暂断开。`,
-      '在线更新',
-      { type: 'warning', confirmButtonText: '开始更新', cancelButtonText: '取消' },
-    );
-    updateRequesting.value = true;
-    updatePollAttempts = 0;
-    await http.post('/admin/system/update');
-    ElMessage.success('更新请求已提交，正在连接在线更新执行器');
-    await loadUpdate(true);
-    scheduleUpdatePolling();
-  } catch (error) {
-    if (error === 'cancel' || error === 'close') return;
-    ElMessage.error(getApiErrorMessage(error, '在线更新提交失败'));
-  } finally {
-    updateRequesting.value = false;
   }
 };
 
@@ -1297,7 +1234,6 @@ onMounted(async () => {
   void resumePendingWebRestart();
 });
 
-onBeforeUnmount(stopUpdatePolling);
 </script>
 
 <template>
@@ -1656,17 +1592,14 @@ onBeforeUnmount(stopUpdatePolling);
 
       <section
         class="online-update-card"
-        :class="[
-          updateInfo?.status.state ? `is-${updateInfo.status.state.toLowerCase()}` : '',
-          { 'has-update': updateInfo?.updateAvailable },
-        ]"
+        :class="{ 'has-update': updateInfo?.updateAvailable }"
       >
         <div class="online-update-heading">
           <span class="runtime-system-info-icon"
             ><el-icon><Refresh /></el-icon
           ></span>
           <div>
-            <strong>在线更新</strong>
+            <strong>版本更新检查</strong>
             <small>
               当前 v{{ updateInfo?.currentVersion ?? APP_VERSION }}
               <template v-if="updateInfo?.latestVersion">
@@ -1676,17 +1609,11 @@ onBeforeUnmount(stopUpdatePolling);
           </div>
           <span class="online-update-state">
             {{
-              updateInfo?.status.state === 'RUNNING'
-                ? '更新中'
-                : updateInfo?.status.state === 'SUCCESS'
-                  ? '更新完成'
-                  : updateInfo?.status.state === 'FAILED'
-                    ? '更新失败'
-                    : updateInfo?.updateAvailable
-                      ? '有新版本'
-                      : updateInfo
-                        ? '已是最新'
-                        : '尚未检查'
+              updateInfo?.updateAvailable
+                ? '有新版本'
+                : updateInfo
+                  ? '已是最新'
+                  : '尚未检查'
             }}
           </span>
         </div>
@@ -1705,29 +1632,9 @@ onBeforeUnmount(stopUpdatePolling);
             <li v-for="note in updateInfo.release.notes" :key="note">{{ note }}</li>
           </ul>
         </div>
-        <p v-if="updateInfo?.status.message" class="online-update-message">
-          {{ updateInfo.status.message }}
-        </p>
         <div class="online-update-actions">
-          <span v-if="updateInfo && !updateInfo.updaterAvailable" class="online-update-hint">
-            在线更新执行器未运行
-          </span>
-          <el-button round :icon="Refresh" :loading="updateLoading" @click="loadUpdate()">
+          <el-button type="primary" round :icon="Refresh" :loading="updateLoading" @click="loadUpdate()">
             检查更新
-          </el-button>
-          <el-button
-            type="primary"
-            round
-            :icon="Download"
-            :loading="updateRequesting || updateInfo?.status.state === 'RUNNING'"
-            :disabled="
-              !updateInfo?.updateAvailable ||
-              !updateInfo.updaterAvailable ||
-              updateInfo?.status.state === 'RUNNING'
-            "
-            @click="requestOnlineUpdate"
-          >
-            立即更新
           </el-button>
         </div>
       </section>

@@ -1,4 +1,4 @@
-# 版本发布与在线更新
+# 版本发布与更新检查
 
 ## 每次更新必须完成
 
@@ -6,23 +6,13 @@
 2. 更新 `release.json`，版本号必须与 `package.json` 一致。
 3. 在 `release.json.notes` 中写明本次更新内容。
 4. 在 `CHANGELOG.md` 增加对应版本段落。
-5. 构建并部署后，在系统设置 → 运行状态 → 在线更新中验证版本。
+5. 构建并部署后，在系统设置 → 运行状态 → 版本更新检查中验证版本。
 
-## 在线更新结构
+## 更新检查
 
 - Web/API 容器不直接持有 Docker 权限。
-- 主机 systemd 服务 `order-system-online-updater` 读取固定更新请求文件，不向 Web/API 容器暴露 Docker 权限。
-- 主机更新器只执行固定流程：备份数据库、下载固定 GitHub 分支、构建 `api web`、重启 `api web`。
-- 更新日志写入项目 `backups/online-update-*.log`。
-- 更新失败不会删除数据库卷，也不会覆盖 `.env.docker`。
-
-## 安装或更新主机更新服务
-
-在 NAS 项目目录执行：
-
-```bash
-sudo bash scripts/install-online-updater.sh
-```
+- 系统设置只读取 GitHub `release.json`，展示版本和更新说明。
+- 应用内不执行服务器命令，实际更新仍由维护人员按部署文档执行。
 
 ## 版本文件示例
 

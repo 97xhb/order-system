@@ -41,6 +41,7 @@ FROM base AS runtime
 ENV NODE_ENV=production
 
 COPY --from=builder /app/package.json ./package.json
+COPY release.json ./release.json
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /app/node_modules ./node_modules

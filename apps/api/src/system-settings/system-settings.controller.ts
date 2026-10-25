@@ -276,21 +276,8 @@ export class AdminSystemSettingsController {
   }
 
   @Get('update')
-  @ApiOperation({ summary: '检查 GitHub 最新版本与在线更新状态' })
+  @ApiOperation({ summary: '检查 GitHub 最新版本与更新说明' })
   getUpdateStatus() {
     return this.updateService.getStatus();
-  }
-
-  @Post('update')
-  @HttpCode(202)
-  @ApiOperation({ summary: '提交在线更新请求，由部署机更新器执行' })
-  requestUpdate(
-    @Req() request: Request,
-    @CurrentAdmin() admin: AuthenticatedAdmin,
-  ) {
-    return this.updateService.requestUpdate(
-      admin,
-      this.systemSettingsService.getRequestMetadata(request),
-    );
   }
 }

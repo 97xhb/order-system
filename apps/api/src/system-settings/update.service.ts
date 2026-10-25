@@ -1,54 +1,18 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { AuthenticatedAdmin } from '../auth/auth.types';
-import { PrismaService } from '../prisma/prisma.service';
 
 export interface ReleaseManifest {
   version: string;
   releasedAt?: string;
   title?: string;
-  notes?: string[];
-}
-
-export interface UpdateStatusFile {
-  state?: 'IDLE' | 'REQUESTED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
-  version?: string | null;
-  message?: string | null;
-  startedAt?: string | null;
-  updatedAt?: string | null;
-}
-
-interface RuntimeRequestMetadata {
-  ipAddress?: string;
-  userAgent?: string;
+  notes: string[];
 }
 
 @Injectable()
 export class UpdateService {
-  private readonly runtimeDir: string;
-  private readonly requestPath: string;
-  private readonly statusPath: string;
   private readonly releaseUrl =
     'https://github.com/97xhb/order-system/raw/refs/heads/main/release.json';
-
-  constructor(
-    private readonly config: ConfigService,
-    private readonly prisma: PrismaService,
-  ) {
-    const statePath =
-      this.config.get<string>('LOCAL_RUNTIME_STATE_PATH')?.trim() ||
-      path.join(process.cwd(), '.local-data', 'runtime-control.json');
-    this.runtimeDir = path.dirname(statePath);
-    this.requestPath = path.join(this.runtimeDir, 'update-request.json');
-    this.statusPath = path.join(this.runtimeDir, 'update-status.json');
-  }
 
   private currentVersion() {
     const candidates = [
@@ -107,21 +71,6 @@ export class UpdateService {
     };
   }
 
-  private status(): UpdateStatusFile {
-    try {
-      return JSON.parse(readFileSync(this.statusPath, 'utf8')) as UpdateStatusFile;
-    } catch {
-      return { state: 'IDLE', version: null, message: null };
-    }
-  }
-
-  private updaterAvailable() {
-    if (!existsSync(this.statusPath)) return false;
-    const status = this.status();
-    const updatedAt = status.updatedAt ? Date.parse(status.updatedAt) : 0;
-    return Date.now() - updatedAt < 60_000;
-  }
-
   async getStatus() {
     const currentVersion = this.currentVersion();
     let latest: ReleaseManifest | null = null;
@@ -137,70 +86,12 @@ export class UpdateService {
       updateAvailable: latest
         ? this.compareVersions(latest.version, currentVersion) > 0
         : false,
-      release: latest,
+      release: latest ?? (existsSync(path.join(process.cwd(), 'release.json'))
+        ? (JSON.parse(
+            readFileSync(path.join(process.cwd(), 'release.json'), 'utf8'),
+          ) as ReleaseManifest)
+        : null),
       error,
-      updaterAvailable: this.updaterAvailable(),
-      requestPending: existsSync(this.requestPath),
-      status: this.status(),
-    };
-  }
-
-  async requestUpdate(
-    admin: AuthenticatedAdmin,
-    metadata: RuntimeRequestMetadata,
-  ) {
-    const currentVersion = this.currentVersion();
-    const latest = await this.remoteRelease();
-    if (this.compareVersions(latest.version, currentVersion) <= 0) {
-      return {
-        requested: false,
-        reason: 'ALREADY_LATEST',
-        currentVersion,
-      };
-    }
-    if (!this.updaterAvailable()) {
-      throw new BadRequestException('在线更新执行器未运行');
-    }
-    if (existsSync(this.requestPath)) {
-      throw new ConflictException('已有更新请求正在处理');
-    }
-
-    await mkdir(this.runtimeDir, { recursive: true });
-    const requestedAt = new Date().toISOString();
-    await writeFile(
-      this.requestPath,
-      `${JSON.stringify(
-        {
-          version: latest.version,
-          requestedAt,
-          requestedBy: admin.username,
-        },
-        null,
-        2,
-      )}\n`,
-      'utf8',
-    );
-    await this.prisma.auditLog.create({
-      data: {
-        actorAdminId: admin.id,
-        source: 'ADMIN_WEB',
-        action: 'SYSTEM_UPDATE_REQUESTED',
-        entityType: 'RuntimeControl',
-        entityId: 'online-update',
-        afterData: {
-          currentVersion,
-          targetVersion: latest.version,
-          requestedAt,
-        },
-        ipAddress: metadata.ipAddress,
-        userAgent: metadata.userAgent,
-      },
-    });
-    return {
-      requested: true,
-      currentVersion,
-      targetVersion: latest.version,
-      requestedAt,
     };
   }
 }
