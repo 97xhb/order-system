@@ -747,9 +747,6 @@ onMounted(async () => {
               </el-button>
             </div>
           </el-form-item>
-          <el-form-item label="收货佬" class="field-half">
-            <el-input v-model="form.receiverName" clearable maxlength="100" />
-          </el-form-item>
         </div>
       </section>
 
@@ -879,7 +876,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section v-if="isEditMode" class="form-panel status-panel">
+      <section class="form-panel status-panel">
         <div class="section-heading">
           <div>
             <strong>寄件与回款状态</strong>
@@ -914,6 +911,9 @@ onMounted(async () => {
                 clearable
                 placeholder="多个订单可填写相同运单号"
               />
+            </el-form-item>
+            <el-form-item label="收货佬">
+              <el-input v-model="form.receiverName" clearable maxlength="100" />
             </el-form-item>
           </div>
 
@@ -973,7 +973,7 @@ onMounted(async () => {
             <div class="status-card-note">已结算时按“结算金额”自动标记，无需重复填写。</div>
           </div>
         </div>
-        <el-form-item class="edit-reason-field">
+        <el-form-item v-if="isEditMode" class="edit-reason-field">
           <template #label>
             <div class="edit-reason-label">
               <span>本次修改说明</span>
