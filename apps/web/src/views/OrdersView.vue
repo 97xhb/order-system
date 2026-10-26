@@ -2603,6 +2603,16 @@ onMounted(() => {
               <strong class="mobile-rebate-amount">{{ money(row.platformRebateAmount) }}</strong>
               <small>原始 {{ money(row.scanAmount) }}</small>
             </div>
+            <div>
+              <span>本单利润</span>
+              <strong
+                class="mobile-profit-amount"
+                :class="{ 'is-unsettled': row.receivableStatus !== 'PAID' }"
+              >
+                已结算 {{ money(row.settledProfit) }}
+              </strong>
+              <small>预结算 {{ money(row.expectedProfit) }}</small>
+            </div>
           </div>
 
           <details class="mobile-order-details">
@@ -4367,6 +4377,13 @@ onMounted(() => {
   }
   .mobile-order-money-grid .mobile-rebate-amount {
     color: #059669;
+  }
+  .mobile-order-money-grid .mobile-profit-amount {
+    color: var(--app-primary);
+    white-space: nowrap;
+  }
+  .mobile-order-money-grid .mobile-profit-amount.is-unsettled {
+    color: var(--app-muted);
   }
   .mobile-order-details {
     margin: 0 12px 11px;
