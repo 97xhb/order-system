@@ -687,27 +687,33 @@ onMounted(async () => {
               placeholder="支持多行填写，可一行写一个商品、方案和数量"
             />
           </el-form-item>
-          <el-form-item label="发货状态" class="field-full">
-            <div
-              class="status-options dispatch-status-options"
-              role="radiogroup"
-              aria-label="发货状态"
-            >
-              <button
-                v-for="option in dispatchStatusOptions"
-                :key="option.value"
-                type="button"
-                role="radio"
-                class="card-choice status-choice"
-                :class="[
-                  `status-${option.value.toLowerCase()}`,
-                  { 'is-selected': form.dispatchStatus === option.value },
-                ]"
-                :aria-checked="form.dispatchStatus === option.value"
-                @click="form.dispatchStatus = option.value"
+          <el-form-item class="field-full dispatch-status-item">
+            <div class="status-card dispatch-status-card">
+              <div class="status-card-heading">
+                <strong>平台发货</strong>
+                <span>填写平台运单号后自动标记为已发货，也可手动调整</span>
+              </div>
+              <div
+                class="status-options dispatch-status-options"
+                role="radiogroup"
+                aria-label="发货状态"
               >
-                {{ option.label }}
-              </button>
+                <button
+                  v-for="option in dispatchStatusOptions"
+                  :key="option.value"
+                  type="button"
+                  role="radio"
+                  class="card-choice status-choice"
+                  :class="[
+                    `status-${option.value.toLowerCase()}`,
+                    { 'is-selected': form.dispatchStatus === option.value },
+                  ]"
+                  :aria-checked="form.dispatchStatus === option.value"
+                  @click="form.dispatchStatus = option.value"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
             </div>
           </el-form-item>
           <el-form-item label="平台订单号" class="field-half">
@@ -1241,6 +1247,13 @@ onMounted(async () => {
   width: 100%;
   margin-bottom: 0;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.dispatch-status-item :deep(.el-form-item__content) {
+  display: block;
+  width: 100%;
+}
+.dispatch-status-card {
+  width: 100%;
 }
 .scan-money-stack {
   display: grid;
