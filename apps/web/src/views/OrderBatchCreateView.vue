@@ -117,7 +117,6 @@ const fallbackBatchFields: Array<OrderTableFieldMeta & { key: BatchColumnKey }> 
   { key: 'dispatchStatus', label: '发货状态', width: 112 },
   { key: 'inboundTrackingNo', label: '平台运单号', width: 215 },
   { key: 'purchaseAddress', label: '下单地址', minWidth: 180 },
-  { key: 'receiverName', label: '收货佬', width: 115 },
   { key: 'fundingType', label: '支付方式', width: 108 },
   { key: 'paymentDiscountAmount', label: '支付优惠', width: 105 },
   { key: 'orderAmount', label: '下单金额', width: 108 },
@@ -156,8 +155,9 @@ const isBatchColumnKey = (value: string): value is BatchColumnKey =>
   batchColumnKeys.has(value as BatchColumnKey);
 const batchColumns = computed<BatchColumnDefinition[]>(() => {
   const source = props.orderFields.length ? props.orderFields : fallbackBatchFields;
-  const resolved = source.filter((field): field is OrderTableFieldMeta & { key: BatchColumnKey } =>
-    isBatchColumnKey(field.key),
+  const resolved = source.filter(
+    (field): field is OrderTableFieldMeta & { key: BatchColumnKey } =>
+      field.key !== 'receiverName' && isBatchColumnKey(field.key),
   );
   const existingKeys = new Set(resolved.map((field) => field.key));
   for (const fallback of fallbackBatchFields) {

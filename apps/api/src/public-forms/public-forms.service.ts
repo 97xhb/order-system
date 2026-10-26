@@ -168,7 +168,6 @@ export class PublicFormsService {
       dispatchStatus: input.dispatchStatus,
       inboundTrackingNo: input.inboundTrackingNo,
       purchaseAddress: input.purchaseAddress,
-      receiverName: input.receiverName,
       fundingType: input.fundingType,
       orderAmount: input.orderAmount,
       paymentDiscountAmount: input.paymentDiscountAmount,
@@ -187,7 +186,6 @@ export class PublicFormsService {
       dispatchStatus: '发货状态',
       inboundTrackingNo: '平台运单号',
       purchaseAddress: '下单地址',
-      receiverName: '收货佬',
       fundingType: '支付方式',
       orderAmount: '下单金额',
       paymentDiscountAmount: '支付优惠',
@@ -464,9 +462,6 @@ export class PublicFormsService {
       dto.dispatchStatus,
       inboundTrackingNo ? DispatchStatus.SHIPPED : DispatchStatus.NOT_SHIPPED,
     );
-    const receiverName = this.clean(
-      this.visibleValue(config, 'receiverName', dto.receiverName, ''),
-    );
 
     try {
       return await this.prisma.$transaction(
@@ -536,7 +531,6 @@ export class PublicFormsService {
                   '',
                 ),
               ),
-              receiverName,
               fundingType,
               orderAmount: this.visibleValue(
                 config,
@@ -632,7 +626,6 @@ export class PublicFormsService {
       dispatchStatus: order.dispatchStatus,
       inboundTrackingNo: order.inboundTrackingNo,
       purchaseAddress: order.purchaseAddress,
-      receiverName: order.receiverName,
       fundingType: order.fundingType,
       orderAmount: order.orderAmount,
       paymentDiscountAmount: order.paymentDiscountAmount,
@@ -728,11 +721,6 @@ export class PublicFormsService {
         dto.purchaseAddress,
         existing.purchaseAddress ?? '',
       ),
-      receiverName: editableValue(
-        'receiverName',
-        dto.receiverName,
-        existing.receiverName ?? '',
-      ),
       fundingType: editableValue(
         'fundingType',
         dto.fundingType,
@@ -803,7 +791,6 @@ export class PublicFormsService {
             dispatchStatus: merged.dispatchStatus,
             inboundTrackingNo: this.clean(merged.inboundTrackingNo),
             purchaseAddress: this.clean(merged.purchaseAddress),
-            receiverName: this.clean(merged.receiverName),
             fundingType: merged.fundingType,
             orderAmount: merged.orderAmount,
             paymentDiscountAmount: merged.paymentDiscountAmount,

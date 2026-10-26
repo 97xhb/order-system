@@ -17,7 +17,6 @@ type FieldKey =
   | 'dispatchStatus'
   | 'inboundTrackingNo'
   | 'purchaseAddress'
-  | 'receiverName'
   | 'fundingType'
   | 'orderAmount'
   | 'paymentDiscountAmount'
@@ -90,7 +89,6 @@ interface MyOrder {
   dispatchStatus: DispatchStatus;
   inboundTrackingNo: string | null;
   purchaseAddress: string | null;
-  receiverName: string | null;
   fundingType: 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
   orderAmount: string | number;
   paymentDiscountAmount: string | number;
@@ -141,7 +139,6 @@ const form = reactive({
   dispatchStatus: 'NOT_SHIPPED' as DispatchStatus,
   inboundTrackingNo: '',
   purchaseAddress: '',
-  receiverName: '',
   fundingType: 'SUBMITTER_ADVANCED' as 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER',
   orderAmount: undefined as number | undefined,
   paymentDiscountAmount: 0 as number | undefined,
@@ -237,7 +234,6 @@ const clearForNext = () => {
   form.dispatchStatus = 'NOT_SHIPPED';
   form.inboundTrackingNo = '';
   form.purchaseAddress = '';
-  form.receiverName = '';
   form.rebateScanned = undefined;
   form.notes = '';
   applyDefaults();
@@ -388,7 +384,6 @@ const editOrder = (order: MyOrder) => {
     dispatchStatus: order.dispatchStatus ?? 'NOT_SHIPPED',
     inboundTrackingNo: order.inboundTrackingNo ?? '',
     purchaseAddress: order.purchaseAddress ?? '',
-    receiverName: order.receiverName ?? '',
     fundingType: order.fundingType,
     orderAmount: Number(order.orderAmount),
     paymentDiscountAmount: Number(order.paymentDiscountAmount),
@@ -647,15 +642,6 @@ onMounted(() => void load());
                   :disabled="!canEditField('purchaseAddress')"
                   type="textarea"
                   :rows="2"
-              /></el-form-item>
-              <el-form-item
-                v-if="field('receiverName').visible"
-                label="收货佬"
-                :required="field('receiverName').required"
-                ><el-input
-                  v-model="form.receiverName"
-                  :disabled="!canEditField('receiverName')"
-                  maxlength="100"
               /></el-form-item>
             </div>
           </section>

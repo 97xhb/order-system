@@ -730,9 +730,6 @@ onMounted(async () => {
               @input="handleInboundTrackingInput"
             />
           </el-form-item>
-          <el-form-item v-if="!isEditMode" label="收货佬" class="field-half">
-            <el-input v-model="form.receiverName" clearable maxlength="100" />
-          </el-form-item>
           <el-form-item label="下单地址" class="field-full compact-textarea">
             <el-input v-model="form.purchaseAddress" type="textarea" :rows="2" />
             <div class="address-quick-actions">
