@@ -162,7 +162,7 @@ interface TableColumnOption {
   key: string;
   label: string;
   field?: string;
-  width?: number;
+  width?: number | 'auto';
   minWidth?: number;
   customFieldId?: string;
   customFieldType?: CustomFieldType;
@@ -170,7 +170,7 @@ interface TableColumnOption {
 }
 
 const baseDefaultVisibleColumnKeys: string[] = [];
-const columnSettingsStorageKey = 'order-system:order-table-columns-v3';
+const columnSettingsStorageKey = 'order-system:order-table-columns-v4';
 const copyColumnSettingsStorageKey = 'order-system:order-copy-columns-v1';
 const defaultCopyColumnKeys = ['inboundTrackingNo', 'shipmentTrackingNo'];
 const serialSortStorageKey = 'order-system:order-serial-sort';
@@ -188,8 +188,12 @@ const tableColumnOptions = computed<TableColumnOption[]>(() => [
   ...options.orderTableFields.map((field) => ({
     key: field.key,
     label: field.label,
-    width: field.width,
-    minWidth: field.minWidth,
+    width:
+      field.key === 'dispatchStatus' || field.key === 'receiverName'
+        ? ('auto' as const)
+        : field.width,
+    minWidth:
+      field.key === 'dispatchStatus' || field.key === 'receiverName' ? undefined : field.minWidth,
     defaultVisible: field.defaultVisible,
   })),
   ...options.customFields.map((field) => ({
@@ -1261,7 +1265,10 @@ const spreadsheetNumberFormat = (column: TableColumnOption) => {
 };
 
 const spreadsheetColumnWidth = (column: TableColumnOption) => {
-  const pixelWidth = column.width ?? column.minWidth ?? 150;
+  const pixelWidth =
+    typeof column.width === 'number'
+      ? column.width
+      : (column.minWidth ?? Math.max(90, column.label.length * 16 + 20));
   return Math.min(42, Math.max(10, Math.round(pixelWidth / 8)));
 };
 
