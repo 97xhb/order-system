@@ -1,5 +1,10 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ReviewStatus, SettlementStatus, ShipmentStatus } from '@prisma/client';
+import {
+  DispatchStatus,
+  ReviewStatus,
+  SettlementStatus,
+  ShipmentStatus,
+} from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -71,6 +76,11 @@ export class ListOrdersQueryDto {
   @IsOptional()
   @IsEnum(ShipmentStatus)
   shipmentStatus?: ShipmentStatus;
+
+  @ApiPropertyOptional({ enum: DispatchStatus })
+  @IsOptional()
+  @IsEnum(DispatchStatus)
+  dispatchStatus?: DispatchStatus;
 
   @ApiPropertyOptional({ enum: ORDER_SETTLEMENT_STATUSES })
   @IsOptional()

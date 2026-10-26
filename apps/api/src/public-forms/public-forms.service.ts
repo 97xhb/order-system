@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   ExternalIdentityStatus,
+  DispatchStatus,
   FundingType,
   OrderSource,
   PayoutMethodStatus,
@@ -164,8 +165,10 @@ export class PublicFormsService {
       productName: input.productName,
       orderedAt: input.orderedAt,
       platformOrderNo: input.platformOrderNo,
+      dispatchStatus: input.dispatchStatus,
       inboundTrackingNo: input.inboundTrackingNo,
       purchaseAddress: input.purchaseAddress,
+      receiverName: input.receiverName,
       fundingType: input.fundingType,
       orderAmount: input.orderAmount,
       paymentDiscountAmount: input.paymentDiscountAmount,
@@ -181,8 +184,10 @@ export class PublicFormsService {
       productName: '商品/方案*数量',
       orderedAt: '下单日期',
       platformOrderNo: '平台订单号',
+      dispatchStatus: '发货状态',
       inboundTrackingNo: '平台运单号',
       purchaseAddress: '下单地址',
+      receiverName: '收货佬',
       fundingType: '支付方式',
       orderAmount: '下单金额',
       paymentDiscountAmount: '支付优惠',
@@ -450,6 +455,18 @@ export class PublicFormsService {
       config,
       dto.submitterSettlementAmount,
     );
+    const inboundTrackingNo = this.clean(
+      this.visibleValue(config, 'inboundTrackingNo', dto.inboundTrackingNo, ''),
+    );
+    const dispatchStatus = this.visibleValue(
+      config,
+      'dispatchStatus',
+      dto.dispatchStatus,
+      inboundTrackingNo ? DispatchStatus.SHIPPED : DispatchStatus.NOT_SHIPPED,
+    );
+    const receiverName = this.clean(
+      this.visibleValue(config, 'receiverName', dto.receiverName, ''),
+    );
 
     try {
       return await this.prisma.$transaction(
@@ -509,14 +526,8 @@ export class PublicFormsService {
                   '',
                 ),
               ),
-              inboundTrackingNo: this.clean(
-                this.visibleValue(
-                  config,
-                  'inboundTrackingNo',
-                  dto.inboundTrackingNo,
-                  '',
-                ),
-              ),
+              dispatchStatus,
+              inboundTrackingNo,
               purchaseAddress: this.clean(
                 this.visibleValue(
                   config,
@@ -525,6 +536,7 @@ export class PublicFormsService {
                   '',
                 ),
               ),
+              receiverName,
               fundingType,
               orderAmount: this.visibleValue(
                 config,
@@ -617,8 +629,10 @@ export class PublicFormsService {
       platform: order.platform,
       submitter: order.submitter,
       platformOrderNo: order.platformOrderNo,
+      dispatchStatus: order.dispatchStatus,
       inboundTrackingNo: order.inboundTrackingNo,
       purchaseAddress: order.purchaseAddress,
+      receiverName: order.receiverName,
       fundingType: order.fundingType,
       orderAmount: order.orderAmount,
       paymentDiscountAmount: order.paymentDiscountAmount,
@@ -699,6 +713,11 @@ export class PublicFormsService {
         dto.platformOrderNo,
         existing.platformOrderNo ?? '',
       ),
+      dispatchStatus: editableValue(
+        'dispatchStatus',
+        dto.dispatchStatus,
+        existing.dispatchStatus,
+      ),
       inboundTrackingNo: editableValue(
         'inboundTrackingNo',
         dto.inboundTrackingNo,
@@ -708,6 +727,11 @@ export class PublicFormsService {
         'purchaseAddress',
         dto.purchaseAddress,
         existing.purchaseAddress ?? '',
+      ),
+      receiverName: editableValue(
+        'receiverName',
+        dto.receiverName,
+        existing.receiverName ?? '',
       ),
       fundingType: editableValue(
         'fundingType',
@@ -736,6 +760,13 @@ export class PublicFormsService {
       ),
       notes: editableValue('notes', dto.notes, existing.notes ?? ''),
     };
+    if (
+      dto.inboundTrackingNo?.trim() &&
+      dto.dispatchStatus === undefined &&
+      merged.dispatchStatus === DispatchStatus.NOT_SHIPPED
+    ) {
+      merged.dispatchStatus = DispatchStatus.SHIPPED;
+    }
     this.assertRequiredFields(config, merged);
 
     const platform = await this.prisma.platform.findFirst({
@@ -769,8 +800,10 @@ export class PublicFormsService {
             productNameSnapshot: this.clean(merged.productName) ?? '',
             orderedAt: this.orderedAt(merged.orderedAt),
             platformOrderNo: this.clean(merged.platformOrderNo),
+            dispatchStatus: merged.dispatchStatus,
             inboundTrackingNo: this.clean(merged.inboundTrackingNo),
             purchaseAddress: this.clean(merged.purchaseAddress),
+            receiverName: this.clean(merged.receiverName),
             fundingType: merged.fundingType,
             orderAmount: merged.orderAmount,
             paymentDiscountAmount: merged.paymentDiscountAmount,

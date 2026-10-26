@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FundingType } from '@prisma/client';
+import { DispatchStatus, FundingType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -52,11 +52,22 @@ export class CreatePublicOrderDto {
   @MaxLength(150)
   inboundTrackingNo?: string;
 
+  @ApiPropertyOptional({ enum: DispatchStatus })
+  @IsOptional()
+  @IsEnum(DispatchStatus)
+  dispatchStatus?: DispatchStatus;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(2_000)
   purchaseAddress?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  receiverName?: string;
 
   @ApiPropertyOptional({ enum: FundingType })
   @IsOptional()

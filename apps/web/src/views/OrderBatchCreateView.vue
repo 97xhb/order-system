@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
 
 interface OptionItem {
   id: string;
@@ -28,8 +29,10 @@ type BatchColumnKey =
   | 'category'
   | 'product'
   | 'platformOrderNo'
+  | 'dispatchStatus'
   | 'inboundTrackingNo'
   | 'purchaseAddress'
+  | 'receiverName'
   | 'fundingType'
   | 'paymentDiscountAmount'
   | 'orderAmount'
@@ -52,8 +55,10 @@ interface BatchOrderRow {
   categoryId: string;
   productName: string;
   platformOrderNo: string;
+  dispatchStatus: DispatchStatus;
   inboundTrackingNo: string;
   purchaseAddress: string;
+  receiverName: string;
   fundingType: FundingType;
   fundingTypeOther: string;
   orderAmount: string;
@@ -109,8 +114,10 @@ const fallbackBatchFields: Array<OrderTableFieldMeta & { key: BatchColumnKey }> 
   { key: 'category', label: '品类', width: 82 },
   { key: 'product', label: '商品/方案*数量', minWidth: 210 },
   { key: 'platformOrderNo', label: '平台订单号', width: 145 },
+  { key: 'dispatchStatus', label: '发货状态', width: 112 },
   { key: 'inboundTrackingNo', label: '平台运单号', width: 215 },
   { key: 'purchaseAddress', label: '下单地址', minWidth: 180 },
+  { key: 'receiverName', label: '收货佬', width: 115 },
   { key: 'fundingType', label: '支付方式', width: 108 },
   { key: 'paymentDiscountAmount', label: '支付优惠', width: 105 },
   { key: 'orderAmount', label: '下单金额', width: 108 },
@@ -133,8 +140,10 @@ const batchColumnWidths: Record<BatchColumnKey, number> = {
   category: 125,
   product: 250,
   platformOrderNo: 160,
+  dispatchStatus: 150,
   inboundTrackingNo: 215,
   purchaseAddress: 190,
+  receiverName: 130,
   fundingType: 190,
   paymentDiscountAmount: 118,
   orderAmount: 118,
@@ -191,6 +200,19 @@ const fundingTypeOptions: Array<{ value: FundingType; label: string }> = [
   { value: 'SUBMITTER_ADVANCED', label: '代付' },
   { value: 'OTHER', label: '其他' },
 ];
+const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
+  { value: 'NOT_SHIPPED', label: '未发货' },
+  { value: 'SHIPPED', label: '已发货' },
+  { value: 'PARTIALLY_SHIPPED', label: '部分发货' },
+  { value: 'EXCEPTION', label: '异常' },
+  { value: 'CANCELLED', label: '已取消' },
+];
+const handleBatchInboundTrackingInput = (row: BatchOrderRow, value: string) => {
+  row.inboundTrackingNo = value;
+  if (value.trim() && row.dispatchStatus === 'NOT_SHIPPED') {
+    row.dispatchStatus = 'SHIPPED';
+  }
+};
 
 const formatLocalDate = (date: Date) => {
   const year = date.getFullYear();
@@ -225,8 +247,10 @@ const createRow = (seed: Partial<BatchOrderRow> = {}): BatchOrderRow => {
     categoryId: defaults.categoryId,
     productName: '',
     platformOrderNo: '',
+    dispatchStatus: 'NOT_SHIPPED',
     inboundTrackingNo: '',
     purchaseAddress: defaults.purchaseAddress,
+    receiverName: '',
     fundingType: defaults.fundingType,
     fundingTypeOther: '',
     orderAmount: '',
@@ -251,6 +275,7 @@ const isMeaningfulRow = (row: BatchOrderRow) =>
     row.productName.trim() ||
     row.platformOrderNo.trim() ||
     row.inboundTrackingNo.trim() ||
+    row.receiverName.trim() ||
     row.orderAmount.trim() ||
     row.submitterSettlementAmount.trim() ||
     row.saleAmount.trim() ||
@@ -396,6 +421,16 @@ const fundingTypeByText = (
   };
 };
 
+const dispatchStatusByText = (value: string): DispatchStatus => {
+  const normalized = value.trim().toLocaleLowerCase();
+  if (!normalized) return 'NOT_SHIPPED';
+  if (normalized.includes('部分') || normalized === 'partially_shipped') return 'PARTIALLY_SHIPPED';
+  if (normalized.includes('取消') || normalized === 'cancelled') return 'CANCELLED';
+  if (normalized.includes('异常') || normalized === 'exception') return 'EXCEPTION';
+  if (normalized.includes('已发') || normalized === 'shipped') return 'SHIPPED';
+  return 'NOT_SHIPPED';
+};
+
 const normalizeHeaderLabel = (value: string) =>
   value.trim().toLocaleLowerCase().replace(/[＊*]/g, '').replace(/\s+/g, '');
 
@@ -406,8 +441,10 @@ const batchHeaderAliases: Record<BatchColumnKey, string[]> = {
   category: ['品类', '分类', '下单品类'],
   product: ['商品/方案*数量', '商品/方案数量', '商品', '方案内容'],
   platformOrderNo: ['平台订单号', '订单号'],
+  dispatchStatus: ['发货状态', '平台发货状态'],
   inboundTrackingNo: ['平台运单号', '平台发货运单号'],
   purchaseAddress: ['下单地址', '购买地址'],
+  receiverName: ['收货佬', '收货人'],
   fundingType: ['支付方式', '资金承担方式'],
   paymentDiscountAmount: ['支付优惠', '支付优惠金额'],
   orderAmount: ['下单金额', '订单金额'],
@@ -551,6 +588,8 @@ const importPastedRows = () => {
       ? `${productName}${productName ? ' * ' : ''}${legacyQuantity}`
       : productName;
     const funding = fundingTypeByText(cellValue(cells, 'fundingType'));
+    const inboundTrackingNo = cellValue(cells, 'inboundTrackingNo');
+    const dispatchStatusText = cellValue(cells, 'dispatchStatus');
     return createRow({
       orderedAt: normalizeDate(cellValue(cells, 'orderedAt')),
       platformId: optionIdByName(platforms.value, platformName) || defaults.platformId,
@@ -558,8 +597,14 @@ const importPastedRows = () => {
       categoryId: optionIdByName(categories.value, categoryName) || defaults.categoryId,
       productName: productNameWithQuantity,
       platformOrderNo: cellValue(cells, 'platformOrderNo'),
-      inboundTrackingNo: cellValue(cells, 'inboundTrackingNo'),
+      dispatchStatus: dispatchStatusText
+        ? dispatchStatusByText(dispatchStatusText)
+        : inboundTrackingNo
+          ? 'SHIPPED'
+          : 'NOT_SHIPPED',
+      inboundTrackingNo,
       purchaseAddress: cellValue(cells, 'purchaseAddress') || defaults.purchaseAddress,
+      receiverName: cellValue(cells, 'receiverName'),
       fundingType: funding.fundingType,
       fundingTypeOther: funding.fundingTypeOther,
       orderAmount: normalizeNumberText(cellValue(cells, 'orderAmount')),
@@ -636,8 +681,10 @@ const rowPayload = (row: BatchOrderRow) => {
     categoryId: row.categoryId || undefined,
     productName: row.productName.trim(),
     platformOrderNo: row.platformOrderNo.trim(),
+    dispatchStatus: row.dispatchStatus,
     inboundTrackingNo: row.inboundTrackingNo.trim(),
     purchaseAddress: row.purchaseAddress.trim(),
+    receiverName: row.receiverName.trim(),
     fundingType: row.fundingType,
     fundingTypeOther: row.fundingType === 'OTHER' ? row.fundingTypeOther.trim() : undefined,
     orderAmount: optionalNumber(row.orderAmount),
@@ -880,14 +927,24 @@ onMounted(loadOptions);
                 v-else-if="column.key === 'platformOrderNo'"
                 v-model="row.platformOrderNo"
               />
+              <el-select v-else-if="column.key === 'dispatchStatus'" v-model="row.dispatchStatus">
+                <el-option
+                  v-for="item in dispatchStatusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
               <el-input
                 v-else-if="column.key === 'inboundTrackingNo'"
-                v-model="row.inboundTrackingNo"
+                :model-value="row.inboundTrackingNo"
+                @update:model-value="handleBatchInboundTrackingInput(row, $event)"
               />
               <el-input
                 v-else-if="column.key === 'purchaseAddress'"
                 v-model="row.purchaseAddress"
               />
+              <el-input v-else-if="column.key === 'receiverName'" v-model="row.receiverName" />
               <div v-else-if="column.key === 'fundingType'" class="funding-cell">
                 <el-select v-model="row.fundingType">
                   <el-option

@@ -8,6 +8,7 @@ import { http } from '../lib/http';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
 type ShipmentStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'DELIVERED' | 'EXCEPTION';
 type SettlementStatus = 'UNPAID' | 'PAID' | 'EXCEPTION';
 type StoredSettlementStatus = SettlementStatus | 'PARTIAL';
@@ -33,6 +34,8 @@ interface EditableOrder {
   platformOrderNo: string | null;
   inboundTrackingNo: string | null;
   purchaseAddress: string | null;
+  receiverName: string | null;
+  dispatchStatus: DispatchStatus;
   fundingType: FundingType;
   customData: unknown;
   orderAmount: string | number;
@@ -77,6 +80,8 @@ interface OrderDraft {
   platformOrderNo: string;
   inboundTrackingNo: string;
   purchaseAddress: string;
+  receiverName: string;
+  dispatchStatus: DispatchStatus;
   fundingType: FundingType;
   fundingTypeOther: string;
   orderAmount: number | undefined;
@@ -101,6 +106,13 @@ const fundingTypeOptions = [
   { value: 'SELF_PAID' as const, label: '自己付', hint: '我直接支付' },
   { value: 'SUBMITTER_ADVANCED' as const, label: '代付', hint: '后续结算' },
   { value: 'OTHER' as const, label: '其他', hint: '填写说明' },
+];
+const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
+  { value: 'NOT_SHIPPED', label: '未发货' },
+  { value: 'SHIPPED', label: '已发货' },
+  { value: 'PARTIALLY_SHIPPED', label: '部分发货' },
+  { value: 'EXCEPTION', label: '异常' },
+  { value: 'CANCELLED', label: '已取消' },
 ];
 const shipmentStatusOptions: Array<{ value: ShipmentStatus; label: string }> = [
   { value: 'NOT_SHIPPED', label: '未寄出' },
@@ -149,6 +161,8 @@ const createEmptyDraft = (): OrderDraft => ({
   platformOrderNo: '',
   inboundTrackingNo: '',
   purchaseAddress: '',
+  receiverName: '',
+  dispatchStatus: 'NOT_SHIPPED',
   fundingType: 'SELF_PAID',
   fundingTypeOther: '',
   orderAmount: undefined,
@@ -230,6 +244,8 @@ const applyOrder = (order: EditableOrder | null | undefined) => {
     platformOrderNo: order.platformOrderNo ?? '',
     inboundTrackingNo: order.inboundTrackingNo ?? '',
     purchaseAddress: order.purchaseAddress ?? '',
+    receiverName: order.receiverName ?? '',
+    dispatchStatus: order.dispatchStatus ?? 'NOT_SHIPPED',
     fundingType: order.fundingType,
     fundingTypeOther: fundingTypeOtherFromOrder(order),
     orderAmount: numberValue(order.orderAmount),
@@ -283,6 +299,7 @@ const reusePreviousBasics = () => {
     'categoryId',
     'productName',
     'purchaseAddress',
+    'receiverName',
     'fundingType',
     'fundingTypeOther',
   ];
@@ -340,6 +357,12 @@ const setScanStatus = (scanned: boolean) => {
   }
 };
 
+const handleInboundTrackingInput = (value: string) => {
+  if (value.trim() && form.dispatchStatus === 'NOT_SHIPPED') {
+    form.dispatchStatus = 'SHIPPED';
+  }
+};
+
 const setReceivableStatus = (status: SettlementStatus) => {
   form.receivableStatus = status;
   if (status === 'PAID') form.shipmentStatus = 'DELIVERED';
@@ -387,6 +410,8 @@ const submitOrder = async () => {
       platformOrderNo: form.platformOrderNo,
       inboundTrackingNo: form.inboundTrackingNo,
       purchaseAddress: form.purchaseAddress,
+      receiverName: form.receiverName,
+      dispatchStatus: form.dispatchStatus,
       fundingType: form.fundingType,
       fundingTypeOther: form.fundingType === 'OTHER' ? form.fundingTypeOther.trim() : undefined,
       orderAmount: form.orderAmount,
@@ -662,6 +687,29 @@ onMounted(async () => {
               placeholder="支持多行填写，可一行写一个商品、方案和数量"
             />
           </el-form-item>
+          <el-form-item label="发货状态" class="field-full">
+            <div
+              class="status-options dispatch-status-options"
+              role="radiogroup"
+              aria-label="发货状态"
+            >
+              <button
+                v-for="option in dispatchStatusOptions"
+                :key="option.value"
+                type="button"
+                role="radio"
+                class="card-choice status-choice"
+                :class="[
+                  `status-${option.value.toLowerCase()}`,
+                  { 'is-selected': form.dispatchStatus === option.value },
+                ]"
+                :aria-checked="form.dispatchStatus === option.value"
+                @click="form.dispatchStatus = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </el-form-item>
           <el-form-item label="平台订单号" class="field-half">
             <el-input v-model="form.platformOrderNo" clearable placeholder="每单单独填写" />
           </el-form-item>
@@ -673,6 +721,7 @@ onMounted(async () => {
               clearable
               resize="vertical"
               placeholder="支持填写多行运单号，未发货可留空"
+              @input="handleInboundTrackingInput"
             />
           </el-form-item>
           <el-form-item label="下单地址" class="field-full compact-textarea">
@@ -691,6 +740,9 @@ onMounted(async () => {
                 清空
               </el-button>
             </div>
+          </el-form-item>
+          <el-form-item label="收货佬" class="field-half">
+            <el-input v-model="form.receiverName" clearable maxlength="100" />
           </el-form-item>
         </div>
       </section>
@@ -1185,6 +1237,11 @@ onMounted(async () => {
   width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.dispatch-status-options {
+  width: 100%;
+  margin-bottom: 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
 .scan-money-stack {
   display: grid;
   min-width: 0;
@@ -1347,6 +1404,9 @@ onMounted(async () => {
   }
   .funding-options {
     grid-template-columns: 1fr;
+  }
+  .dispatch-status-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .funding-option {
     min-height: 50px;

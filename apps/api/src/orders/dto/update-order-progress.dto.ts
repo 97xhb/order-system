@@ -1,5 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { SettlementStatus, ShipmentStatus } from '@prisma/client';
+import {
+  DispatchStatus,
+  SettlementStatus,
+  ShipmentStatus,
+} from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
@@ -20,6 +24,17 @@ export class UpdateOrderProgressDto {
   @IsString()
   @MaxLength(150)
   shipmentTrackingNo?: string;
+
+  @ApiPropertyOptional({ enum: DispatchStatus })
+  @IsOptional()
+  @IsEnum(DispatchStatus)
+  dispatchStatus?: DispatchStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  receiverName?: string;
 
   @ApiPropertyOptional({ description: '下单金额' })
   @IsOptional()

@@ -31,6 +31,7 @@ interface OptionItem {
 }
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
 type ShipmentStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'DELIVERED' | 'EXCEPTION';
 type SettlementStatus = 'UNPAID' | 'PAID' | 'EXCEPTION';
 type StoredSettlementStatus = SettlementStatus | 'PARTIAL';
@@ -87,6 +88,8 @@ interface OrderApiRow {
   platformOrderNo: string | null;
   inboundTrackingNo: string | null;
   purchaseAddress: string | null;
+  receiverName: string | null;
+  dispatchStatus: DispatchStatus;
   fundingType: FundingType;
   customData: unknown;
   shipmentLink: { shipment: { trackingNo: string; carrier?: string | null } } | null;
@@ -166,36 +169,7 @@ interface TableColumnOption {
   defaultVisible?: boolean;
 }
 
-const baseTableColumnOptions: TableColumnOption[] = [
-  { key: 'serialNo', label: '序号', field: 'displaySerialNo', width: 68 },
-  { key: 'orderedAt', label: '下单日期', field: 'orderedAt', width: 104 },
-  { key: 'platform', label: '平台', width: 82 },
-  { key: 'submitter', label: '下单人', width: 125 },
-  { key: 'category', label: '品类', width: 82 },
-  { key: 'product', label: '商品/方案*数量', minWidth: 210 },
-  { key: 'platformOrderNo', label: '平台订单号', field: 'platformOrderNo', width: 145 },
-  {
-    key: 'inboundTrackingNo',
-    label: '平台运单号',
-    field: 'inboundTrackingNo',
-    width: 215,
-  },
-  { key: 'purchaseAddress', label: '下单地址', field: 'purchaseAddress', minWidth: 180 },
-  { key: 'shipmentTrackingNo', label: '寄件运单号', width: 215 },
-  { key: 'shipmentStatus', label: '寄件状态', width: 102 },
-  { key: 'fundingType', label: '支付方式', width: 108 },
-  { key: 'paymentDiscountAmount', label: '支付优惠', width: 105 },
-  { key: 'orderAmount', label: '下单金额', width: 108 },
-  { key: 'submitterSettlementAmount', label: '结算金额', width: 108 },
-  { key: 'platformRebateAmount', label: '扫码返利', width: 132 },
-  { key: 'submitterSettlementStatus', label: '结算状态', width: 132 },
-  { key: 'saleAmount', label: '回款金额', width: 108 },
-  { key: 'receivableStatus', label: '回款状态', width: 132 },
-  { key: 'profit', label: '利润', width: 150 },
-  { key: 'notes', label: '备注', field: 'notes', minWidth: 190 },
-  { key: 'editReasonHistory', label: '修改说明', minWidth: 260 },
-];
-const baseDefaultVisibleColumnKeys = baseTableColumnOptions.map((item) => item.key);
+const baseDefaultVisibleColumnKeys: string[] = [];
 const columnSettingsStorageKey = 'order-system:order-table-columns-v3';
 const copyColumnSettingsStorageKey = 'order-system:order-copy-columns-v1';
 const defaultCopyColumnKeys = ['inboundTrackingNo', 'shipmentTrackingNo'];
@@ -211,15 +185,13 @@ const options = reactive<OrdersResponse['options']>({
   orderTableFields: [],
 });
 const tableColumnOptions = computed<TableColumnOption[]>(() => [
-  ...(options.orderTableFields.length
-    ? options.orderTableFields.map((field) => ({
-        key: field.key,
-        label: field.label,
-        width: field.width,
-        minWidth: field.minWidth,
-        defaultVisible: field.defaultVisible,
-      }))
-    : baseTableColumnOptions),
+  ...options.orderTableFields.map((field) => ({
+    key: field.key,
+    label: field.label,
+    width: field.width,
+    minWidth: field.minWidth,
+    defaultVisible: field.defaultVisible,
+  })),
   ...options.customFields.map((field) => ({
     key: `custom:${field.id}`,
     label: field.label,
@@ -260,20 +232,38 @@ const batchEditVisible = ref(false);
 const batchEditSaving = ref(false);
 const batchEditForm = reactive({
   purchaseAddress: '',
+  receiverName: '',
   shipmentTrackingNo: '',
   orderAmount: null as number | null,
   submitterSettlementAmount: null as number | null,
   saleAmount: null as number | null,
   amountFormulas: {} as Record<string, string>,
+  dispatchStatus: null as DispatchStatus | null,
   shipmentStatus: null as ShipmentStatus | null,
   receivableStatus: null as SettlementStatus | null,
   submitterSettlementStatus: null as SettlementStatus | null,
 });
-const batchEditStatusFields = computed(() => [
-  { key: "shipmentStatus", label: "寄件状态", value: batchEditForm.shipmentStatus },
-  { key: "receivableStatus", label: "回款状态", value: batchEditForm.receivableStatus },
-  { key: "submitterSettlementStatus", label: "结算状态", value: batchEditForm.submitterSettlementStatus },
-] as const);
+const batchEditStatusFields = computed(
+  () =>
+    [
+      { key: 'dispatchStatus', label: '发货状态', value: batchEditForm.dispatchStatus },
+      { key: 'shipmentStatus', label: '寄件状态', value: batchEditForm.shipmentStatus },
+      { key: 'receivableStatus', label: '回款状态', value: batchEditForm.receivableStatus },
+      {
+        key: 'submitterSettlementStatus',
+        label: '结算状态',
+        value: batchEditForm.submitterSettlementStatus,
+      },
+    ] as const,
+);
+const batchDispatchStatusOptions: Array<{ label: string; value: DispatchStatus | null }> = [
+  { label: '不修改', value: null },
+  { label: '未发货', value: 'NOT_SHIPPED' },
+  { label: '已发货', value: 'SHIPPED' },
+  { label: '部分发货', value: 'PARTIALLY_SHIPPED' },
+  { label: '异常', value: 'EXCEPTION' },
+  { label: '已取消', value: 'CANCELLED' },
+];
 const batchShipmentStatusOptions: Array<{ label: string; value: ShipmentStatus | null }> = [
   { label: '不修改', value: null },
   { label: '未寄出', value: 'NOT_SHIPPED' },
@@ -293,13 +283,25 @@ const batchSettlementStatusOptions: Array<{ label: string; value: SettlementStat
   { label: '已结算', value: 'PAID' },
   { label: '异常', value: 'EXCEPTION' },
 ];
-const batchEditFields = computed(() => [
-  { key: 'purchaseAddress', label: '下单地址', value: batchEditForm.purchaseAddress.trim() },
-  { key: 'shipmentTrackingNo', label: '寄件运单号', value: batchEditForm.shipmentTrackingNo.trim() },
-  { key: 'orderAmount', label: '下单金额', value: batchEditForm.orderAmount },
-  { key: 'submitterSettlementAmount', label: '结算金额', value: batchEditForm.submitterSettlementAmount },
-  { key: 'saleAmount', label: '回款金额', value: batchEditForm.saleAmount },
-] as const);
+const batchEditFields = computed(
+  () =>
+    [
+      { key: 'purchaseAddress', label: '下单地址', value: batchEditForm.purchaseAddress.trim() },
+      { key: 'receiverName', label: '收货佬', value: batchEditForm.receiverName.trim() },
+      {
+        key: 'shipmentTrackingNo',
+        label: '寄件运单号',
+        value: batchEditForm.shipmentTrackingNo.trim(),
+      },
+      { key: 'orderAmount', label: '下单金额', value: batchEditForm.orderAmount },
+      {
+        key: 'submitterSettlementAmount',
+        label: '结算金额',
+        value: batchEditForm.submitterSettlementAmount,
+      },
+      { key: 'saleAmount', label: '回款金额', value: batchEditForm.saleAmount },
+    ] as const,
+);
 const batchEditCount = computed(
   () =>
     batchEditFields.value.filter((item) => item.value !== '' && item.value !== null).length +
@@ -327,6 +329,7 @@ const filters = reactive({
   categoryIds: [] as string[],
   schemeIds: [] as string[],
   reviewStatus: '',
+  dispatchStatus: '',
   shipmentStatus: '',
   receivableStatus: '',
   submitterSettlementStatus: '',
@@ -360,6 +363,27 @@ const statusTypes: Record<string, 'primary' | 'success' | 'warning' | 'danger' |
   PAID: 'success',
   EXCEPTION: 'danger',
 };
+const dispatchStatusLabels: Record<DispatchStatus, string> = {
+  NOT_SHIPPED: '未发货',
+  SHIPPED: '已发货',
+  PARTIALLY_SHIPPED: '部分发货',
+  EXCEPTION: '异常',
+  CANCELLED: '已取消',
+};
+const dispatchStatusTypes: Record<
+  DispatchStatus,
+  'primary' | 'success' | 'warning' | 'danger' | 'info'
+> = {
+  NOT_SHIPPED: 'info',
+  SHIPPED: 'success',
+  PARTIALLY_SHIPPED: 'warning',
+  EXCEPTION: 'danger',
+  CANCELLED: 'info',
+};
+const dispatchStatusLabel = (value: unknown) =>
+  dispatchStatusLabels[value as DispatchStatus] ?? '未发货';
+const dispatchStatusType = (value: unknown) =>
+  dispatchStatusTypes[value as DispatchStatus] ?? 'info';
 const submitterSettlementStatusLabels: Record<StoredSettlementStatus, string> = {
   UNPAID: '未结算',
   PARTIAL: '未结算',
@@ -541,6 +565,10 @@ const copyColumnValue = (row: OrderRow, column: TableColumnOption): string => {
       return copyPlainValue(row.inboundTrackingNo);
     case 'purchaseAddress':
       return copyPlainValue(row.purchaseAddress);
+    case 'receiverName':
+      return copyPlainValue(row.receiverName);
+    case 'dispatchStatus':
+      return dispatchStatusLabels[row.dispatchStatus];
     case 'shipmentTrackingNo':
       return copyPlainValue(row.shipmentLink?.shipment.trackingNo);
     case 'shipmentStatus':
@@ -602,6 +630,7 @@ const orderQueryParams = (page: number, pageSize: number) => ({
   categoryIds: filters.categoryIds.join(',') || undefined,
   schemeIds: filters.schemeIds.join(',') || undefined,
   reviewStatus: filters.reviewStatus || undefined,
+  dispatchStatus: filters.dispatchStatus || undefined,
   shipmentStatus: filters.shipmentStatus || undefined,
   receivableStatus: filters.receivableStatus || undefined,
   submitterSettlementStatus: filters.submitterSettlementStatus || undefined,
@@ -659,6 +688,7 @@ const resetFilters = () => {
   filters.categoryIds = [];
   filters.schemeIds = [];
   filters.reviewStatus = '';
+  filters.dispatchStatus = '';
   filters.shipmentStatus = '';
   filters.receivableStatus = '';
   filters.submitterSettlementStatus = '';
@@ -1168,6 +1198,10 @@ const spreadsheetColumnValue = (row: OrderRow, column: TableColumnOption): Sprea
       return spreadsheetText(row.inboundTrackingNo);
     case 'purchaseAddress':
       return spreadsheetText(row.purchaseAddress);
+    case 'receiverName':
+      return spreadsheetText(row.receiverName);
+    case 'dispatchStatus':
+      return spreadsheetText(dispatchStatusLabels[row.dispatchStatus]);
     case 'shipmentTrackingNo':
       return spreadsheetText(row.shipmentLink?.shipment.trackingNo);
     case 'shipmentStatus':
@@ -1545,15 +1579,17 @@ watch(
 
 const openBatchEdit = () => {
   if (!selectedRows.value.length) {
-    ElMessage.warning("请先勾选需要批量修改的订单");
+    ElMessage.warning('请先勾选需要批量修改的订单');
     return;
   }
   Object.assign(batchEditForm, {
-    purchaseAddress: "",
-    shipmentTrackingNo: "",
+    purchaseAddress: '',
+    receiverName: '',
+    shipmentTrackingNo: '',
     orderAmount: null,
     submitterSettlementAmount: null,
     saleAmount: null,
+    dispatchStatus: null,
     shipmentStatus: null,
     receivableStatus: null,
     submitterSettlementStatus: null,
@@ -1565,13 +1601,13 @@ const openBatchEdit = () => {
 const batchEdit = async () => {
   if (!selectedRows.value.length) return;
   if (!batchEditCount.value) {
-    ElMessage.warning("请至少填写一个要修改的字段");
+    ElMessage.warning('请至少填写一个要修改的字段');
     return;
   }
   const payload: Record<string, unknown> = {};
   const labels: string[] = [];
   for (const item of batchEditFields.value) {
-    if (item.value === "" || item.value === null) continue;
+    if (item.value === '' || item.value === null) continue;
     payload[item.key] = item.value;
     labels.push(item.label);
   }
@@ -1587,29 +1623,34 @@ const batchEdit = async () => {
   };
   try {
     await ElMessageBox.confirm(
-      `确定将 ${selectedRows.value.length} 笔订单的 ${labels.join("、")} 统一修改为填写值吗？`,
-      "批量修改订单",
-      { type: "warning", confirmButtonText: "确认修改", cancelButtonText: "取消" },
+      `确定将 ${selectedRows.value.length} 笔订单的 ${labels.join('、')} 统一修改为填写值吗？`,
+      '批量修改订单',
+      { type: 'warning', confirmButtonText: '确认修改', cancelButtonText: '取消' },
     );
     batchEditSaving.value = true;
     const results = await Promise.allSettled(
       selectedRows.value.map((row) =>
-        http.patch(`/admin/orders/${row.id}/progress`, { ...payload, reason: "订单列表批量修改字段" }),
+        http.patch(`/admin/orders/${row.id}/progress`, {
+          ...payload,
+          reason: '订单列表批量修改字段',
+        }),
       ),
     );
-    const failedCount = results.filter((result) => result.status === "rejected").length;
+    const failedCount = results.filter((result) => result.status === 'rejected').length;
     const successCount = results.length - failedCount;
     if (failedCount) {
-      ElMessage.warning(`已成功修改 ${successCount} 笔，另有 ${failedCount} 笔修改失败，请重新筛选核对`);
+      ElMessage.warning(
+        `已成功修改 ${successCount} 笔，另有 ${failedCount} 笔修改失败，请重新筛选核对`,
+      );
     } else {
-      ElMessage.success(`已批量修改 ${successCount} 笔订单的 ${labels.join("、")}`);
+      ElMessage.success(`已批量修改 ${successCount} 笔订单的 ${labels.join('、')}`);
     }
     batchEditVisible.value = false;
     selectedRows.value = [];
     await load();
   } catch (error) {
-    if (error === "cancel" || error === "close") return;
-    ElMessage.error(getApiErrorMessage(error, "批量修改订单失败"));
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(getApiErrorMessage(error, '批量修改订单失败'));
   } finally {
     batchEditSaving.value = false;
   }
@@ -1940,6 +1981,15 @@ onMounted(() => {
                 <el-option label="已驳回" value="REJECTED" />
               </el-select>
             </el-form-item>
+            <el-form-item label="发货状态">
+              <el-select v-model="filters.dispatchStatus" clearable>
+                <el-option label="未发货" value="NOT_SHIPPED" />
+                <el-option label="已发货" value="SHIPPED" />
+                <el-option label="部分发货" value="PARTIALLY_SHIPPED" />
+                <el-option label="异常" value="EXCEPTION" />
+                <el-option label="已取消" value="CANCELLED" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="寄件状态">
               <el-select v-model="filters.shipmentStatus" clearable>
                 <el-option label="未寄出" value="NOT_SHIPPED" />
@@ -2256,6 +2306,11 @@ onMounted(() => {
               <template v-else-if="column.key === 'platformOrderNo'">
                 {{ row.platformOrderNo || '-' }}
               </template>
+              <template v-else-if="column.key === 'dispatchStatus'">
+                <el-tag :type="dispatchStatusType(row.dispatchStatus)" size="small">
+                  {{ dispatchStatusLabel(row.dispatchStatus) }}
+                </el-tag>
+              </template>
               <template v-else-if="column.key === 'inboundTrackingNo'">
                 <div class="tracking-cell">
                   <span class="tracking-number">
@@ -2282,6 +2337,9 @@ onMounted(() => {
               </template>
               <template v-else-if="column.key === 'purchaseAddress'">
                 {{ row.purchaseAddress || '-' }}
+              </template>
+              <template v-else-if="column.key === 'receiverName'">
+                {{ row.receiverName || '-' }}
               </template>
               <template v-else-if="column.key === 'shipmentTrackingNo'">
                 <div class="tracking-cell">
@@ -2482,6 +2540,12 @@ onMounted(() => {
 
           <div class="mobile-order-status-grid">
             <div>
+              <span>发货</span>
+              <el-tag :type="dispatchStatusType(row.dispatchStatus)" size="small">
+                {{ dispatchStatusLabel(row.dispatchStatus) }}
+              </el-tag>
+            </div>
+            <div>
               <span>寄件</span>
               <el-tag :type="statusTypes[row.shipmentStatus]" size="small">
                 {{ shipmentStatusText(row) }}
@@ -2578,6 +2642,10 @@ onMounted(() => {
               <div>
                 <dt>下单地址</dt>
                 <dd>{{ row.purchaseAddress || '-' }}</dd>
+              </div>
+              <div>
+                <dt>收货佬</dt>
+                <dd>{{ row.receiverName || '-' }}</dd>
               </div>
               <div>
                 <dt>备注</dt>
@@ -2683,31 +2751,73 @@ onMounted(() => {
       />
     </section>
 
-    <el-dialog
-      v-model="batchEditVisible"
-      title="批量修改所选订单"
-      width="min(760px, 96vw)"
-    >
+    <el-dialog v-model="batchEditVisible" title="批量修改所选订单" width="min(760px, 96vw)">
       <div class="batch-edit-form">
         <div class="batch-edit-summary">
-          <span>已选 <b>{{ selectedRows.length }}</b> 笔订单</span>
-          <span>将修改 <b>{{ batchEditCount }}</b> 项</span>
+          <span
+            >已选 <b>{{ selectedRows.length }}</b> 笔订单</span
+          >
+          <span
+            >将修改 <b>{{ batchEditCount }}</b> 项</span
+          >
         </div>
         <div class="batch-edit-grid">
           <label class="batch-edit-field batch-edit-field--wide">
             <span class="batch-edit-label">下单地址</span>
-            <el-input v-model="batchEditForm.purchaseAddress" type="textarea" :rows="2" placeholder="留空不修改" />
+            <el-input
+              v-model="batchEditForm.purchaseAddress"
+              type="textarea"
+              :rows="2"
+              placeholder="留空不修改"
+            />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">收货佬</span>
+            <el-input v-model="batchEditForm.receiverName" placeholder="留空不修改" />
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">寄件运单号</span>
-            <el-input v-model="batchEditForm.shipmentTrackingNo" placeholder="留空不修改，填单号自动改为已寄出" />
+            <el-input
+              v-model="batchEditForm.shipmentTrackingNo"
+              placeholder="留空不修改，填单号自动改为已寄出"
+            />
           </label>
           <div class="status-grid batch-status-grid">
             <div class="status-card">
               <div class="status-card-heading">
+                <strong>平台发货</strong><span>选择整批订单的发货结果</span>
+              </div>
+              <div
+                class="status-options status-options--three"
+                role="radiogroup"
+                aria-label="发货状态"
+              >
+                <button
+                  v-for="item in batchDispatchStatusOptions"
+                  :key="item.label"
+                  type="button"
+                  class="card-choice status-choice"
+                  :class="[
+                    `status-${item.value?.toLowerCase() ?? 'none'}`,
+                    { 'is-selected': batchEditForm.dispatchStatus === item.value },
+                  ]"
+                  :aria-checked="batchEditForm.dispatchStatus === item.value"
+                  role="radio"
+                  @click="batchEditForm.dispatchStatus = item.value"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </div>
+            <div class="status-card">
+              <div class="status-card-heading">
                 <strong>货物寄件</strong><span>填写运单号时可自动标记为已寄出</span>
               </div>
-              <div class="status-options status-options--three" role="radiogroup" aria-label="寄件状态">
+              <div
+                class="status-options status-options--three"
+                role="radiogroup"
+                aria-label="寄件状态"
+              >
                 <button
                   v-for="item in batchShipmentStatusOptions"
                   :key="item.label"
@@ -2729,7 +2839,11 @@ onMounted(() => {
               <div class="status-card-heading">
                 <strong>收货佬给我回款</strong><span>批量选择回款结果</span>
               </div>
-              <div class="status-options status-options--three" role="radiogroup" aria-label="回款状态">
+              <div
+                class="status-options status-options--three"
+                role="radiogroup"
+                aria-label="回款状态"
+              >
                 <button
                   v-for="item in batchReceivableStatusOptions"
                   :key="item.label"
@@ -2751,7 +2865,11 @@ onMounted(() => {
               <div class="status-card-heading">
                 <strong>我给下单人结算</strong><span>批量选择结算结果</span>
               </div>
-              <div class="status-options status-options--three" role="radiogroup" aria-label="结算状态">
+              <div
+                class="status-options status-options--three"
+                role="radiogroup"
+                aria-label="结算状态"
+              >
                 <button
                   v-for="item in batchSettlementStatusOptions"
                   :key="item.label"
@@ -2801,7 +2919,13 @@ onMounted(() => {
       </div>
       <template #footer>
         <el-button @click="batchEditVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!batchEditCount" :loading="batchEditSaving" @click="batchEdit">确认修改</el-button>
+        <el-button
+          type="primary"
+          :disabled="!batchEditCount"
+          :loading="batchEditSaving"
+          @click="batchEdit"
+          >确认修改</el-button
+        >
       </template>
     </el-dialog>
 
@@ -3538,6 +3662,7 @@ onMounted(() => {
 
 .batch-status-grid {
   grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .batch-edit-hint {

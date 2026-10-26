@@ -42,6 +42,14 @@ enum ShipmentStatus {
   EXCEPTION
 }
 
+enum DispatchStatus {
+  NOT_SHIPPED
+  SHIPPED
+  PARTIALLY_SHIPPED
+  EXCEPTION
+  CANCELLED
+}
+
 enum SettlementStatus {
   UNPAID
   PARTIAL
@@ -374,6 +382,7 @@ model Order {
   source                    OrderSource      @default(ADMIN)
   reviewStatus              ReviewStatus     @default(DRAFT) @map("review_status")
   status                    OrderStatus      @default(ACTIVE)
+  dispatchStatus            DispatchStatus   @default(NOT_SHIPPED) @map("dispatch_status")
   shipmentStatus            ShipmentStatus   @default(NOT_SHIPPED) @map("shipment_status")
   receivableStatus          SettlementStatus @default(UNPAID) @map("receivable_status")
   submitterSettlementStatus SettlementStatus @default(UNPAID) @map("submitter_settlement_status")
@@ -396,6 +405,7 @@ model Order {
   platformOrderNo         String?     @map("platform_order_no") @db.VarChar(150)
   inboundTrackingNo       String?     @map("inbound_tracking_no") @db.VarChar(150)
   purchaseAddress         String?     @map("purchase_address") @db.Text
+  receiverName            String?     @map("receiver_name") @db.VarChar(100)
   fundingType             FundingType @map("funding_type")
 
   orderAmount               Decimal @default(0) @map("order_amount") @db.Decimal(18, 2)

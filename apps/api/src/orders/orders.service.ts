@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   CustomFieldScope,
+  DispatchStatus,
   FundingType,
   Prisma,
   ProfitRuleScope,
@@ -396,6 +397,10 @@ export class OrdersService {
     if (dto.fundingType === FundingType.OTHER && !fundingTypeOther) {
       throw new BadRequestException('选择其他支付方式时必须填写具体说明');
     }
+    const inboundTrackingNo = this.clean(dto.inboundTrackingNo);
+    const dispatchStatus =
+      dto.dispatchStatus ??
+      (inboundTrackingNo ? DispatchStatus.SHIPPED : DispatchStatus.NOT_SHIPPED);
 
     try {
       return await this.prisma.$transaction(async (transaction) => {
@@ -474,8 +479,10 @@ export class OrdersService {
             submitterWechatNickname: this.clean(dto.wechatNickname),
             rebateScanned: scanRebate.rebateScanned,
             platformOrderNo: this.clean(dto.platformOrderNo),
-            inboundTrackingNo: this.clean(dto.inboundTrackingNo),
+            inboundTrackingNo,
+            dispatchStatus,
             purchaseAddress: this.clean(dto.purchaseAddress),
+            receiverName: this.clean(dto.receiverName),
             fundingType: dto.fundingType,
             orderAmount: amountData.orderAmount,
             paymentDiscountAmount: amountData.paymentDiscountAmount,
@@ -648,6 +655,15 @@ export class OrdersService {
     const fundingType = dto.fundingType ?? existing.fundingType;
     const requestedShipmentStatus =
       dto.shipmentStatus ?? existing.shipmentStatus;
+    const inboundTrackingNo =
+      dto.inboundTrackingNo === undefined
+        ? existing.inboundTrackingNo
+        : this.clean(dto.inboundTrackingNo);
+    const dispatchStatus =
+      dto.dispatchStatus ??
+      (dto.inboundTrackingNo !== undefined && inboundTrackingNo
+        ? DispatchStatus.SHIPPED
+        : existing.dispatchStatus);
     const shipmentTrackingNo =
       dto.shipmentTrackingNo === undefined
         ? undefined
@@ -790,13 +806,19 @@ export class OrdersService {
             existingCustomData.amountFormulas &&
             typeof existingCustomData.amountFormulas === 'object' &&
             !Array.isArray(existingCustomData.amountFormulas)
-              ? { ...(existingCustomData.amountFormulas as Record<string, string>) }
+              ? {
+                  ...(existingCustomData.amountFormulas as Record<
+                    string,
+                    string
+                  >),
+                }
               : {};
           for (const [key, formula] of Object.entries(formulas ?? {})) {
             if (formula) current[key] = formula;
             else delete current[key];
           }
-          if (Object.keys(current).length) existingCustomData.amountFormulas = current;
+          if (Object.keys(current).length)
+            existingCustomData.amountFormulas = current;
           else delete existingCustomData.amountFormulas;
         }
 
@@ -822,14 +844,16 @@ export class OrdersService {
               dto.platformOrderNo === undefined
                 ? existing.platformOrderNo
                 : this.clean(dto.platformOrderNo),
-            inboundTrackingNo:
-              dto.inboundTrackingNo === undefined
-                ? existing.inboundTrackingNo
-                : this.clean(dto.inboundTrackingNo),
+            inboundTrackingNo,
+            dispatchStatus,
             purchaseAddress:
               dto.purchaseAddress === undefined
                 ? existing.purchaseAddress
                 : this.clean(dto.purchaseAddress),
+            receiverName:
+              dto.receiverName === undefined
+                ? existing.receiverName
+                : this.clean(dto.receiverName),
             fundingType,
             shipmentStatus,
             receivableStatus,
@@ -924,6 +948,9 @@ export class OrdersService {
               categoryId: existing.categoryId,
               orderedAt: existing.orderedAt.toISOString(),
               productName: existing.productNameSnapshot,
+              dispatchStatus: existing.dispatchStatus,
+              inboundTrackingNo: existing.inboundTrackingNo,
+              receiverName: existing.receiverName,
               shipmentStatus: existing.shipmentStatus,
               shipmentTrackingNo:
                 existing.shipmentLink?.shipment.trackingNo ?? null,
@@ -938,6 +965,9 @@ export class OrdersService {
               categoryId: order.categoryId,
               orderedAt: order.orderedAt.toISOString(),
               productName: order.productNameSnapshot,
+              dispatchStatus: order.dispatchStatus,
+              inboundTrackingNo: order.inboundTrackingNo,
+              receiverName: order.receiverName,
               shipmentStatus: order.shipmentStatus,
               shipmentTrackingNo:
                 dto.shipmentTrackingNo === undefined
@@ -983,6 +1013,7 @@ export class OrdersService {
           { platformOrderNo: { contains: keyword, mode: 'insensitive' } },
           { inboundTrackingNo: { contains: keyword, mode: 'insensitive' } },
           { purchaseAddress: { contains: keyword, mode: 'insensitive' } },
+          { receiverName: { contains: keyword, mode: 'insensitive' } },
           { notes: { contains: keyword, mode: 'insensitive' } },
           { submitter: { name: { contains: keyword, mode: 'insensitive' } } },
           {
@@ -1000,6 +1031,7 @@ export class OrdersService {
       andFilters.push({
         OR: [
           { reviewStatus: ReviewStatus.REJECTED },
+          { dispatchStatus: DispatchStatus.EXCEPTION },
           { shipmentStatus: ShipmentStatus.EXCEPTION },
           { receivableStatus: SettlementStatus.EXCEPTION },
           { submitterSettlementStatus: SettlementStatus.EXCEPTION },
@@ -1011,6 +1043,8 @@ export class OrdersService {
       andFilters.push({ reviewStatus: query.reviewStatus });
     if (query.shipmentStatus)
       andFilters.push({ shipmentStatus: query.shipmentStatus });
+    if (query.dispatchStatus)
+      andFilters.push({ dispatchStatus: query.dispatchStatus });
     if (query.receivableStatus) {
       andFilters.push({ receivableStatus: query.receivableStatus });
     }
@@ -1358,7 +1392,9 @@ export class OrdersService {
       include: {
         shipmentLink: {
           include: {
-            shipment: { select: { id: true, trackingNo: true, shippedAt: true } },
+            shipment: {
+              select: { id: true, trackingNo: true, shippedAt: true },
+            },
           },
         },
       },
@@ -1378,6 +1414,17 @@ export class OrdersService {
       dto.inboundTrackingNo === undefined
         ? undefined
         : this.clean(dto.inboundTrackingNo);
+    const savedInboundTrackingNo =
+      inboundTrackingNo === undefined
+        ? existing.inboundTrackingNo
+        : inboundTrackingNo;
+    const dispatchStatus =
+      dto.dispatchStatus ??
+      (dto.inboundTrackingNo !== undefined && savedInboundTrackingNo
+        ? DispatchStatus.SHIPPED
+        : existing.dispatchStatus);
+    const receiverName =
+      dto.receiverName === undefined ? undefined : this.clean(dto.receiverName);
     const shipmentTrackingNo =
       dto.shipmentTrackingNo === undefined
         ? undefined
@@ -1470,10 +1517,12 @@ export class OrdersService {
         where: { id },
         data: {
           shipmentStatus,
+          dispatchStatus,
           saleAmount,
           ...(dto.orderAmount !== undefined ? { orderAmount } : {}),
           ...(inboundTrackingNo !== undefined ? { inboundTrackingNo } : {}),
           ...(purchaseAddress !== undefined ? { purchaseAddress } : {}),
+          ...(receiverName !== undefined ? { receiverName } : {}),
           customerReceivedAmount,
           receivableStatus,
           submitterSettlementAmount,
@@ -1520,7 +1569,9 @@ export class OrdersService {
             create: { orderId: id, shipmentId: shipment.id },
           });
         } else {
-          await transaction.shipmentOrder.deleteMany({ where: { orderId: id } });
+          await transaction.shipmentOrder.deleteMany({
+            where: { orderId: id },
+          });
         }
       } else if (shipmentStatus !== undefined && existing.shipmentLink) {
         await transaction.shipment.update({
@@ -1542,6 +1593,8 @@ export class OrdersService {
           entityId: id,
           beforeData: {
             shipmentStatus: existing.shipmentStatus,
+            dispatchStatus: existing.dispatchStatus,
+            receiverName: existing.receiverName,
             shipmentTrackingNo:
               existing.shipmentLink?.shipment.trackingNo ?? null,
             orderAmount: existing.orderAmount.toString(),
@@ -1558,6 +1611,8 @@ export class OrdersService {
           },
           afterData: {
             shipmentStatus: order.shipmentStatus,
+            dispatchStatus: order.dispatchStatus,
+            receiverName: order.receiverName,
             shipmentTrackingNo:
               dto.shipmentTrackingNo === undefined
                 ? (existing.shipmentLink?.shipment.trackingNo ?? null)

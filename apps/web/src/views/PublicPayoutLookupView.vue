@@ -48,12 +48,30 @@ const fallbackQueryFieldOptions: PayoutQueryFieldOption[] = [
     publicAllowed: true,
   },
   {
+    key: 'dispatchStatus',
+    orderColumnKey: 'dispatchStatus',
+    label: '发货状态',
+    description: '未发货、已发货、部分发货、异常或已取消',
+    width: 96,
+    defaultVisible: false,
+    publicAllowed: true,
+  },
+  {
     key: 'platformTrackingNo',
     orderColumnKey: 'inboundTrackingNo',
     label: '平台运单号',
     description: '平台发货产生的运单号',
     minWidth: 130,
     defaultVisible: true,
+    publicAllowed: true,
+  },
+  {
+    key: 'receiverName',
+    orderColumnKey: 'receiverName',
+    label: '收货佬',
+    description: '订单对应的收货佬',
+    width: 100,
+    defaultVisible: false,
     publicAllowed: true,
   },
   {
@@ -196,6 +214,7 @@ const fieldText = (order: HistoryOrder, field: PayoutQueryFieldOption) => {
   if (value === null || value === undefined || value === '') return '-';
   if (field.key === 'orderedAt') return formatBusinessDate(String(value));
   if (field.key === 'shipmentStatus') return shipmentStatusLabels[String(value)] ?? String(value);
+  if (field.key === 'dispatchStatus') return dispatchStatusLabels[String(value)] ?? String(value);
   if (field.key === 'fundingType') return fundingTypeLabels[String(value)] ?? String(value);
   if (field.key === 'settlementStatus')
     return settlementLabels[String(value) as SettlementStatus] ?? String(value);
@@ -255,6 +274,13 @@ const settlementLabels: Record<SettlementStatus, string> = {
   UNPAID: '未结算',
   PAID: '已结算',
   EXCEPTION: '异常',
+};
+const dispatchStatusLabels: Record<string, string> = {
+  NOT_SHIPPED: '未发货',
+  SHIPPED: '已发货',
+  PARTIALLY_SHIPPED: '部分发货',
+  EXCEPTION: '异常',
+  CANCELLED: '已取消',
 };
 
 const settlementTypes: Record<SettlementStatus, 'danger' | 'success' | 'warning'> = {

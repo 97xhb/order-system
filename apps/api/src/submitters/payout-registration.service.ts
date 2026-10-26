@@ -520,7 +520,9 @@ export class PayoutRegistrationService {
           serialNo: true,
           orderedAt: true,
           platformOrderNo: true,
+          dispatchStatus: true,
           purchaseAddress: true,
+          receiverName: true,
           shipmentStatus: true,
           fundingType: true,
           productNameSnapshot: true,
@@ -609,11 +611,17 @@ export class PayoutRegistrationService {
           case 'platformOrderNo':
             item.platformOrderNo = order.platformOrderNo;
             break;
+          case 'dispatchStatus':
+            item.dispatchStatus = order.dispatchStatus;
+            break;
           case 'platformTrackingNo':
             item.platformTrackingNo = order.inboundTrackingNo;
             break;
           case 'purchaseAddress':
             item.purchaseAddress = order.purchaseAddress;
+            break;
+          case 'receiverName':
+            item.receiverName = order.receiverName;
             break;
           case 'shipmentTrackingNo':
             item.shipmentTrackingNo =

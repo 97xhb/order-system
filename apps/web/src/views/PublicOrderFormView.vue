@@ -14,14 +14,17 @@ type FieldKey =
   | 'productName'
   | 'orderedAt'
   | 'platformOrderNo'
+  | 'dispatchStatus'
   | 'inboundTrackingNo'
   | 'purchaseAddress'
+  | 'receiverName'
   | 'fundingType'
   | 'orderAmount'
   | 'paymentDiscountAmount'
   | 'rebateScanned'
   | 'submitterSettlementAmount'
   | 'notes';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
 
 const system = useSystemStore();
 
@@ -84,8 +87,10 @@ interface MyOrder {
   platform: { id: string; name: string };
   submitter: { id: string; name: string; nickname: string | null };
   platformOrderNo: string | null;
+  dispatchStatus: DispatchStatus;
   inboundTrackingNo: string | null;
   purchaseAddress: string | null;
+  receiverName: string | null;
   fundingType: 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
   orderAmount: string | number;
   paymentDiscountAmount: string | number;
@@ -133,8 +138,10 @@ const form = reactive({
   productName: '',
   orderedAt: formatLocalDate(),
   platformOrderNo: '',
+  dispatchStatus: 'NOT_SHIPPED' as DispatchStatus,
   inboundTrackingNo: '',
   purchaseAddress: '',
+  receiverName: '',
   fundingType: 'SUBMITTER_ADVANCED' as 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER',
   orderAmount: undefined as number | undefined,
   paymentDiscountAmount: 0 as number | undefined,
@@ -157,6 +164,13 @@ const fundingTypeOptions = [
   { value: 'SUBMITTER_ADVANCED' as const, label: '代付', hint: '后续统一结算' },
   { value: 'OTHER' as const, label: '其他', hint: '由管理员补充说明' },
 ];
+const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
+  { value: 'NOT_SHIPPED', label: '未发货' },
+  { value: 'SHIPPED', label: '已发货' },
+  { value: 'PARTIALLY_SHIPPED', label: '部分发货' },
+  { value: 'EXCEPTION', label: '异常' },
+  { value: 'CANCELLED', label: '已取消' },
+];
 const selectFundingType = (value: (typeof fundingTypeOptions)[number]['value']) => {
   if (!canEditField('fundingType')) return;
   form.fundingType = value;
@@ -164,6 +178,11 @@ const selectFundingType = (value: (typeof fundingTypeOptions)[number]['value']) 
 const selectRebateScanned = (value: boolean) => {
   if (!canEditField('rebateScanned')) return;
   form.rebateScanned = value;
+};
+const handleInboundTrackingInput = (value: string) => {
+  if (value.trim() && form.dispatchStatus === 'NOT_SHIPPED') {
+    form.dispatchStatus = 'SHIPPED';
+  }
 };
 const statusLabels: Record<string, string> = {
   DRAFT: '草稿',
@@ -215,8 +234,10 @@ const clearForNext = () => {
   editingId.value = null;
   form.orderedAt = formatLocalDate();
   form.platformOrderNo = '';
+  form.dispatchStatus = 'NOT_SHIPPED';
   form.inboundTrackingNo = '';
   form.purchaseAddress = '';
+  form.receiverName = '';
   form.rebateScanned = undefined;
   form.notes = '';
   applyDefaults();
@@ -364,8 +385,10 @@ const editOrder = (order: MyOrder) => {
     productName: order.productName,
     orderedAt: formatBusinessDate(order.orderedAt),
     platformOrderNo: order.platformOrderNo ?? '',
+    dispatchStatus: order.dispatchStatus ?? 'NOT_SHIPPED',
     inboundTrackingNo: order.inboundTrackingNo ?? '',
     purchaseAddress: order.purchaseAddress ?? '',
+    receiverName: order.receiverName ?? '',
     fundingType: order.fundingType,
     orderAmount: Number(order.orderAmount),
     paymentDiscountAmount: Number(order.paymentDiscountAmount),
@@ -576,6 +599,35 @@ onMounted(() => void load());
                   placeholder="请输入平台订单号"
               /></el-form-item>
               <el-form-item
+                v-if="field('dispatchStatus').visible"
+                label="发货状态"
+                :required="field('dispatchStatus').required"
+                class="span-two"
+              >
+                <div
+                  class="status-options dispatch-status-options"
+                  role="radiogroup"
+                  aria-label="发货状态"
+                >
+                  <button
+                    v-for="option in dispatchStatusOptions"
+                    :key="option.value"
+                    type="button"
+                    role="radio"
+                    class="card-choice status-choice"
+                    :class="[
+                      `status-${option.value.toLowerCase()}`,
+                      { 'is-selected': form.dispatchStatus === option.value },
+                    ]"
+                    :disabled="!canEditField('dispatchStatus')"
+                    :aria-checked="form.dispatchStatus === option.value"
+                    @click="form.dispatchStatus = option.value"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </el-form-item>
+              <el-form-item
                 v-if="field('inboundTrackingNo').visible"
                 label="平台运单号"
                 :required="field('inboundTrackingNo').required"
@@ -583,6 +635,7 @@ onMounted(() => void load());
                   v-model="form.inboundTrackingNo"
                   :disabled="!canEditField('inboundTrackingNo')"
                   placeholder="未发货可留空"
+                  @input="handleInboundTrackingInput"
               /></el-form-item>
               <el-form-item
                 v-if="field('purchaseAddress').visible"
@@ -594,6 +647,15 @@ onMounted(() => void load());
                   :disabled="!canEditField('purchaseAddress')"
                   type="textarea"
                   :rows="2"
+              /></el-form-item>
+              <el-form-item
+                v-if="field('receiverName').visible"
+                label="收货佬"
+                :required="field('receiverName').required"
+                ><el-input
+                  v-model="form.receiverName"
+                  :disabled="!canEditField('receiverName')"
+                  maxlength="100"
               /></el-form-item>
             </div>
           </section>
@@ -1411,6 +1473,11 @@ footer {
 .scan-choice-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.dispatch-status-options {
+  width: 100%;
+  margin-bottom: 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
 .funding-option {
   min-height: 58px;
   align-items: center;
@@ -1731,6 +1798,9 @@ footer {
     gap: 3px;
   }
   .scan-choice-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dispatch-status-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .funding-option {

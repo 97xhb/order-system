@@ -1,0 +1,11 @@
+CREATE TYPE "DispatchStatus" AS ENUM (
+  'NOT_SHIPPED',
+  'SHIPPED',
+  'PARTIALLY_SHIPPED',
+  'EXCEPTION',
+  'CANCELLED'
+);
+
+ALTER TABLE "orders"
+ADD COLUMN "dispatch_status" "DispatchStatus" NOT NULL DEFAULT 'NOT_SHIPPED',
+ADD COLUMN "receiver_name" VARCHAR(100);

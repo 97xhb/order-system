@@ -14,8 +14,10 @@ type FieldKey =
   | 'productName'
   | 'orderedAt'
   | 'platformOrderNo'
+  | 'dispatchStatus'
   | 'inboundTrackingNo'
   | 'purchaseAddress'
+  | 'receiverName'
   | 'fundingType'
   | 'orderAmount'
   | 'paymentDiscountAmount'
@@ -67,8 +69,10 @@ const fieldLabels: Record<FieldKey, string> = {
   productName: '商品/方案*数量',
   orderedAt: '下单日期',
   platformOrderNo: '平台订单号',
+  dispatchStatus: '发货状态',
   inboundTrackingNo: '平台运单号',
   purchaseAddress: '下单地址',
+  receiverName: '收货佬',
   fundingType: '支付方式',
   orderAmount: '下单金额',
   paymentDiscountAmount: '支付优惠',
@@ -84,8 +88,10 @@ const fieldDescriptions: Record<FieldKey, string> = {
   productName: '下单人填写本次实际商品、方案和数量，支持多行',
   orderedAt: '订单实际下单日期',
   platformOrderNo: '平台生成的订单编号',
+  dispatchStatus: '未发货、已发货、部分发货、异常或已取消',
   inboundTrackingNo: '平台发货后的物流单号',
   purchaseAddress: '下单时填写的收货地址',
+  receiverName: '订单对应的收货佬',
   fundingType: '自己付、代付或其他',
   orderAmount: '订单实际支付金额',
   paymentDiscountAmount: '支付优惠金额',
@@ -144,8 +150,10 @@ const defaultFieldConfig: FieldConfig = {
     productName: { visible: true, editable: true, required: false },
     orderedAt: { visible: true, editable: true, required: true },
     platformOrderNo: { visible: true, editable: true, required: true },
+    dispatchStatus: { visible: false, editable: false, required: false },
     inboundTrackingNo: { visible: true, editable: true, required: false },
     purchaseAddress: { visible: true, editable: true, required: false },
+    receiverName: { visible: false, editable: false, required: false },
     fundingType: { visible: false, editable: false, required: false },
     orderAmount: { visible: true, editable: true, required: true },
     paymentDiscountAmount: { visible: false, editable: false, required: false },
