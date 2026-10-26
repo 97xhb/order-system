@@ -1422,6 +1422,25 @@ const loadVisibleColumns = () => {
       Array.isArray(items)
         ? items.filter((item): item is string => typeof item === 'string' && allowedKeys.has(item))
         : [];
+    const mergeColumnOrder = (storedOrder: string[]) => {
+      const merged = [...storedOrder];
+      const mergedSet = new Set(merged);
+      for (const [index, key] of allColumnKeys.entries()) {
+        if (mergedSet.has(key)) continue;
+        const previous = [...allColumnKeys.slice(0, index)]
+          .reverse()
+          .find((candidate) => mergedSet.has(candidate));
+        const next = allColumnKeys.slice(index + 1).find((candidate) => mergedSet.has(candidate));
+        const insertAt = previous
+          ? merged.indexOf(previous) + 1
+          : next
+            ? merged.indexOf(next)
+            : merged.length;
+        merged.splice(insertAt, 0, key);
+        mergedSet.add(key);
+      }
+      return merged;
+    };
     if (Array.isArray(value)) {
       visibleColumnKeys.value = normalizeKeys(value);
       columnOrderKeys.value = [...allColumnKeys];
@@ -1438,10 +1457,7 @@ const loadVisibleColumns = () => {
         (key) => defaultVisibleKeys.has(key) && !storedVisible.includes(key),
       ),
     ];
-    columnOrderKeys.value = [
-      ...storedOrder,
-      ...allColumnKeys.filter((key) => !storedOrder.includes(key)),
-    ];
+    columnOrderKeys.value = mergeColumnOrder(storedOrder);
   } catch {
     localStorage.removeItem(columnSettingsStorageKey);
     resetVisibleColumns();
