@@ -63,6 +63,12 @@ export class CreatePublicOrderDto {
   @MaxLength(2_000)
   purchaseAddress?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  receiverName?: string;
+
   @ApiPropertyOptional({ enum: FundingType })
   @IsOptional()
   @IsEnum(FundingType)

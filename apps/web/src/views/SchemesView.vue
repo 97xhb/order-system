@@ -17,6 +17,7 @@ type FieldKey =
   | 'dispatchStatus'
   | 'inboundTrackingNo'
   | 'purchaseAddress'
+  | 'receiverName'
   | 'fundingType'
   | 'orderAmount'
   | 'paymentDiscountAmount'
@@ -71,6 +72,7 @@ const fieldLabels: Record<FieldKey, string> = {
   dispatchStatus: '发货状态',
   inboundTrackingNo: '平台运单号',
   purchaseAddress: '下单地址',
+  receiverName: '收货佬',
   fundingType: '支付方式',
   orderAmount: '下单金额',
   paymentDiscountAmount: '支付优惠',
@@ -89,6 +91,7 @@ const fieldDescriptions: Record<FieldKey, string> = {
   dispatchStatus: '未发货、已发货、部分发货、异常或已取消',
   inboundTrackingNo: '平台发货后的物流单号',
   purchaseAddress: '下单时填写的收货地址',
+  receiverName: '订单对应的收货佬，默认仅后台可见',
   fundingType: '自己付、代付或其他',
   orderAmount: '订单实际支付金额',
   paymentDiscountAmount: '支付优惠金额',
@@ -150,6 +153,7 @@ const defaultFieldConfig: FieldConfig = {
     dispatchStatus: { visible: false, editable: false, required: false },
     inboundTrackingNo: { visible: true, editable: true, required: false },
     purchaseAddress: { visible: true, editable: true, required: false },
+    receiverName: { visible: false, editable: false, required: false },
     fundingType: { visible: false, editable: false, required: false },
     orderAmount: { visible: true, editable: true, required: true },
     paymentDiscountAmount: { visible: false, editable: false, required: false },
