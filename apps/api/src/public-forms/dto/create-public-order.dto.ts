@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DispatchStatus, FundingType } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -25,6 +25,7 @@ export class CreatePublicOrderDto {
   wechatNickname!: string;
 
   @ApiPropertyOptional({ format: 'uuid' })
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsOptional()
   @IsUUID()
   categoryId?: string;

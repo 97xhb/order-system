@@ -313,13 +313,17 @@ const submit = async () => {
   }
   submitting.value = true;
   try {
+    const payload = {
+      ...form,
+      categoryId: form.categoryId || undefined,
+    };
     if (editingId.value) {
-      await http.patch(`/public/forms/${token.value}/orders/${editingId.value}`, form);
+      await http.patch(`/public/forms/${token.value}/orders/${editingId.value}`, payload);
       ElMessage.success('登记已修改，仍等待管理员确认');
     } else {
       const response = await http.post<{ serialNo: number }>(
         `/public/forms/${token.value}/orders`,
-        form,
+        payload,
       );
       ElMessage.success(`提交成功，登记序号 ${response.data.serialNo}`);
     }
