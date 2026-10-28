@@ -445,7 +445,12 @@ export class PublicFormsService {
 
     const productName =
       this.clean(
-        this.visibleValue(config, 'productName', dto.productName, ''),
+        this.visibleValue(
+          config,
+          'productName',
+          dto.productName,
+          form.scheme.productName,
+        ),
       ) ?? '';
 
     const nickname = this.clean(
