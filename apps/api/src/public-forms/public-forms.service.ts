@@ -649,8 +649,9 @@ export class PublicFormsService {
         form.allowEditBeforeApproval &&
         order.reviewStatus === ReviewStatus.PENDING,
       canDelete:
-        form.allowDeleteBeforeApproval &&
-        order.reviewStatus === ReviewStatus.PENDING,
+        order.reviewStatus === ReviewStatus.REJECTED ||
+        (form.allowDeleteBeforeApproval &&
+          order.reviewStatus === ReviewStatus.PENDING),
     }));
   }
 
@@ -863,9 +864,6 @@ export class PublicFormsService {
     requestMetadata: { ipAddress?: string; userAgent?: string },
   ) {
     const form = await this.getForm(publicToken, false);
-    if (!form.allowDeleteBeforeApproval) {
-      throw new ForbiddenException('管理员未开放删除权限');
-    }
     const existing = await this.prisma.order.findFirst({
       where: {
         id: orderId,
@@ -876,8 +874,12 @@ export class PublicFormsService {
       },
     });
     if (!existing) throw new NotFoundException('登记记录不存在');
-    if (existing.reviewStatus !== ReviewStatus.PENDING) {
-      throw new ForbiddenException('管理员确认后不能再删除');
+    const canDelete =
+      existing.reviewStatus === ReviewStatus.REJECTED ||
+      (existing.reviewStatus === ReviewStatus.PENDING &&
+        form.allowDeleteBeforeApproval);
+    if (!canDelete) {
+      throw new ForbiddenException('该订单当前不能删除');
     }
 
     await this.prisma.$transaction(async (transaction) => {
@@ -888,7 +890,7 @@ export class PublicFormsService {
       await transaction.auditLog.create({
         data: {
           source: 'PUBLIC_FORM',
-          action: 'ORDER_DELETED_BEFORE_APPROVAL',
+          action: 'ORDER_DELETED_BY_SUBMITTER',
           entityType: 'Order',
           entityId: existing.id,
           ipAddress: requestMetadata.ipAddress,
