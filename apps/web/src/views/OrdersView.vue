@@ -2279,7 +2279,7 @@ onMounted(() => {
           v-loading="loading"
           :data="rows"
           stripe
-          :max-height="640"
+          :max-height="980"
           show-overflow
           :column-config="{ resizable: true }"
           :row-config="{ keyField: 'id', isHover: true }"
