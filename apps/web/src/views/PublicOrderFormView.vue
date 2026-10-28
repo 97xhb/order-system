@@ -164,6 +164,42 @@ const fundingTypeOptions = [
   { value: 'SUBMITTER_ADVANCED' as const, label: '代付', hint: '后续统一结算' },
   { value: 'OTHER' as const, label: '其他', hint: '由管理员补充说明' },
 ];
+const requiredFieldLabels: Partial<Record<FieldKey, string>> = {
+  wechatNickname: '下单人微信昵称',
+  platformId: '下单平台',
+  categoryId: '品类',
+  productName: '商品/方案*数量',
+  orderedAt: '下单日期',
+  platformOrderNo: '平台订单号',
+  dispatchStatus: '发货状态',
+  inboundTrackingNo: '平台运单号',
+  purchaseAddress: '下单地址',
+  receiverName: '收货佬',
+  fundingType: '支付方式',
+  orderAmount: '下单金额',
+  paymentDiscountAmount: '支付优惠',
+  rebateScanned: '扫码返利',
+  submitterSettlementAmount: '结算金额',
+  notes: '备注',
+};
+const requiredFieldOrder: FieldKey[] = [
+  'wechatNickname',
+  'platformId',
+  'categoryId',
+  'productName',
+  'orderedAt',
+  'platformOrderNo',
+  'dispatchStatus',
+  'inboundTrackingNo',
+  'purchaseAddress',
+  'receiverName',
+  'fundingType',
+  'orderAmount',
+  'paymentDiscountAmount',
+  'rebateScanned',
+  'submitterSettlementAmount',
+  'notes',
+];
 const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
   { value: 'NOT_SHIPPED', label: '未发货' },
   { value: 'SHIPPED', label: '已发货' },
@@ -295,21 +331,16 @@ const linkIdentity = async () => {
 };
 
 const submit = async () => {
-  if (!form.platformId) {
-    ElMessage.warning('请选择下单平台');
-    return;
-  }
-  if (!form.wechatNickname.trim()) {
-    ElMessage.warning('请填写下单人微信昵称');
-    return;
-  }
-  if (field('categoryId').required && !form.categoryId) {
-    ElMessage.warning('请选择品类');
-    return;
-  }
-  if (field('productName').required && !form.productName.trim()) {
-    ElMessage.warning('请填写商品/方案*数量');
-    return;
+  for (const key of requiredFieldOrder) {
+    const rule = field(key);
+    if (!rule.visible || !rule.required) continue;
+    const value = form[key];
+    const missing =
+      value === undefined || value === null || (typeof value === 'string' && !value.trim());
+    if (missing) {
+      ElMessage.warning(`请填写${requiredFieldLabels[key] ?? '必填项'}`);
+      return;
+    }
   }
   submitting.value = true;
   try {

@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -8,6 +8,48 @@ import { AppModule } from './app.module';
 import { resolveTrustProxySetting } from './security/trust-proxy';
 import { SystemSettingsService } from './system-settings/system-settings.service';
 import { RuntimeControlService } from './system-settings/runtime-control.service';
+import type { ValidationError } from 'class-validator';
+
+const VALIDATION_FIELD_LABELS: Record<string, string> = {
+  platformId: '下单平台',
+  wechatNickname: '下单人微信昵称',
+  categoryId: '品类',
+  productName: '商品/方案*数量',
+  orderedAt: '下单日期',
+  platformOrderNo: '平台订单号',
+  dispatchStatus: '发货状态',
+  inboundTrackingNo: '平台运单号',
+  purchaseAddress: '下单地址',
+  receiverName: '收货佬',
+  fundingType: '支付方式',
+  orderAmount: '下单金额',
+  paymentDiscountAmount: '支付优惠',
+  rebateScanned: '扫码返利',
+  submitterSettlementAmount: '结算金额',
+  notes: '备注',
+};
+
+const validationMessages = (errors: ValidationError[]) => {
+  const messages: string[] = [];
+  const visit = (error: ValidationError) => {
+    const label = VALIDATION_FIELD_LABELS[error.property] ?? error.property;
+    const constraintKeys = Object.keys(error.constraints ?? {});
+    if (constraintKeys.length) {
+      if (
+        constraintKeys.some((key) => ['isDefined', 'isNotEmpty'].includes(key))
+      ) {
+        messages.push(`${label}为必填项`);
+      } else if (constraintKeys.includes('whitelistValidation')) {
+        messages.push(`包含不支持的字段：${error.property}`);
+      } else {
+        messages.push(`${label}填写格式或内容不正确`);
+      }
+    }
+    error.children?.forEach(visit);
+  };
+  errors.forEach(visit);
+  return messages.length ? messages : ['提交内容校验失败'];
+};
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -103,6 +145,8 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
+      exceptionFactory: (errors) =>
+        new BadRequestException(validationMessages(errors)),
     }),
   );
 
