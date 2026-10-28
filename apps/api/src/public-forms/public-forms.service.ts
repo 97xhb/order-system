@@ -449,7 +449,7 @@ export class PublicFormsService {
           config,
           'productName',
           dto.productName,
-          form.scheme.productName,
+          form.scheme.name || form.scheme.productName,
         ),
       ) ?? '';
 

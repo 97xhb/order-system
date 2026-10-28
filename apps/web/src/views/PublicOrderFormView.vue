@@ -215,7 +215,7 @@ const applyDefaults = () => {
   const defaults = data.value?.form.scheme.defaultValues ?? {};
   form.platformId = String(defaults.platformId ?? data.value?.options.platforms[0]?.id ?? '');
   form.categoryId = '';
-  form.productName = data.value?.form.scheme.productName ?? '';
+  form.productName = data.value?.form.scheme.name || data.value?.form.scheme.productName || '';
   form.fundingType = 'SELF_PAID';
   form.orderAmount = defaults.orderAmount === undefined ? undefined : Number(defaults.orderAmount);
   form.paymentDiscountAmount = Number(defaults.paymentDiscountAmount ?? 0);
