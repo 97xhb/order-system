@@ -2313,7 +2313,9 @@ onMounted(() => {
             :title="column.label"
             :width="column.width"
             :min-width="column.minWidth"
-            :show-overflow="!['product', 'editReasonHistory'].includes(column.key)"
+            :show-overflow="
+              !['product', 'platformOrderNo', 'editReasonHistory'].includes(column.key)
+            "
           >
             <template #default="{ row }">
               <template v-if="column.key === 'serialNo'">{{ row.displaySerialNo }}</template>
@@ -3883,9 +3885,22 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
+  white-space: normal;
+}
+.order-table :deep(.vxe-body--row) {
+  height: auto !important;
 }
 .order-table :deep(.vxe-body--column) {
-  height: 46px;
+  height: auto !important;
+  min-height: 46px;
+  align-items: stretch !important;
+}
+.order-table :deep(.vxe-body--column .vxe-cell) {
+  display: flex;
+  align-items: center;
+  padding-block: 8px;
+  overflow: visible;
+  word-break: break-word;
 }
 .order-table :deep(.el-tag),
 .order-table :deep(.el-button) {
