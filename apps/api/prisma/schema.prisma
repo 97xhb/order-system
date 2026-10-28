@@ -398,7 +398,7 @@ model Order {
   profitRuleId       String? @map("profit_rule_id") @db.Uuid
 
   orderedAt               DateTime    @map("ordered_at") @db.Timestamptz(3)
-  productNameSnapshot     String      @map("product_name_snapshot") @db.VarChar(200)
+  productNameSnapshot     String      @map("product_name_snapshot") @db.Text
   schemeNameSnapshot      String?     @map("scheme_name_snapshot") @db.VarChar(150)
   submitterWechatNickname String?     @map("submitter_wechat_nickname") @db.VarChar(100)
   rebateScanned           Boolean?    @map("rebate_scanned")

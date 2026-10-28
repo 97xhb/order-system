@@ -572,8 +572,8 @@ onMounted(() => void load());
                   v-model="form.productName"
                   :disabled="!canEditField('productName')"
                   type="textarea"
-                  :rows="3"
-                  maxlength="200"
+                  :autosize="{ minRows: 4, maxRows: 12 }"
+                  maxlength="5000"
                   show-word-limit
                   placeholder="填写本次实际报单内容，支持多行；未填写可由管理员补充"
                 />

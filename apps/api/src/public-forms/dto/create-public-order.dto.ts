@@ -32,7 +32,7 @@ export class CreatePublicOrderDto {
   @ApiPropertyOptional({ example: 'iPhone 16 128G * 1' })
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(5_000)
   productName?: string;
 
   @ApiPropertyOptional({ example: '2026-08-14' })

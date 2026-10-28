@@ -684,6 +684,7 @@ onMounted(async () => {
               :rows="3"
               clearable
               resize="vertical"
+              maxlength="5000"
               placeholder="支持多行填写，可一行写一个商品、方案和数量"
             />
           </el-form-item>

@@ -46,7 +46,7 @@ export class CreateAdminOrderDto {
 
   @ApiProperty({ example: 'iPhone 16 128G' })
   @IsString()
-  @MaxLength(200)
+  @MaxLength(5_000)
   productName!: string;
 
   @ApiPropertyOptional()
