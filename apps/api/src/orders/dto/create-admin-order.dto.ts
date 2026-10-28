@@ -64,7 +64,7 @@ export class CreateAdminOrderDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(150)
+  @MaxLength(800)
   platformOrderNo?: string;
 
   @ApiPropertyOptional()

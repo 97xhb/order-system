@@ -718,7 +718,14 @@ onMounted(async () => {
             </div>
           </el-form-item>
           <el-form-item label="平台订单号" class="field-half">
-            <el-input v-model="form.platformOrderNo" clearable placeholder="每单单独填写" />
+            <el-input
+              v-model="form.platformOrderNo"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 6 }"
+              maxlength="800"
+              clearable
+              placeholder="支持多行填写平台订单号"
+            />
           </el-form-item>
           <el-form-item label="平台运单号" class="field-half compact-textarea">
             <el-input

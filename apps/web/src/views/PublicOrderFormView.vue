@@ -595,7 +595,10 @@ onMounted(() => void load());
                 ><el-input
                   v-model="form.platformOrderNo"
                   :disabled="!canEditField('platformOrderNo')"
-                  placeholder="请输入平台订单号"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 6 }"
+                  maxlength="800"
+                  placeholder="支持多行填写平台订单号"
               /></el-form-item>
               <el-form-item
                 v-if="field('dispatchStatus').visible"

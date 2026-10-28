@@ -2327,7 +2327,7 @@ onMounted(() => {
                 <div class="product-lines">{{ row.productNameSnapshot }}</div>
               </template>
               <template v-else-if="column.key === 'platformOrderNo'">
-                {{ row.platformOrderNo || '-' }}
+                <div class="multiline-cell">{{ row.platformOrderNo || '-' }}</div>
               </template>
               <template v-else-if="column.key === 'dispatchStatus'">
                 <el-tag :type="dispatchStatusType(row.dispatchStatus)" size="small">
@@ -2620,7 +2620,7 @@ onMounted(() => {
             <dl>
               <div>
                 <dt>平台订单号</dt>
-                <dd>{{ row.platformOrderNo || '-' }}</dd>
+                <dd class="multiline-cell">{{ row.platformOrderNo || '-' }}</dd>
               </div>
               <div>
                 <dt>平台运单号</dt>
@@ -4066,6 +4066,11 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 500;
 }
+.multiline-cell {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 .rebate-stack {
   display: flex;
   align-items: flex-start;

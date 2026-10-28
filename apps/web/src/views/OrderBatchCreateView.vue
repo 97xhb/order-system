@@ -926,6 +926,9 @@ onMounted(loadOptions);
               <el-input
                 v-else-if="column.key === 'platformOrderNo'"
                 v-model="row.platformOrderNo"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 5 }"
+                maxlength="800"
               />
               <el-select v-else-if="column.key === 'dispatchStatus'" v-model="row.dispatchStatus">
                 <el-option

@@ -402,7 +402,7 @@ model Order {
   schemeNameSnapshot      String?     @map("scheme_name_snapshot") @db.VarChar(150)
   submitterWechatNickname String?     @map("submitter_wechat_nickname") @db.VarChar(100)
   rebateScanned           Boolean?    @map("rebate_scanned")
-  platformOrderNo         String?     @map("platform_order_no") @db.VarChar(150)
+  platformOrderNo         String?     @map("platform_order_no") @db.VarChar(800)
   inboundTrackingNo       String?     @map("inbound_tracking_no") @db.VarChar(150)
   purchaseAddress         String?     @map("purchase_address") @db.Text
   receiverName            String?     @map("receiver_name") @db.VarChar(100)
