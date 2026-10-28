@@ -701,6 +701,13 @@ footer {
 
 @media (max-width: 560px) {
   .public-payout-page {
+    --el-font-size-extra-large: 24px;
+    --el-font-size-large: 22px;
+    --el-font-size-medium: 20px;
+    --el-font-size-base: 18px;
+    --el-font-size-small: 17px;
+    --el-font-size-extra-small: 16px;
+    --el-result-title-font-size: 24px;
     padding: 13px 10px 24px;
   }
 
@@ -742,6 +749,7 @@ footer {
   }
 
   .method-option small {
+    font-size: 13px;
     white-space: normal;
   }
 

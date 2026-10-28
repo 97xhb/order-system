@@ -142,7 +142,7 @@ const form = reactive({
   inboundTrackingNo: '',
   purchaseAddress: '',
   receiverName: '',
-  fundingType: 'SUBMITTER_ADVANCED' as 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER',
+  fundingType: 'SELF_PAID' as 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER',
   orderAmount: undefined as number | undefined,
   paymentDiscountAmount: 0 as number | undefined,
   rebateScanned: undefined as boolean | undefined,
@@ -216,8 +216,7 @@ const applyDefaults = () => {
   form.platformId = String(defaults.platformId ?? data.value?.options.platforms[0]?.id ?? '');
   form.categoryId = '';
   form.productName = '';
-  form.fundingType =
-    (defaults.fundingType as typeof form.fundingType | undefined) ?? 'SUBMITTER_ADVANCED';
+  form.fundingType = 'SELF_PAID';
   form.orderAmount = defaults.orderAmount === undefined ? undefined : Number(defaults.orderAmount);
   form.paymentDiscountAmount = Number(defaults.paymentDiscountAmount ?? 0);
   form.wechatNickname = data.value?.identity.submitter?.nickname ?? '';
@@ -1739,7 +1738,14 @@ footer {
 }
 @media (max-width: 560px) {
   .public-page {
+    --el-font-size-extra-large: 24px;
+    --el-font-size-large: 22px;
+    --el-font-size-medium: 20px;
+    --el-font-size-base: 18px;
+    --el-font-size-small: 17px;
+    --el-font-size-extra-small: 16px;
     padding: 13px 10px 26px;
+    font-size: 20px;
   }
   .public-header {
     align-items: flex-start;
@@ -1808,10 +1814,10 @@ footer {
     padding: 7px 4px;
   }
   .funding-option strong {
-    font-size: 15px;
+    font-size: 16px;
   }
   .funding-option small {
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.25;
     white-space: normal;
   }

@@ -489,8 +489,7 @@ export class PublicFormsService {
             config,
             'fundingType',
             dto.fundingType,
-            (defaults.fundingType as FundingType | undefined) ??
-              FundingType.SUBMITTER_ADVANCED,
+            FundingType.SELF_PAID,
           );
           const order = await transaction.order.create({
             data: {

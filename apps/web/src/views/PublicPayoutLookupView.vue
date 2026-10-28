@@ -1096,6 +1096,13 @@ footer {
 
 @media (max-width: 560px) {
   .lookup-page {
+    --el-font-size-extra-large: 24px;
+    --el-font-size-large: 22px;
+    --el-font-size-medium: 20px;
+    --el-font-size-base: 18px;
+    --el-font-size-small: 17px;
+    --el-font-size-extra-small: 16px;
+    --el-result-title-font-size: 24px;
     padding: 13px 10px 24px;
   }
 
@@ -1122,6 +1129,9 @@ footer {
 
   .recognized-panel .query-heading {
     flex-direction: column;
+  }
+  .order-row > span::before {
+    font-size: 13px;
   }
 
   .recognized-actions {
