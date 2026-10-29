@@ -143,7 +143,7 @@ fi
 # ---------------------------------------------------------------
 echo
 echo '构建镜像（第一次可能需要几分钟）...'
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 
 echo '启动容器...'
 docker compose --env-file .env.docker up -d

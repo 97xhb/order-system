@@ -98,7 +98,21 @@ http://你的IP:8191/login
 
 数据库不会丢失，`.env.docker` 不会被覆盖。
 
-### 方式 A：用 Git 部署（推荐）
+### 方式 A：本地源码直接上传（飞牛 NAS 推荐）
+
+开发和测试完成后，先把改动提交并推送到 Git，再把同一份本地源码上传到部署目录：
+
+1. 保留部署目录中的 `.env.docker`、`backups` 和数据卷。
+2. 用本地源码覆盖程序文件，不需要在 NAS 上重新从 GitHub 下载。
+3. 进入部署目录执行：
+
+```bash
+sh scripts/update-docker.sh
+```
+
+部署目录没有 `.git` 时，脚本会直接构建当前本地源码，不访问 GitHub，也不会执行 `build --pull`。
+
+### 方式 B：服务器自己从 Git 更新
 
 ```bash
 cd order-system          # 进入项目目录
@@ -106,19 +120,15 @@ git pull                 # 拉取最新源码
 sh scripts/update-docker.sh
 ```
 
-### 方式 B：用 ZIP / 手动上传部署（飞牛 NAS 常见）
+### 方式 C：显式从 GitHub 下载源码
 
-飞牛等环境通常是把项目文件拷进目录，没有 git 仓库，按下面做：
-
-1. 从 GitHub 下载最新 ZIP 并解压。
-2. 用新文件覆盖旧目录中的程序文件，但**不要删除、不要覆盖 `.env.docker`**。
-3. 进入项目目录执行：
+只有确实需要让部署机主动下载源码时才使用：
 
 ```bash
-sh scripts/update-docker.sh
+sh scripts/update-docker.sh --download
 ```
 
-`update-docker.sh` 检测不到 git 时会跳过拉取，直接用当前目录重新构建。
+默认更新流程不会访问 GitHub。`--download` 是显式覆盖操作，仅在本地直传不可用时使用。
 
 新版也支持一条命令完成同样的更新（等价写法）：
 

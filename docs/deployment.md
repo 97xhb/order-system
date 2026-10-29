@@ -96,7 +96,7 @@ sed -i \
 
 ```bash
 docker compose --env-file .env.docker config --quiet
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 docker compose --env-file .env.docker up -d
 docker compose --env-file .env.docker ps
 ```
@@ -151,7 +151,7 @@ docker compose --env-file .env.docker restart
 docker compose --env-file .env.docker down
 
 # 更新源码后重新构建并启动
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 docker compose --env-file .env.docker up -d
 ```
 
@@ -268,7 +268,7 @@ scripts/
 | docker/Caddyfile                 | 在内部 8190 提供静态页面，并反向代理 `/api`      |
 | .dockerignore                    | 阻止本机数据库、密钥、日志和开发产物进入镜像     |
 | scripts/setup-fnos-env.sh        | 交互式生成 `.env.docker`，自动生成随机密钥       |
-| scripts/update-docker.sh         | 拉取新代码并重新构建、重启容器，保留数据卷       |
+| scripts/update-docker.sh         | 默认构建当前本地源码；仅 --download 显式访问 Git |
 | scripts/migrate-to-env-docker.sh | 把旧版 compose 顶部配置迁移到 `.env.docker`      |
 | scripts/build-fnos-release.ps1   | 生成并校验不含密钥、本机数据和构建产物的飞牛 ZIP |
 
@@ -782,7 +782,7 @@ docker compose --env-file .env.docker config --quiet
 ### 10.2 拉取基础镜像并构建
 
 ```powershell
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 ```
 
 第一次会下载 Node.js、Caddy、PostgreSQL 和项目依赖，通常需要几分钟到几十分钟。后续构建会使用缓存。
@@ -1193,10 +1193,21 @@ docker compose --env-file .env.docker logs --tail=100 api
 
 ### 18.2 放入新代码
 
-使用 Git 部署时直接拉取：
+飞牛 NAS 默认使用本地直传：在开发机完成提交和推送后，把同一份本地源码
+上传并覆盖部署目录中的程序文件。不要覆盖 `.env.docker`、`backups` 和附件目录。
+然后执行：
+
+```bash
+sh scripts/update-docker.sh
+```
+
+部署目录没有 `.git` 时，脚本只构建当前已经上传的源码，不会访问 GitHub。
+
+只有部署目录本身是 Git 工作区、且希望服务器主动拉取时才执行：
 
 ```bash
 git pull
+sh scripts/update-docker.sh
 ```
 
 从旧版本（密码写在 `docker-compose.yml` 顶部）升级时，先复制旧文件留底，再执行：
@@ -1207,12 +1218,6 @@ sh scripts/migrate-to-env-docker.sh /root/old-compose.yml
 
 脚本会读取旧配置生成 `.env.docker` 并打印结果，核对后继续下一步。
 
-手动上传新代码时，不要覆盖：
-
-- .env.docker。
-- backups。
-- 自己保存的附件目录。
-
 ### 18.3 检查配置
 
 ```powershell
@@ -1222,7 +1227,7 @@ docker compose --env-file .env.docker config --quiet
 ### 18.4 构建新镜像
 
 ```powershell
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 ```
 
 ### 18.5 启动新版本
@@ -1708,7 +1713,7 @@ docker pull node:24-bookworm-slim
 Windows 在 Docker Desktop 的代理设置中配置实际可用的 HTTP/HTTPS 代理；Linux 给 Docker daemon 配置代理后重启 Docker。不要把来源不明的镜像加速地址写进项目文件。代理恢复后重新执行：
 
 ```powershell
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 ```
 
 ## 24. 安全检查清单
@@ -1789,7 +1794,7 @@ docker compose --env-file .env.docker restart
 更新构建：
 
 ```powershell
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 docker compose --env-file .env.docker up -d
 ```
 

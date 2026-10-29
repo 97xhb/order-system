@@ -1,19 +1,40 @@
 #!/bin/sh
 # 更新已经部署好的系统。数据库数据不会丢失，.env.docker 不会被覆盖。
 #
-# 用法（在项目目录内执行，两种都行）：
+# 用法（在项目目录内执行）：
 #   sh scripts/update-docker.sh
 #   ./scripts/update-docker.sh
+#   sh scripts/update-docker.sh --download
 #
-# 更新方式自动判断：
-#   - 目录里有 git 仓库：执行 git pull 拉取最新源码
-#   - 没有 git：从 GitHub 下载最新源码并覆盖程序文件
-# 两种方式都会保留 .env.docker、backups 等你自己生成的文件。
+# 默认行为：
+#   - 目录里有 git 仓库：执行 git pull --ff-only 后再构建
+#   - 没有 git：直接使用当前目录里已经上传的源码构建，不访问 GitHub
+#
+# 只有显式传入 --download 时才从 GitHub 下载源码覆盖当前程序文件。
+# 所有方式都会保留 .env.docker、backups 等用户文件。
 set -eu
 
 REPO_OWNER='97xhb'
 REPO_NAME='order-system'
 REPO_BRANCH='main'
+
+download_source=0
+case "${1:-}" in
+  '')
+    ;;
+  '--download')
+    download_source=1
+    ;;
+  '-h' | '--help')
+    sed -n '2,15p' "$0"
+    exit 0
+    ;;
+  *)
+    echo "未知参数：$1" >&2
+    echo '只支持 --download，或不传参数。' >&2
+    exit 1
+    ;;
+esac
 
 cd "$(dirname "$0")/.."
 project_dir="$(pwd)"
@@ -40,21 +61,20 @@ fi
 echo '==> 备份当前 .env.docker'
 cp .env.docker ".env.docker.bak-$(date +%Y%m%d-%H%M%S)"
 
-echo '==> 获取最新源码'
-need_download=0
-if [ -d .git ] && command -v git >/dev/null 2>&1; then
-  if git pull --ff-only; then
-    echo '源码已通过 git 更新。'
-  else
-    echo 'git pull 未成功（可能有本地改动），改用下载方式覆盖程序文件。' >&2
-    need_download=1
+if [ "$download_source" = '1' ]; then
+  echo '==> 从 GitHub 下载源码（显式使用 --download）'
+elif [ -d .git ] && command -v git >/dev/null 2>&1; then
+  echo '==> 更新 Git 源码'
+  if ! git pull --ff-only; then
+    echo 'git pull --ff-only 失败，已停止，未构建任何镜像。' >&2
+    echo '请先处理本地改动；确实需要覆盖时再显式执行 --download。' >&2
+    exit 1
   fi
 else
-  echo '未检测到 git 仓库，将从 GitHub 下载最新源码。'
-  need_download=1
+  echo '==> 未检测到 Git，直接构建当前目录的本地源码（不访问 GitHub）'
 fi
 
-if [ "$need_download" = '1' ]; then
+if [ "$download_source" = '1' ]; then
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     echo '系统里没有 curl 或 wget，无法自动下载源码。' >&2
     echo '请手动上传新版程序文件后重新执行本脚本。' >&2
@@ -83,7 +103,7 @@ if [ "$need_download" = '1' ]; then
 fi
 
 echo '==> 构建镜像'
-docker compose --env-file .env.docker build --pull
+docker compose --env-file .env.docker build api web
 
 echo '==> 重启容器'
 docker compose --env-file .env.docker up -d

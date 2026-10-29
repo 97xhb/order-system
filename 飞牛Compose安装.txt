@@ -80,12 +80,17 @@
 
 更新到新版本（保留数据）：
 
+   先把新版源码直接上传并覆盖部署目录中的程序文件，
+   保留 .env.docker、backups 和数据卷，然后执行：
+
    sh scripts/update-docker.sh
 
-或者手动执行：
+飞牛部署目录不是 Git 仓库时，脚本会直接构建当前本地源码，
+不会再从 GitHub 下载，也不会执行 build --pull。
 
-   git pull
-   docker compose --env-file .env.docker up -d --build
+只有明确需要让 NAS 主动从 GitHub 下载时才执行：
+
+   sh scripts/update-docker.sh --download
 
 六、数据卷说明
 
