@@ -36,6 +36,16 @@ export const ORDER_TABLE_FIELD_DEFINITIONS: readonly OrderTableFieldDefinition[]
       publicDefaultVisible: false,
     },
     {
+      key: 'textColor',
+      payoutKey: 'textColor',
+      label: '文本颜色',
+      description: '订单列表自定义文本颜色',
+      width: 100,
+      defaultVisible: true,
+      publicAllowed: false,
+      publicDefaultVisible: false,
+    },
+    {
       key: 'orderedAt',
       payoutKey: 'orderedAt',
       label: '下单日期',

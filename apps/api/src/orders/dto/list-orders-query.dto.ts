@@ -16,6 +16,7 @@ import {
   IsString,
   Max,
   MaxLength,
+  Matches,
   Min,
 } from 'class-validator';
 import { ORDER_SETTLEMENT_STATUSES } from '../order-statuses';
@@ -81,6 +82,11 @@ export class ListOrdersQueryDto {
   @IsOptional()
   @IsEnum(DispatchStatus)
   dispatchStatus?: DispatchStatus;
+
+  @ApiPropertyOptional({ example: '#2563EB' })
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  textColor?: string;
 
   @ApiPropertyOptional({ enum: ORDER_SETTLEMENT_STATUSES })
   @IsOptional()

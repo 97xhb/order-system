@@ -406,6 +406,7 @@ model Order {
   inboundTrackingNo       String?     @map("inbound_tracking_no") @db.VarChar(150)
   purchaseAddress         String?     @map("purchase_address") @db.Text
   receiverName            String?     @map("receiver_name") @db.VarChar(100)
+  textColor               String?     @map("text_color") @db.VarChar(7)
   fundingType             FundingType @map("funding_type")
 
   orderAmount               Decimal @default(0) @map("order_amount") @db.Decimal(18, 2)

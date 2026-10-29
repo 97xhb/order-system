@@ -483,6 +483,7 @@ export class OrdersService {
             dispatchStatus,
             purchaseAddress: this.clean(dto.purchaseAddress),
             receiverName: this.clean(dto.receiverName),
+            textColor: dto.textColor?.toUpperCase() ?? null,
             fundingType: dto.fundingType,
             orderAmount: amountData.orderAmount,
             paymentDiscountAmount: amountData.paymentDiscountAmount,
@@ -854,6 +855,10 @@ export class OrdersService {
               dto.receiverName === undefined
                 ? existing.receiverName
                 : this.clean(dto.receiverName),
+            textColor:
+              dto.textColor === undefined
+                ? existing.textColor
+                : (dto.textColor?.toUpperCase() ?? null),
             fundingType,
             shipmentStatus,
             receivableStatus,
@@ -951,6 +956,7 @@ export class OrdersService {
               dispatchStatus: existing.dispatchStatus,
               inboundTrackingNo: existing.inboundTrackingNo,
               receiverName: existing.receiverName,
+              textColor: existing.textColor,
               shipmentStatus: existing.shipmentStatus,
               shipmentTrackingNo:
                 existing.shipmentLink?.shipment.trackingNo ?? null,
@@ -968,6 +974,7 @@ export class OrdersService {
               dispatchStatus: order.dispatchStatus,
               inboundTrackingNo: order.inboundTrackingNo,
               receiverName: order.receiverName,
+              textColor: order.textColor,
               shipmentStatus: order.shipmentStatus,
               shipmentTrackingNo:
                 dto.shipmentTrackingNo === undefined
@@ -1045,6 +1052,8 @@ export class OrdersService {
       andFilters.push({ shipmentStatus: query.shipmentStatus });
     if (query.dispatchStatus)
       andFilters.push({ dispatchStatus: query.dispatchStatus });
+    if (query.textColor)
+      andFilters.push({ textColor: query.textColor.toUpperCase() });
     if (query.receivableStatus) {
       andFilters.push({ receivableStatus: query.receivableStatus });
     }
@@ -1433,6 +1442,10 @@ export class OrdersService {
       dto.purchaseAddress === undefined
         ? undefined
         : this.clean(dto.purchaseAddress);
+    const textColor =
+      dto.textColor === undefined
+        ? undefined
+        : (dto.textColor?.toUpperCase() ?? null);
     const submitterSettlementAmount = new Prisma.Decimal(
       dto.submitterSettlementAmount ?? existing.submitterSettlementAmount,
     );
@@ -1523,6 +1536,7 @@ export class OrdersService {
           ...(inboundTrackingNo !== undefined ? { inboundTrackingNo } : {}),
           ...(purchaseAddress !== undefined ? { purchaseAddress } : {}),
           ...(receiverName !== undefined ? { receiverName } : {}),
+          ...(textColor !== undefined ? { textColor } : {}),
           customerReceivedAmount,
           receivableStatus,
           submitterSettlementAmount,
@@ -1595,6 +1609,7 @@ export class OrdersService {
             shipmentStatus: existing.shipmentStatus,
             dispatchStatus: existing.dispatchStatus,
             receiverName: existing.receiverName,
+            textColor: existing.textColor,
             shipmentTrackingNo:
               existing.shipmentLink?.shipment.trackingNo ?? null,
             orderAmount: existing.orderAmount.toString(),
@@ -1613,6 +1628,7 @@ export class OrdersService {
             shipmentStatus: order.shipmentStatus,
             dispatchStatus: order.dispatchStatus,
             receiverName: order.receiverName,
+            textColor: order.textColor,
             shipmentTrackingNo:
               dto.shipmentTrackingNo === undefined
                 ? (existing.shipmentLink?.shipment.trackingNo ?? null)

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DispatchStatus, FundingType } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -12,6 +12,7 @@ import {
   IsUUID,
   Max,
   MaxLength,
+  Matches,
   Min,
 } from 'class-validator';
 
@@ -89,6 +90,12 @@ export class CreateAdminOrderDto {
   @IsString()
   @MaxLength(100)
   receiverName?: string;
+
+  @ApiPropertyOptional({ example: '#2563EB' })
+  @Transform(({ value }) => (value === '' ? null : value))
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  textColor?: string | null;
 
   @ApiProperty({ enum: FundingType })
   @IsEnum(FundingType)

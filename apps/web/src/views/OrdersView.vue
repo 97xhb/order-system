@@ -90,6 +90,7 @@ interface OrderApiRow {
   purchaseAddress: string | null;
   receiverName: string | null;
   dispatchStatus: DispatchStatus;
+  textColor: string | null;
   fundingType: FundingType;
   customData: unknown;
   shipmentLink: { shipment: { trackingNo: string; carrier?: string | null } } | null;
@@ -241,6 +242,7 @@ const batchEditForm = reactive({
   orderAmount: null as number | null,
   submitterSettlementAmount: null as number | null,
   saleAmount: null as number | null,
+  textColor: null as string | null,
   amountFormulas: {} as Record<string, string>,
   dispatchStatus: null as DispatchStatus | null,
   shipmentStatus: null as ShipmentStatus | null,
@@ -290,6 +292,7 @@ const batchSettlementStatusOptions: Array<{ label: string; value: SettlementStat
 const batchEditFields = computed(
   () =>
     [
+      { key: 'textColor', label: '文本颜色', value: batchEditForm.textColor },
       { key: 'purchaseAddress', label: '下单地址', value: batchEditForm.purchaseAddress.trim() },
       { key: 'receiverName', label: '收货佬', value: batchEditForm.receiverName.trim() },
       {
@@ -334,6 +337,7 @@ const filters = reactive({
   schemeIds: [] as string[],
   reviewStatus: '',
   dispatchStatus: '',
+  textColor: '',
   shipmentStatus: '',
   receivableStatus: '',
   submitterSettlementStatus: '',
@@ -388,6 +392,14 @@ const dispatchStatusLabel = (value: unknown) =>
   dispatchStatusLabels[value as DispatchStatus] ?? '未发货';
 const dispatchStatusType = (value: unknown) =>
   dispatchStatusTypes[value as DispatchStatus] ?? 'info';
+const textColorPresets = [
+  { label: '红色', value: '#DC2626' },
+  { label: '橙色', value: '#EA580C' },
+  { label: '绿色', value: '#059669' },
+  { label: '蓝色', value: '#2563EB' },
+  { label: '紫色', value: '#7C3AED' },
+  { label: '灰色', value: '#64748B' },
+];
 const submitterSettlementStatusLabels: Record<StoredSettlementStatus, string> = {
   UNPAID: '未结算',
   PARTIAL: '未结算',
@@ -573,6 +585,8 @@ const copyColumnValue = (row: OrderRow, column: TableColumnOption): string => {
       return copyPlainValue(row.receiverName);
     case 'dispatchStatus':
       return dispatchStatusLabels[row.dispatchStatus];
+    case 'textColor':
+      return row.textColor || '默认';
     case 'shipmentTrackingNo':
       return copyPlainValue(row.shipmentLink?.shipment.trackingNo);
     case 'shipmentStatus':
@@ -635,6 +649,7 @@ const orderQueryParams = (page: number, pageSize: number) => ({
   schemeIds: filters.schemeIds.join(',') || undefined,
   reviewStatus: filters.reviewStatus || undefined,
   dispatchStatus: filters.dispatchStatus || undefined,
+  textColor: filters.textColor || undefined,
   shipmentStatus: filters.shipmentStatus || undefined,
   receivableStatus: filters.receivableStatus || undefined,
   submitterSettlementStatus: filters.submitterSettlementStatus || undefined,
@@ -693,6 +708,7 @@ const resetFilters = () => {
   filters.schemeIds = [];
   filters.reviewStatus = '';
   filters.dispatchStatus = '';
+  filters.textColor = '';
   filters.shipmentStatus = '';
   filters.receivableStatus = '';
   filters.submitterSettlementStatus = '';
@@ -768,6 +784,23 @@ const tableRenderKey = computed(
 const isRowSelected = (row: OrderRow) => selectedRowIds.value.has(row.id);
 const orderRowClassName = ({ row }: { row: OrderRow }) =>
   isRowSelected(row) ? 'is-selected-row' : '';
+const orderRowStyle = ({ row }: { row: OrderRow }) =>
+  row.textColor ? { '--order-row-color': row.textColor } : {};
+const updateTextColor = async (row: OrderRow, color: string | null) => {
+  const previous = row.textColor;
+  const textColor = color?.toUpperCase() ?? null;
+  row.textColor = textColor;
+  try {
+    await http.patch(`/admin/orders/${row.id}/progress`, {
+      textColor,
+      reason: '订单列表修改文本颜色',
+    });
+    ElMessage.success(textColor ? '订单文本颜色已更新' : '订单文本颜色已恢复默认');
+  } catch (error) {
+    row.textColor = previous;
+    ElMessage.error(getApiErrorMessage(error, '文本颜色修改失败'));
+  }
+};
 const isColumnVisible = (key: string) => visibleColumnSet.value.has(key);
 const isCopyColumnSelected = (key: string) => copyColumnSet.value.has(key);
 
@@ -1206,6 +1239,8 @@ const spreadsheetColumnValue = (row: OrderRow, column: TableColumnOption): Sprea
       return spreadsheetText(row.receiverName);
     case 'dispatchStatus':
       return spreadsheetText(dispatchStatusLabels[row.dispatchStatus]);
+    case 'textColor':
+      return spreadsheetText(row.textColor || '默认');
     case 'shipmentTrackingNo':
       return spreadsheetText(row.shipmentLink?.shipment.trackingNo);
     case 'shipmentStatus':
@@ -1612,6 +1647,7 @@ const openBatchEdit = () => {
     orderAmount: null,
     submitterSettlementAmount: null,
     saleAmount: null,
+    textColor: null,
     dispatchStatus: null,
     shipmentStatus: null,
     receivableStatus: null,
@@ -2013,6 +2049,19 @@ onMounted(() => {
                 <el-option label="已取消" value="CANCELLED" />
               </el-select>
             </el-form-item>
+            <el-form-item label="文本颜色">
+              <div class="text-color-filter">
+                <el-color-picker v-model="filters.textColor" />
+                <el-button
+                  v-if="filters.textColor"
+                  text
+                  size="small"
+                  @click="filters.textColor = ''"
+                >
+                  清除
+                </el-button>
+              </div>
+            </el-form-item>
             <el-form-item label="寄件状态">
               <el-select v-model="filters.shipmentStatus" clearable>
                 <el-option label="未寄出" value="NOT_SHIPPED" />
@@ -2284,6 +2333,7 @@ onMounted(() => {
           :column-config="{ resizable: true }"
           :row-config="{ keyField: 'id', isHover: true }"
           :row-class-name="orderRowClassName"
+          :row-style="orderRowStyle"
         >
           <vxe-column width="54" align="center">
             <template #header>
@@ -2318,7 +2368,27 @@ onMounted(() => {
             "
           >
             <template #default="{ row }">
-              <template v-if="column.key === 'serialNo'">{{ row.displaySerialNo }}</template>
+              <template v-if="column.key === 'textColor'">
+                <div class="text-color-cell">
+                  <el-color-picker
+                    :model-value="row.textColor || ''"
+                    size="small"
+                    @change="updateTextColor(row, $event)"
+                  />
+                  <span :style="{ color: row.textColor || 'var(--app-muted)' }">
+                    {{ row.textColor || '默认' }}
+                  </span>
+                  <el-button
+                    v-if="row.textColor"
+                    text
+                    size="small"
+                    @click="updateTextColor(row, null)"
+                  >
+                    清除
+                  </el-button>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'serialNo'">{{ row.displaySerialNo }}</template>
               <template v-else-if="column.key === 'orderedAt'">{{ date(row.orderedAt) }}</template>
               <template v-else-if="column.key === 'platform'">{{ row.platform.name }}</template>
               <template v-else-if="column.key === 'submitter'">{{ row.submitter.name }}</template>
@@ -2541,6 +2611,7 @@ onMounted(() => {
           :key="row.id"
           class="mobile-order-card"
           :class="{ 'is-selected': isRowSelected(row) }"
+          :style="row.textColor ? { '--mobile-order-text-color': row.textColor } : undefined"
         >
           <header class="mobile-order-header">
             <el-checkbox
@@ -2809,6 +2880,35 @@ onMounted(() => {
           <label class="batch-edit-field">
             <span class="batch-edit-label">收货佬</span>
             <el-input v-model="batchEditForm.receiverName" placeholder="留空不修改" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-label">文本颜色</span>
+            <div class="batch-color-options">
+              <button
+                type="button"
+                class="card-choice batch-color-clear"
+                :class="{ 'is-selected': batchEditForm.textColor === null }"
+                @click="batchEditForm.textColor = null"
+              >
+                不修改
+              </button>
+              <button
+                v-for="color in textColorPresets"
+                :key="color.value"
+                type="button"
+                class="batch-color-swatch"
+                :class="{ 'is-selected': batchEditForm.textColor === color.value }"
+                :style="{ '--swatch-color': color.value }"
+                :title="color.label"
+                :aria-label="color.label"
+                @click="batchEditForm.textColor = color.value"
+              />
+              <el-color-picker
+                :model-value="batchEditForm.textColor || ''"
+                size="small"
+                @change="batchEditForm.textColor = $event?.toUpperCase() ?? null"
+              />
+            </div>
           </label>
           <label class="batch-edit-field">
             <span class="batch-edit-label">寄件运单号</span>
@@ -3668,6 +3768,50 @@ onMounted(() => {
   color: var(--app-text-secondary);
   font-size: 13px;
 }
+.text-color-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.batch-color-options {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.batch-color-clear {
+  min-height: 32px;
+  padding: 4px 9px;
+  border-radius: 9px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+.batch-color-clear.is-selected {
+  color: var(--app-heading);
+}
+.batch-color-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--swatch-color);
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+.batch-color-swatch:hover {
+  transform: translateY(-1px);
+}
+.batch-color-swatch.is-selected {
+  border-color: var(--app-card-solid);
+  box-shadow:
+    0 0 0 2px var(--app-primary),
+    0 4px 10px color-mix(in srgb, var(--swatch-color) 28%, transparent);
+}
 
 .batch-edit-summary b {
   color: var(--app-text);
@@ -3881,11 +4025,20 @@ onMounted(() => {
   background: color-mix(in srgb, var(--app-primary-soft) 22%, var(--app-control)) !important;
 }
 .order-table :deep(.vxe-body--column .vxe-cell) {
-  color: var(--app-text);
+  color: var(--order-row-color, var(--app-text));
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
   white-space: normal;
+}
+.text-color-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.text-color-cell > span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
 }
 .order-table :deep(.vxe-body--row) {
   height: auto !important;
@@ -4479,6 +4632,11 @@ onMounted(() => {
     width: 100%;
     justify-content: center;
     overflow: hidden;
+  }
+  .mobile-order-card .mobile-order-heading-copy .product-lines,
+  .mobile-order-card .mobile-order-money-grid strong,
+  .mobile-order-card .mobile-order-details dd {
+    color: var(--mobile-order-text-color, var(--app-heading));
   }
   .table-card :deep(.el-pagination__total),
   .table-card :deep(.el-pagination__sizes) {

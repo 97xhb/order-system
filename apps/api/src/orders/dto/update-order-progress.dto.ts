@@ -4,7 +4,7 @@ import {
   SettlementStatus,
   ShipmentStatus,
 } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
   IsIn,
@@ -14,6 +14,7 @@ import {
   IsString,
   Max,
   MaxLength,
+  Matches,
   Min,
 } from 'class-validator';
 import { ORDER_SETTLEMENT_STATUSES } from '../order-statuses';
@@ -35,6 +36,12 @@ export class UpdateOrderProgressDto {
   @IsString()
   @MaxLength(100)
   receiverName?: string;
+
+  @ApiPropertyOptional({ example: '#2563EB', nullable: true })
+  @Transform(({ value }) => (value === '' ? null : value))
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  textColor?: string | null;
 
   @ApiPropertyOptional({ description: '下单金额' })
   @IsOptional()
