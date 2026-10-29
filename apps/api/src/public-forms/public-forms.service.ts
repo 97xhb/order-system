@@ -649,8 +649,9 @@ export class PublicFormsService {
       notes: order.notes,
       createdAt: order.createdAt,
       canEdit:
-        form.allowEditBeforeApproval &&
-        order.reviewStatus === ReviewStatus.PENDING,
+        order.reviewStatus === ReviewStatus.REJECTED ||
+        (form.allowEditBeforeApproval &&
+          order.reviewStatus === ReviewStatus.PENDING),
       canDelete:
         order.reviewStatus === ReviewStatus.REJECTED ||
         (form.allowDeleteBeforeApproval &&
@@ -666,9 +667,6 @@ export class PublicFormsService {
     requestMetadata: { ipAddress?: string; userAgent?: string },
   ) {
     const form = await this.getForm(publicToken, false);
-    if (!form.allowEditBeforeApproval) {
-      throw new ForbiddenException('管理员未开放提交后的修改权限');
-    }
     const existing = await this.prisma.order.findFirst({
       where: {
         id: orderId,
@@ -679,8 +677,17 @@ export class PublicFormsService {
       },
     });
     if (!existing) throw new NotFoundException('登记记录不存在');
-    if (existing.reviewStatus !== ReviewStatus.PENDING) {
+    if (
+      existing.reviewStatus !== ReviewStatus.PENDING &&
+      existing.reviewStatus !== ReviewStatus.REJECTED
+    ) {
       throw new ForbiddenException('管理员确认后不能再修改');
+    }
+    if (
+      existing.reviewStatus === ReviewStatus.PENDING &&
+      !form.allowEditBeforeApproval
+    ) {
+      throw new ForbiddenException('管理员未开放提交后的修改权限');
     }
 
     const config = this.config(form.fieldConfig);
@@ -801,6 +808,9 @@ export class PublicFormsService {
         const updated = await transaction.order.update({
           where: { id: existing.id },
           data: {
+            reviewStatus: ReviewStatus.PENDING,
+            approvedAt: null,
+            approvedById: null,
             platformId: merged.platformId,
             categoryId: merged.categoryId ?? null,
             submitterId: submitter.id,
@@ -826,12 +836,16 @@ export class PublicFormsService {
         await transaction.auditLog.create({
           data: {
             source: 'PUBLIC_FORM',
-            action: 'ORDER_UPDATED_BEFORE_APPROVAL',
+            action:
+              existing.reviewStatus === ReviewStatus.REJECTED
+                ? 'ORDER_RESUBMITTED_AFTER_REJECTION'
+                : 'ORDER_UPDATED_BEFORE_APPROVAL',
             entityType: 'Order',
             entityId: updated.id,
             ipAddress: requestMetadata.ipAddress,
             userAgent: requestMetadata.userAgent,
             beforeData: {
+              reviewStatus: existing.reviewStatus,
               platformId: existing.platformId,
               platformOrderNo: existing.platformOrderNo,
               orderAmount: existing.orderAmount.toString(),
@@ -839,6 +853,7 @@ export class PublicFormsService {
                 existing.submitterSettlementAmount.toString(),
             },
             afterData: {
+              reviewStatus: updated.reviewStatus,
               platformId: updated.platformId,
               platformOrderNo: updated.platformOrderNo,
               orderAmount: updated.orderAmount.toString(),

@@ -111,6 +111,7 @@ const loadError = ref('');
 const data = ref<BootstrapData | null>(null);
 const myOrders = ref<MyOrder[]>([]);
 const editingId = ref<string | null>(null);
+const editingReviewStatus = ref<string | null>(null);
 const identityDialog = ref(false);
 const identityLinking = ref(false);
 const identityCodeInput = ref('');
@@ -268,6 +269,7 @@ const applyDefaults = () => {
 
 const clearForNext = () => {
   editingId.value = null;
+  editingReviewStatus.value = null;
   form.orderedAt = formatLocalDate();
   form.platformOrderNo = '';
   form.dispatchStatus = 'NOT_SHIPPED';
@@ -351,7 +353,11 @@ const submit = async () => {
     };
     if (editingId.value) {
       await http.patch(`/public/forms/${token.value}/orders/${editingId.value}`, payload);
-      ElMessage.success('登记已修改，仍等待管理员确认');
+      ElMessage.success(
+        editingReviewStatus.value === 'REJECTED'
+          ? '已修改并重新提交，等待管理员确认'
+          : '登记已修改，仍等待管理员确认',
+      );
     } else {
       const response = await http.post<{ serialNo: number }>(
         `/public/forms/${token.value}/orders`,
@@ -413,6 +419,7 @@ const deletePayout = async (method: { id: string; label: string }) => {
 
 const editOrder = (order: MyOrder) => {
   editingId.value = order.id;
+  editingReviewStatus.value = order.reviewStatus;
   Object.assign(form, {
     wechatNickname: order.wechatNickname ?? '',
     platformId: order.platform.id,
@@ -476,7 +483,7 @@ onMounted(() => void load());
           <span class="submission-guide-mark">提</span>
           <div class="submission-guide-copy">
             <strong>提交后进入待确认</strong>
-            <span>管理员确认前按设置可以修改，确认后订单自动锁定。</span>
+            <span>待确认或已驳回时可按设置修改；驳回后修改保存会重新提交审核。</span>
             <small>灰色字段由管理员补写或仅供查看，未开放的字段可以留空。</small>
           </div>
           <span class="submission-guide-pill">待管理员确认</span>
@@ -866,7 +873,13 @@ onMounted(() => void load());
                   type="primary"
                   size="large"
                   :loading="submitting"
-                  >{{ editingId ? '保存修改' : '提交登记' }}</el-button
+                  >{{
+                    editingId
+                      ? editingReviewStatus === 'REJECTED'
+                        ? '重新提交审核'
+                        : '保存修改'
+                      : '提交登记'
+                  }}</el-button
                 >
               </div>
             </div>
@@ -963,7 +976,9 @@ onMounted(() => void load());
           }}</span>
         </div>
         <div v-if="order.canEdit || order.canDelete" class="order-actions">
-          <el-button v-if="order.canEdit" size="small" @click="editOrder(order)">修改</el-button
+          <el-button v-if="order.canEdit" size="small" @click="editOrder(order)">{{
+            order.reviewStatus === 'REJECTED' ? '修改并重新提交' : '修改'
+          }}</el-button
           ><el-button
             v-if="order.canDelete"
             size="small"
