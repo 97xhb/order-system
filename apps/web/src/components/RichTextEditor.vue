@@ -49,10 +49,12 @@ const renderValue = () => {
   const element = editor.value;
   if (!element || element.innerHTML === props.modelValue) return;
   element.innerHTML = props.modelValue;
-  plainTextLength.value = element.innerText
+  const plainText = element.innerText
     .replace(/\u00a0/g, ' ')
     .replace(/\r\n/g, '\n')
-    .trim().length;
+    .trim();
+  plainTextLength.value = plainText.length;
+  emit('update:plainText', plainText);
 };
 
 const rememberSelection = () => {

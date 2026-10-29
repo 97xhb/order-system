@@ -48,7 +48,7 @@ export class UpdateSchemeDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(5_000)
+  @MaxLength(50_000)
   description?: string;
 
   @ApiPropertyOptional()

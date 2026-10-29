@@ -45,6 +45,17 @@ export class SchemesService {
     return { productName: plainText, productNameHtml: html };
   }
 
+  private richText(value: string | undefined, label: string) {
+    const html = sanitizeShareFormRichText(value);
+    if (
+      html &&
+      richTextToPlainText(html).length > RICH_TEXT_CONTENT_MAX_LENGTH
+    ) {
+      throw new BadRequestException(`${label}不能超过 5000 字`);
+    }
+    return html;
+  }
+
   private token() {
     return randomBytes(24).toString('base64url');
   }
@@ -191,7 +202,7 @@ export class SchemesService {
             name,
             productName: productContent.productName,
             productNameHtml: productContent.productNameHtml,
-            description: this.clean(dto.description),
+            description: this.richText(dto.description, '方案说明'),
             defaultValues: (dto.defaultValues ?? {
               fundingType: 'SUBMITTER_ADVANCED',
             }) as Prisma.InputJsonValue,
@@ -262,7 +273,7 @@ export class SchemesService {
             description:
               dto.description === undefined
                 ? undefined
-                : this.clean(dto.description),
+                : this.richText(dto.description, '方案说明'),
             defaultValues: dto.defaultValues as
               Prisma.InputJsonValue | undefined,
             enabled: dto.enabled,
@@ -312,13 +323,7 @@ export class SchemesService {
     const description =
       dto.description === undefined
         ? undefined
-        : sanitizeShareFormRichText(dto.description);
-    if (
-      description &&
-      richTextToPlainText(description).length > RICH_TEXT_CONTENT_MAX_LENGTH
-    ) {
-      throw new BadRequestException('填写说明不能超过 5000 字');
-    }
+        : this.richText(dto.description, '填写说明');
 
     let fieldConfig: Prisma.InputJsonValue | undefined;
     if (dto.fieldConfig !== undefined) {

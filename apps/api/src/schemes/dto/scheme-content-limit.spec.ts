@@ -52,4 +52,19 @@ describe('scheme content limits', () => {
       false,
     );
   });
+
+  it('accepts rich HTML for the separate scheme description', async () => {
+    const errors = await validate(
+      plainToInstance(CreateSchemeDto, {
+        name: '测试方案',
+        productName: '普通内容',
+        description:
+          '<p><strong>方案说明</strong><span style="color:#2563eb">蓝色文字</span></p>',
+      }),
+    );
+
+    expect(errors.some((error) => error.property === 'description')).toBe(
+      false,
+    );
+  });
 });

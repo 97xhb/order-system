@@ -81,6 +81,8 @@ describe('SchemesService', () => {
         productName: '重点红色',
         productNameHtml:
           '<p><strong>重点</strong><script>alert(1)</script><font color="#d92d20">红色</font></p>',
+        description:
+          '<p><strong>方案说明</strong><script>alert(2)</script><span style="color:#2563eb">蓝色</span></p>',
       },
       admin,
     );
@@ -91,6 +93,8 @@ describe('SchemesService', () => {
           productName: '重点红色',
           productNameHtml:
             '<p><strong>重点</strong><font color="#d92d20">红色</font></p>',
+          description:
+            '<p><strong>方案说明</strong><span style="color:#2563eb">蓝色</span></p>',
         }),
       }),
     );

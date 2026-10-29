@@ -202,6 +202,7 @@ const qrLink = ref('');
 const editingSchemeId = ref<string | null>(null);
 const activeSchemeId = ref('');
 const amountOptionsText = ref('');
+const schemeDescriptionPlain = ref('');
 const DEFAULT_SHARE_TITLE = '在线报单系统';
 const router = useRouter();
 
@@ -303,12 +304,13 @@ const refreshWhenVisible = () => {
 
 const openScheme = (item?: Scheme) => {
   editingSchemeId.value = item?.id ?? null;
+  schemeDescriptionPlain.value = '';
   Object.assign(schemeForm, {
     code: item?.code ?? '',
     name: item?.name ?? '',
     productName: item?.productName ?? '',
     productNameHtml: item ? (item.productNameHtml ?? editorHtml(item.productName)) : '',
-    description: item?.description ?? '',
+    description: editorHtml(item?.description ?? ''),
     enabled: item?.enabled ?? true,
     sortOrder: item?.sortOrder ?? 0,
     shareFormStatus: 'ACTIVE',
@@ -324,6 +326,10 @@ const saveScheme = async () => {
   }
   if (schemeForm.productName.length > 5_000) {
     ElMessage.warning('方案内容不能超过 5000 字');
+    return;
+  }
+  if (schemeDescriptionPlain.value.length > 5_000) {
+    ElMessage.warning('方案说明不能超过 5000 字');
     return;
   }
   saving.value = true;
@@ -746,9 +752,16 @@ onBeforeUnmount(() => {
               v-model="schemeForm.shareTitle"
               placeholder="默认：在线报单系统" /></el-form-item
         ></template>
-        <el-form-item label="方案说明" class="span-two"
-          ><el-input v-model="schemeForm.description" type="textarea" :rows="3"
-        /></el-form-item>
+        <el-form-item label="方案说明" class="span-two">
+          <RichTextEditor
+            v-model="schemeForm.description"
+            :max-length="5_000"
+            :min-height="120"
+            :max-height="300"
+            placeholder="填写方案说明，可按需设置加粗、字号和文字颜色"
+            @update:plain-text="schemeDescriptionPlain = $event"
+          />
+        </el-form-item>
       </el-form>
       <template #footer
         ><el-button @click="schemeDialog = false">取消</el-button
