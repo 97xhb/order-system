@@ -49,6 +49,11 @@ describe('SchemesService', () => {
       },
       _count: { _all: true },
     });
+    expect(prisma.orderScheme.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+    );
     expect(result[0]).toMatchObject({
       pendingOrderCount: 2,
       approvedOrderCount: 3,

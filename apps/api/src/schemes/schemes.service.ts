@@ -108,7 +108,7 @@ export class SchemesService {
   async list(includeDisabled = true) {
     const schemes = await this.prisma.orderScheme.findMany({
       where: includeDisabled ? undefined : { enabled: true },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         category: { select: { id: true, name: true } },
         shareForm: {

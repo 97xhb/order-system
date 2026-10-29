@@ -45,6 +45,7 @@ interface Scheme {
   description: string | null;
   enabled: boolean;
   sortOrder: number;
+  createdAt: string;
   _count: { orders: number; profitRules: number };
   shareForm: {
     id: string;
@@ -203,6 +204,7 @@ const editingSchemeId = ref<string | null>(null);
 const activeSchemeId = ref('');
 const amountOptionsText = ref('');
 const schemeDescriptionPlain = ref('');
+const expandedSchemeIds = ref(new Set<string>());
 const DEFAULT_SHARE_TITLE = '在线报单系统';
 const router = useRouter();
 
@@ -213,7 +215,6 @@ const schemeForm = reactive({
   productNameHtml: '',
   description: '',
   enabled: true,
-  sortOrder: 0,
   shareFormStatus: 'ACTIVE',
   shareTitle: DEFAULT_SHARE_TITLE,
 });
@@ -312,7 +313,6 @@ const openScheme = (item?: Scheme) => {
     productNameHtml: item ? (item.productNameHtml ?? editorHtml(item.productName)) : '',
     description: editorHtml(item?.description ?? ''),
     enabled: item?.enabled ?? true,
-    sortOrder: item?.sortOrder ?? 0,
     shareFormStatus: 'ACTIVE',
     shareTitle: item ? '' : DEFAULT_SHARE_TITLE,
   });
@@ -354,6 +354,29 @@ const saveScheme = async () => {
   } finally {
     saving.value = false;
   }
+};
+
+const schemeCreatedDate = (value: string) =>
+  new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+
+const schemeContentText = (value: string) => value.replace(/\s+/g, ' ').trim();
+const schemeContentCharacters = (value: string) => Array.from(schemeContentText(value));
+const schemeHasMoreContent = (value: string) => schemeContentCharacters(value).length > 100;
+const isSchemeExpanded = (id: string) => expandedSchemeIds.value.has(id);
+const schemeContentPreview = (value: string) => {
+  const characters = schemeContentCharacters(value);
+  return characters.length > 100 ? `${characters.slice(0, 100).join('')}…` : characters.join('');
+};
+const toggleSchemeContent = (id: string) => {
+  const next = new Set(expandedSchemeIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  expandedSchemeIds.value = next;
 };
 
 const openShare = (item: Scheme) => {
@@ -439,10 +462,12 @@ const openPendingOrders = (item: Scheme) => {
   });
 };
 
-const copyLink = async (item: Scheme) => {
+const shareSchemeLink = async (item: Scheme) => {
   if (!item.shareForm) return;
-  await navigator.clipboard.writeText(publicLink(item.shareForm.publicToken));
-  ElMessage.success('分享链接已复制，可直接发到微信');
+  await navigator.clipboard.writeText(
+    `【${item.name}】\n${publicLink(item.shareForm.publicToken)}`,
+  );
+  ElMessage.success('方案标题和分享链接已复制，可直接发到微信');
 };
 
 const showQr = async (item: Scheme) => {
@@ -528,7 +553,7 @@ onBeforeUnmount(() => {
 
     <section v-loading="loading" class="surface-card scheme-list">
       <div class="list-head">
-        <strong>方案列表</strong><span>共 {{ items.length }} 个方案</span>
+        <strong>方案列表</strong><span>共 {{ items.length }} 个方案 · 按创建时间倒序</span>
       </div>
       <el-empty v-if="!items.length" description="还没有创建下单方案" :image-size="86"
         ><el-button type="primary" :icon="Plus" @click="openScheme()"
@@ -537,13 +562,37 @@ onBeforeUnmount(() => {
       >
       <template v-else>
         <el-table class="scheme-table" :data="items" stripe>
-          <el-table-column label="方案" min-width="250">
-            <template #default="{ row }"
-              ><div class="scheme-name">
-                <strong>{{ row.name }}</strong
-                ><span>{{ row.productName }} · {{ row.code }}</span>
-              </div></template
-            >
+          <el-table-column label="方案" min-width="380">
+            <template #default="{ row }">
+              <div class="scheme-name">
+                <div class="scheme-title-row">
+                  <strong>{{ row.name }}</strong>
+                  <time>{{ schemeCreatedDate(row.createdAt) }}</time>
+                </div>
+                <div
+                  v-if="row.productName"
+                  class="scheme-content-preview"
+                  :class="{ 'is-expanded': isSchemeExpanded(row.id) }"
+                >
+                  {{
+                    isSchemeExpanded(row.id)
+                      ? schemeContentText(row.productName)
+                      : schemeContentPreview(row.productName)
+                  }}
+                </div>
+                <div class="scheme-meta-row">
+                  <code>{{ row.code }}</code>
+                  <button
+                    v-if="schemeHasMoreContent(row.productName)"
+                    type="button"
+                    class="scheme-content-toggle"
+                    @click="toggleSchemeContent(row.id)"
+                  >
+                    {{ isSchemeExpanded(row.id) ? '收起' : '展开全文' }}
+                  </button>
+                </div>
+              </div>
+            </template>
           </el-table-column>
           <el-table-column label="方案状态" width="100"
             ><template #default="{ row }"
@@ -569,8 +618,8 @@ onBeforeUnmount(() => {
           </el-table-column>
           <el-table-column label="分享操作" min-width="260">
             <template #default="{ row }"
-              ><el-button size="small" type="primary" plain @click="copyLink(row)"
-                >复制链接</el-button
+              ><el-button size="small" type="primary" plain @click="shareSchemeLink(row)"
+                >分享链接</el-button
               ><el-button size="small" @click="showQr(row)">二维码</el-button
               ><el-button size="small" @click="openShare(row)">配置表单</el-button
               ><el-button
@@ -618,9 +667,32 @@ onBeforeUnmount(() => {
           <article v-for="row in items" :key="row.id" class="scheme-mobile-card">
             <header>
               <div class="scheme-name">
-                <strong>{{ row.name }}</strong>
-                <span>{{ row.productName }}</span>
-                <small>{{ row.code }}</small>
+                <div class="scheme-title-row">
+                  <strong>{{ row.name }}</strong>
+                  <time>{{ schemeCreatedDate(row.createdAt) }}</time>
+                </div>
+                <div
+                  v-if="row.productName"
+                  class="scheme-content-preview"
+                  :class="{ 'is-expanded': isSchemeExpanded(row.id) }"
+                >
+                  {{
+                    isSchemeExpanded(row.id)
+                      ? schemeContentText(row.productName)
+                      : schemeContentPreview(row.productName)
+                  }}
+                </div>
+                <div class="scheme-meta-row">
+                  <code>{{ row.code }}</code>
+                  <button
+                    v-if="schemeHasMoreContent(row.productName)"
+                    type="button"
+                    class="scheme-content-toggle"
+                    @click="toggleSchemeContent(row.id)"
+                  >
+                    {{ isSchemeExpanded(row.id) ? '收起' : '展开全文' }}
+                  </button>
+                </div>
               </div>
               <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
                 {{ row.enabled ? '启用' : '停用' }}
@@ -658,9 +730,9 @@ onBeforeUnmount(() => {
                   type="primary"
                   plain
                   :disabled="!row.shareForm"
-                  @click="copyLink(row)"
+                  @click="shareSchemeLink(row)"
                 >
-                  复制链接
+                  分享链接
                 </el-button>
                 <el-button size="small" :disabled="!row.shareForm" @click="showQr(row)">
                   二维码
@@ -737,9 +809,6 @@ onBeforeUnmount(() => {
             @update:plain-text="schemeForm.productName = $event"
           />
         </el-form-item>
-        <el-form-item label="排序"
-          ><el-input-number v-model="schemeForm.sortOrder" :precision="0" :controls="false"
-        /></el-form-item>
         <el-form-item label="方案启用"><el-switch v-model="schemeForm.enabled" /></el-form-item>
         <template v-if="!editingSchemeId"
           ><el-form-item label="分享链接初始状态"
@@ -1005,12 +1074,64 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 4px;
 }
+.scheme-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .scheme-name strong {
   color: var(--app-heading);
+}
+.scheme-title-row time {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 18%, var(--app-border));
+  border-radius: 999px;
+  color: var(--app-muted);
+  background: color-mix(in srgb, var(--app-primary-soft) 32%, var(--app-card-solid));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 .scheme-name span {
   overflow-wrap: anywhere;
   white-space: pre-line;
+}
+.scheme-content-preview {
+  color: var(--app-text);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.scheme-content-preview.is-expanded {
+  padding: 7px 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--app-control) 42%, transparent);
+}
+.scheme-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.scheme-meta-row code {
+  color: var(--app-muted);
+  font-size: 10.5px;
+}
+.scheme-content-toggle {
+  padding: 0;
+  border: 0;
+  color: var(--app-primary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+}
+.scheme-content-toggle:hover {
+  text-decoration: underline;
 }
 .scheme-table :deep(.el-table__inner-wrapper::before) {
   background: var(--app-border);
@@ -1460,13 +1581,19 @@ onBeforeUnmount(() => {
   .scheme-mobile-card .scheme-name strong {
     font-size: 14px;
   }
-  .scheme-mobile-card .scheme-name span {
+  .scheme-mobile-card .scheme-title-row {
+    align-items: flex-start;
+  }
+  .scheme-mobile-card .scheme-content-preview {
     margin-top: 2px;
     color: var(--app-text);
     font-size: 12.5px;
     line-height: 1.5;
   }
-  .scheme-mobile-card .scheme-name small {
+  .scheme-mobile-card .scheme-meta-row {
+    margin-top: 2px;
+  }
+  .scheme-mobile-card .scheme-meta-row code {
     color: var(--app-muted);
     font-size: 10.5px;
     overflow-wrap: anywhere;
