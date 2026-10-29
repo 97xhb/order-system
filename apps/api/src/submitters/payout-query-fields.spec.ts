@@ -1,4 +1,5 @@
 import {
+  ORDER_TABLE_FIELD_DEFINITIONS,
   normalizePayoutQueryFields,
   normalizePayoutQueryLockedFields,
   publicPayoutQueryFieldOptions,
@@ -62,5 +63,15 @@ describe('payout query field permissions', () => {
     expect(
       publicPayoutQueryFieldOptions(options, locked).map((field) => field.key),
     ).toEqual(['orderAmount', 'custom:internal']);
+  });
+
+  it('keeps text color in the serial cell instead of a separate order column', () => {
+    expect(
+      ORDER_TABLE_FIELD_DEFINITIONS.some((field) => field.key === 'textColor'),
+    ).toBe(false);
+    expect(
+      ORDER_TABLE_FIELD_DEFINITIONS.find((field) => field.key === 'serialNo')
+        ?.width,
+    ).toBe(96);
   });
 });

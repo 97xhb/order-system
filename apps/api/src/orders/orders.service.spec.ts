@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import {
+  DispatchStatus,
   Prisma,
   ReviewStatus,
   SettlementStatus,
@@ -476,6 +477,7 @@ describe('OrdersService deletion and ordering', () => {
             {
               OR: [
                 { reviewStatus: ReviewStatus.REJECTED },
+                { dispatchStatus: DispatchStatus.EXCEPTION },
                 { shipmentStatus: ShipmentStatus.EXCEPTION },
                 { receivableStatus: SettlementStatus.EXCEPTION },
                 { submitterSettlementStatus: SettlementStatus.EXCEPTION },

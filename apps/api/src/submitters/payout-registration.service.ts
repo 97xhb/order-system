@@ -518,7 +518,6 @@ export class PayoutRegistrationService {
         select: {
           id: true,
           serialNo: true,
-          textColor: true,
           orderedAt: true,
           platformOrderNo: true,
           dispatchStatus: true,
@@ -593,9 +592,6 @@ export class PayoutRegistrationService {
         switch (field.key) {
           case 'serialNo':
             item.serialNo = order.serialNo;
-            break;
-          case 'textColor':
-            item.textColor = order.textColor;
             break;
           case 'orderedAt':
             item.orderedAt = order.orderedAt;
