@@ -1,4 +1,7 @@
-import { sanitizeShareFormRichText } from './share-form-rich-text';
+import {
+  richTextToPlainText,
+  sanitizeShareFormRichText,
+} from './share-form-rich-text';
 
 describe('sanitizeShareFormRichText', () => {
   it('keeps simple text formatting and removes executable or unsupported content', () => {
@@ -26,5 +29,13 @@ describe('sanitizeShareFormRichText', () => {
 
   it('returns null for empty rich text', () => {
     expect(sanitizeShareFormRichText('   ')).toBeNull();
+  });
+
+  it('extracts readable multiline text from formatted scheme content', () => {
+    expect(
+      richTextToPlainText(
+        '<p><strong>黑色</strong> &amp; 白色</p><div>数量：<span style="color:#d92d20">2</span></div>',
+      ),
+    ).toBe('黑色 & 白色\n数量：2');
   });
 });

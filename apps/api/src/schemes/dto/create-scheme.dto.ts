@@ -37,8 +37,16 @@ export class CreateSchemeDto {
     example: 'iPhone 16 128G * 1\n颜色：黑色',
   })
   @IsString()
-  @MaxLength(200)
+  @MaxLength(5_000)
   productName!: string;
+
+  @ApiPropertyOptional({
+    description: '方案内容富文本 HTML，保存前会清洗',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50_000)
+  productNameHtml?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

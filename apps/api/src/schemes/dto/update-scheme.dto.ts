@@ -34,8 +34,16 @@ export class UpdateSchemeDto {
   @ApiPropertyOptional({ description: '方案内容，支持多行' })
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(5_000)
   productName?: string;
+
+  @ApiPropertyOptional({
+    description: '方案内容富文本 HTML，保存前会清洗',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50_000)
+  productNameHtml?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

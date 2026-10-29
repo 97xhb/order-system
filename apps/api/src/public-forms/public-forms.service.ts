@@ -400,6 +400,9 @@ export class PublicFormsService {
         scheme: {
           name: form.scheme.name,
           productName: form.scheme.productName,
+          productNameHtml: sanitizeShareFormRichText(
+            form.scheme.productNameHtml,
+          ),
           description: sanitizeShareFormRichText(form.scheme.description),
           defaultValues: form.scheme.defaultValues,
         },

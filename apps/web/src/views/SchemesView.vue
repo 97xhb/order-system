@@ -2,10 +2,11 @@
 import { Link, Plus, Refresh } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import QRCode from 'qrcode';
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
+import RichTextEditor from '../components/RichTextEditor.vue';
 
 type FieldKey =
   | 'wechatNickname'
@@ -40,6 +41,7 @@ interface Scheme {
   code: string;
   name: string;
   productName: string;
+  productNameHtml: string | null;
   description: string | null;
   enabled: boolean;
   sortOrder: number;
@@ -200,25 +202,14 @@ const qrLink = ref('');
 const editingSchemeId = ref<string | null>(null);
 const activeSchemeId = ref('');
 const amountOptionsText = ref('');
-const descriptionEditor = ref<HTMLElement | null>(null);
-const descriptionEditorKey = ref(0);
-const descriptionEditorHtml = ref('');
-const richTextColor = ref('#d92d20');
-const richTextFontSize = ref('3');
 const DEFAULT_SHARE_TITLE = '在线报单系统';
-const richTextSizeOptions = [
-  { label: '小字', value: '2' },
-  { label: '正文', value: '3' },
-  { label: '大字', value: '5' },
-  { label: '特大', value: '6' },
-] as const;
-let savedRichTextRange: Range | null = null;
 const router = useRouter();
 
 const schemeForm = reactive({
   code: '',
   name: '',
   productName: '',
+  productNameHtml: '',
   description: '',
   enabled: true,
   sortOrder: 0,
@@ -274,59 +265,6 @@ const escapeHtml = (value: string) =>
 const editorHtml = (value: string) =>
   richTextTagPattern.test(value) ? value : escapeHtml(value).replace(/\r?\n/g, '<br>');
 
-const syncDescription = () => {
-  const editor = descriptionEditor.value;
-  if (!editor) return;
-  shareForm.description = editor.innerText.trim() ? editor.innerHTML.trim() : '';
-};
-
-const renderDescriptionEditor = async () => {
-  await nextTick();
-  const editor = descriptionEditor.value;
-  if (editor && editor.innerHTML !== descriptionEditorHtml.value) {
-    editor.innerHTML = descriptionEditorHtml.value;
-  }
-  savedRichTextRange = null;
-};
-
-const rememberRichTextSelection = () => {
-  const editor = descriptionEditor.value;
-  const selection = window.getSelection();
-  if (!editor || !selection?.rangeCount) return;
-  const range = selection.getRangeAt(0);
-  if (editor.contains(range.commonAncestorContainer)) {
-    savedRichTextRange = range.cloneRange();
-  }
-};
-
-const restoreRichTextSelection = () => {
-  if (!savedRichTextRange) return;
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(savedRichTextRange);
-};
-
-const execRichTextCommand = (command: string, value?: string) => {
-  descriptionEditor.value?.focus();
-  restoreRichTextSelection();
-  document.execCommand(command, false, value);
-  syncDescription();
-  rememberRichTextSelection();
-};
-
-const applyRichTextColor = () => execRichTextCommand('foreColor', richTextColor.value);
-const applyRichTextFontSize = (value: string) => {
-  richTextFontSize.value = value;
-  execRichTextCommand('fontSize', value);
-};
-const handleRichTextPaste = (event: ClipboardEvent) => {
-  event.preventDefault();
-  restoreRichTextSelection();
-  document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') ?? '');
-  syncDescription();
-  rememberRichTextSelection();
-};
-
 const load = async (showLoading = true) => {
   if (showLoading) loading.value = true;
   try {
@@ -369,6 +307,7 @@ const openScheme = (item?: Scheme) => {
     code: item?.code ?? '',
     name: item?.name ?? '',
     productName: item?.productName ?? '',
+    productNameHtml: item ? (item.productNameHtml ?? editorHtml(item.productName)) : '',
     description: item?.description ?? '',
     enabled: item?.enabled ?? true,
     sortOrder: item?.sortOrder ?? 0,
@@ -381,6 +320,10 @@ const openScheme = (item?: Scheme) => {
 const saveScheme = async () => {
   if (!schemeForm.name.trim() || !schemeForm.productName.trim()) {
     ElMessage.warning('请填写方案名称和方案内容');
+    return;
+  }
+  if (schemeForm.productName.length > 5_000) {
+    ElMessage.warning('方案内容不能超过 5000 字');
     return;
   }
   saving.value = true;
@@ -413,7 +356,7 @@ const openShare = (item: Scheme) => {
   Object.assign(shareForm, {
     status: item.shareForm.status,
     title: item.shareForm.title || DEFAULT_SHARE_TITLE,
-    description: item.shareForm.description ?? '',
+    description: editorHtml(item.shareForm.description ?? ''),
     allowEditBeforeApproval: item.shareForm.allowEditBeforeApproval,
     allowDeleteBeforeApproval: item.shareForm.allowDeleteBeforeApproval,
     startsAt: item.shareForm.startsAt ?? '',
@@ -422,13 +365,10 @@ const openShare = (item: Scheme) => {
     fieldConfig: normalizeFieldConfig(item.shareForm.fieldConfig),
   });
   amountOptionsText.value = shareForm.fieldConfig.settlementAmount.options.join(', ');
-  descriptionEditorHtml.value = editorHtml(shareForm.description);
-  descriptionEditorKey.value += 1;
   shareDialog.value = true;
 };
 
 const saveShare = async () => {
-  syncDescription();
   (Object.keys(shareForm.fieldConfig.fields) as FieldKey[]).forEach((key) => {
     const rule = shareForm.fieldConfig.fields[key];
     if (!rule.visible) {
@@ -782,13 +722,13 @@ onBeforeUnmount(() => {
             placeholder="留空自动生成"
         /></el-form-item>
         <el-form-item label="方案内容" required class="span-two">
-          <el-input
-            v-model="schemeForm.productName"
-            type="textarea"
-            :rows="3"
-            maxlength="200"
-            show-word-limit
+          <RichTextEditor
+            v-model="schemeForm.productNameHtml"
+            :max-length="5_000"
+            :min-height="140"
+            :max-height="360"
             placeholder="填写商品、数量及本方案内容，支持多行"
+            @update:plain-text="schemeForm.productName = $event"
           />
         </el-form-item>
         <el-form-item label="排序"
@@ -816,13 +756,7 @@ onBeforeUnmount(() => {
       >
     </el-dialog>
 
-    <el-dialog
-      v-model="shareDialog"
-      class="share-config-dialog"
-      width="min(920px, 96vw)"
-      top="4vh"
-      @opened="renderDescriptionEditor"
-    >
+    <el-dialog v-model="shareDialog" class="share-config-dialog" width="min(920px, 96vw)" top="4vh">
       <template #header>
         <div class="share-dialog-heading">
           <span class="share-dialog-mark">报</span>
@@ -908,76 +842,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <el-form-item class="description-form-item">
-            <div class="rich-text-field">
-              <div class="rich-text-toolbar" @mousedown.capture="rememberRichTextSelection">
-                <button
-                  type="button"
-                  class="rich-tool-button is-bold"
-                  title="加粗"
-                  @mousedown.prevent
-                  @click="execRichTextCommand('bold')"
-                >
-                  B
-                </button>
-                <button
-                  type="button"
-                  class="rich-tool-button is-italic"
-                  title="斜体"
-                  @mousedown.prevent
-                  @click="execRichTextCommand('italic')"
-                >
-                  I
-                </button>
-                <button
-                  type="button"
-                  class="rich-tool-button is-underline"
-                  title="下划线"
-                  @mousedown.prevent
-                  @click="execRichTextCommand('underline')"
-                >
-                  U
-                </button>
-                <div class="rich-size-buttons" aria-label="字号">
-                  <button
-                    v-for="option in richTextSizeOptions"
-                    :key="option.value"
-                    type="button"
-                    class="rich-tool-button rich-size-button"
-                    :class="{ 'is-active': richTextFontSize === option.value }"
-                    :title="`设置为${option.label}`"
-                    @mousedown.prevent
-                    @click="applyRichTextFontSize(option.value)"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
-                <label class="rich-color-control" title="文字颜色">
-                  <span>颜色</span>
-                  <input v-model="richTextColor" type="color" @input="applyRichTextColor" />
-                </label>
-                <button
-                  type="button"
-                  class="rich-tool-button rich-clear-button"
-                  @mousedown.prevent
-                  @click="execRichTextCommand('removeFormat')"
-                >
-                  清除格式
-                </button>
-              </div>
-              <div
-                :key="descriptionEditorKey"
-                ref="descriptionEditor"
-                class="rich-text-editor"
-                contenteditable="true"
-                data-placeholder="例如：请核对订单号、金额；提交后先等待管理员确认。"
-                v-html="descriptionEditorHtml"
-                @input="syncDescription"
-                @keyup="rememberRichTextSelection"
-                @mouseup="rememberRichTextSelection"
-                @focus="rememberRichTextSelection"
-                @paste="handleRichTextPaste"
-              ></div>
-            </div>
+            <RichTextEditor
+              v-model="shareForm.description"
+              :max-length="5_000"
+              placeholder="例如：请核对订单号、金额；提交后先等待管理员确认。"
+            />
           </el-form-item>
         </section>
 
@@ -1276,102 +1145,6 @@ onBeforeUnmount(() => {
 }
 .description-form-item {
   margin-bottom: 0 !important;
-}
-.rich-text-field {
-  width: 100%;
-  overflow: hidden;
-  border: 1px solid var(--app-border);
-  border-radius: 15px;
-  background: var(--app-card-solid);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--app-heading) 5%, transparent);
-}
-.rich-text-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  min-height: 42px;
-  padding: 5px 7px;
-  border-bottom: 1px solid var(--app-border);
-  background: var(--app-hover);
-  gap: 5px;
-}
-.rich-tool-button {
-  min-width: 30px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  color: var(--app-text);
-  background: var(--app-card-solid);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-}
-.rich-tool-button:hover {
-  border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
-  color: var(--app-primary);
-}
-.rich-tool-button.is-bold {
-  font-weight: 800;
-}
-.rich-tool-button.is-italic {
-  font-style: italic;
-}
-.rich-tool-button.is-underline {
-  text-decoration: underline;
-}
-.rich-clear-button {
-  min-width: 74px;
-}
-.rich-size-buttons {
-  display: inline-flex;
-  gap: 4px;
-}
-.rich-size-button {
-  min-width: 38px;
-  padding: 0 6px;
-}
-.rich-size-button.is-active {
-  border-color: color-mix(in srgb, var(--app-primary) 52%, var(--app-border));
-  color: var(--app-primary);
-  background: color-mix(in srgb, var(--app-primary) 10%, var(--app-card-solid));
-}
-.rich-color-control {
-  display: inline-flex;
-  align-items: center;
-  height: 30px;
-  padding: 0 7px;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  color: var(--app-muted);
-  background: var(--app-card-solid);
-  cursor: pointer;
-  font-size: 11px;
-  gap: 5px;
-}
-.rich-color-control input {
-  width: 19px;
-  height: 19px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.rich-text-editor {
-  min-height: 82px;
-  max-height: 180px;
-  overflow-y: auto;
-  padding: 10px 12px;
-  color: var(--app-text);
-  outline: none;
-  font-size: 14px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-}
-.rich-text-editor:empty::before {
-  color: var(--app-muted);
-  content: attr(data-placeholder);
-  pointer-events: none;
 }
 .switch-stack {
   width: 100%;

@@ -66,6 +66,7 @@ interface BootstrapData {
     scheme: {
       name: string;
       productName: string;
+      productNameHtml: string | null;
       description: string | null;
       defaultValues: Record<string, unknown> | null;
     };
@@ -521,9 +522,19 @@ onMounted(() => void load());
               <small>本次报单方案</small>
             </div>
           </div>
-          <div v-if="data.form.scheme.productName" class="scheme-summary-product">
+          <div
+            v-if="data.form.scheme.productNameHtml || data.form.scheme.productName"
+            class="scheme-summary-product"
+          >
             <span>方案内容</span>
-            <div>{{ data.form.scheme.productName }}</div>
+            <div
+              v-if="data.form.scheme.productNameHtml"
+              class="scheme-summary-product-rich"
+              v-html="data.form.scheme.productNameHtml"
+            />
+            <div v-else class="scheme-summary-product-plain">
+              {{ data.form.scheme.productName }}
+            </div>
           </div>
           <div v-if="data.form.scheme.description" class="scheme-summary-description">
             <span>方案说明</span>
@@ -1328,7 +1339,23 @@ footer {
   font-size: 15px;
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+.scheme-summary-product-plain {
   white-space: pre-wrap;
+}
+.scheme-summary-description-content {
+  white-space: pre-wrap;
+}
+.scheme-summary-product-rich {
+  white-space: normal;
+}
+.scheme-summary-product-rich :deep(p),
+.scheme-summary-product-rich :deep(div) {
+  margin: 0 0 5px;
+}
+.scheme-summary-product-rich :deep(p:last-child),
+.scheme-summary-product-rich :deep(div:last-child) {
+  margin-bottom: 0;
 }
 .scheme-summary-description-content :deep(p),
 .scheme-summary-description-content :deep(div) {

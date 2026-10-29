@@ -77,7 +77,8 @@
 ## 5. 在线报单
 
 - `OrderScheme.name`：方案名称，只读展示。
-- `OrderScheme.productName`：多行方案内容，只读展示。
+- `OrderScheme.productName`：多行方案内容的纯文本版本，用于订单预填和搜索。
+- `OrderScheme.productNameHtml`：经过白名单清洗的方案内容富文本，用于公开报单页展示。
 - `OrderScheme.description`：方案说明，只读展示。
 - `ShareForm.title`：公开页标题，默认“在线报单系统”。
 - `ShareForm.description`：富文本填写说明。

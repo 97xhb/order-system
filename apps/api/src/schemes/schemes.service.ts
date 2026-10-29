@@ -15,9 +15,13 @@ import {
   DEFAULT_SHARE_FORM_FIELD_CONFIG,
   normalizeShareFormFieldConfig,
 } from './share-form-config';
-import { sanitizeShareFormRichText } from './share-form-rich-text';
+import {
+  richTextToPlainText,
+  sanitizeShareFormRichText,
+} from './share-form-rich-text';
 
 const DEFAULT_SHARE_FORM_TITLE = '在线报单系统';
+const RICH_TEXT_CONTENT_MAX_LENGTH = 5_000;
 
 @Injectable()
 export class SchemesService {
@@ -26,6 +30,19 @@ export class SchemesService {
   private clean(value: string | undefined) {
     const normalized = value?.trim();
     return normalized ? normalized : null;
+  }
+
+  private productContent(productName?: string, productNameHtml?: string) {
+    const html = sanitizeShareFormRichText(productNameHtml);
+    const plainText =
+      (html ? richTextToPlainText(html) : '') || productName?.trim() || '';
+    if (!plainText) {
+      throw new BadRequestException('方案内容不能为空');
+    }
+    if (plainText.length > RICH_TEXT_CONTENT_MAX_LENGTH) {
+      throw new BadRequestException('方案内容不能超过 5000 字');
+    }
+    return { productName: plainText, productNameHtml: html };
   }
 
   private token() {
@@ -157,8 +174,11 @@ export class SchemesService {
   async create(dto: CreateSchemeDto, admin: AuthenticatedAdmin) {
     await this.assertCategory(dto.categoryId);
     const name = dto.name.trim();
-    const productName = dto.productName.trim();
-    if (!name || !productName) {
+    const productContent = this.productContent(
+      dto.productName,
+      dto.productNameHtml,
+    );
+    if (!name) {
       throw new BadRequestException('方案名称和方案内容不能为空');
     }
 
@@ -169,7 +189,8 @@ export class SchemesService {
             categoryId: dto.categoryId,
             code: (dto.code?.trim() || this.code()).toUpperCase(),
             name,
-            productName,
+            productName: productContent.productName,
+            productNameHtml: productContent.productNameHtml,
             description: this.clean(dto.description),
             defaultValues: (dto.defaultValues ?? {
               fundingType: 'SUBMITTER_ADVANCED',
@@ -223,9 +244,10 @@ export class SchemesService {
     if (dto.name !== undefined && !dto.name.trim()) {
       throw new BadRequestException('方案名称不能为空');
     }
-    if (dto.productName !== undefined && !dto.productName.trim()) {
-      throw new BadRequestException('方案内容不能为空');
-    }
+    const productContent =
+      dto.productName !== undefined || dto.productNameHtml !== undefined
+        ? this.productContent(dto.productName, dto.productNameHtml)
+        : undefined;
 
     try {
       return await this.prisma.$transaction(async (transaction) => {
@@ -235,7 +257,8 @@ export class SchemesService {
             categoryId: dto.categoryId,
             code: dto.code?.trim().toUpperCase(),
             name: dto.name?.trim(),
-            productName: dto.productName?.trim(),
+            productName: productContent?.productName,
+            productNameHtml: productContent?.productNameHtml,
             description:
               dto.description === undefined
                 ? undefined
@@ -286,6 +309,16 @@ export class SchemesService {
     if (dto.title !== undefined && !dto.title.trim()) {
       throw new BadRequestException('分享表单标题不能为空');
     }
+    const description =
+      dto.description === undefined
+        ? undefined
+        : sanitizeShareFormRichText(dto.description);
+    if (
+      description &&
+      richTextToPlainText(description).length > RICH_TEXT_CONTENT_MAX_LENGTH
+    ) {
+      throw new BadRequestException('填写说明不能超过 5000 字');
+    }
 
     let fieldConfig: Prisma.InputJsonValue | undefined;
     if (dto.fieldConfig !== undefined) {
@@ -326,10 +359,7 @@ export class SchemesService {
         data: {
           status: dto.status,
           title: dto.title?.trim(),
-          description:
-            dto.description === undefined
-              ? undefined
-              : sanitizeShareFormRichText(dto.description),
+          description,
           fieldConfig,
           allowEditBeforeApproval: dto.allowEditBeforeApproval,
           allowDeleteBeforeApproval: dto.allowDeleteBeforeApproval,
