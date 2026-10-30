@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsEnum,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -103,6 +104,14 @@ export class CreatePublicOrderDto {
   @Min(0)
   @Max(1_000_000_000_000)
   submitterSettlementAmount?: number;
+
+  @ApiPropertyOptional({
+    description: '金额字段的原始公式，例如 {"orderAmount":"=100+5"}',
+    type: Object,
+  })
+  @IsOptional()
+  @IsObject()
+  amountFormulas?: Record<string, string>;
 
   @ApiPropertyOptional()
   @IsOptional()

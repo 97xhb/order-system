@@ -49,6 +49,7 @@ describe('PublicFormsService rejected order resubmission', () => {
     rebateScanned: false,
     submitterSettlementAmount: new Prisma.Decimal(80),
     submitterSettlementStatus: SettlementStatus.UNPAID,
+    customData: null,
     notes: null,
     approvedAt: null,
     approvedById: null,
@@ -134,7 +135,14 @@ describe('PublicFormsService rejected order resubmission', () => {
       'token-1',
       rejectedOrder.id,
       identity as never,
-      { platformOrderNo: 'NEW-ORDER-NO' },
+      {
+        platformOrderNo: 'NEW-ORDER-NO',
+        amountFormulas: {
+          orderAmount: '=100+5',
+          paymentDiscountAmount: '=9+1',
+          submitterSettlementAmount: '=80',
+        },
+      },
       {},
     );
 
@@ -145,6 +153,12 @@ describe('PublicFormsService rejected order resubmission', () => {
           approvedAt: null,
           approvedById: null,
           platformOrderNo: 'NEW-ORDER-NO',
+          customData: {
+            amountFormulas: {
+              orderAmount: '=100+5',
+              submitterSettlementAmount: '=80',
+            },
+          },
         }),
       }),
     );

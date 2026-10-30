@@ -35,12 +35,21 @@ import {
   ShareFormFieldKey,
 } from '../schemes/share-form-config';
 import { sanitizeShareFormRichText } from '../schemes/share-form-rich-text';
+import {
+  amountFormulasFromCustomData,
+  normalizeAmountFormulas,
+} from '../orders/amount-formulas';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { CreatePublicPayoutMethodDto } from './dto/create-public-payout-method.dto';
 import { UpdatePublicOrderDto } from './dto/update-public-order.dto';
 import type { ResolvedPublicIdentity } from './public-identity.service';
 
 type PublicOrderInput = CreatePublicOrderDto | UpdatePublicOrderDto;
+const PUBLIC_AMOUNT_FORMULA_KEYS = [
+  'orderAmount',
+  'paymentDiscountAmount',
+  'submitterSettlementAmount',
+] as const;
 
 @Injectable()
 export class PublicFormsService {
@@ -106,6 +115,20 @@ export class PublicFormsService {
     } catch {
       throw new InternalServerErrorException('分享表单字段配置异常');
     }
+  }
+
+  private amountFormulas(
+    config: ShareFormFieldConfig,
+    value: Record<string, string> | undefined,
+  ) {
+    const allowed = PUBLIC_AMOUNT_FORMULA_KEYS.filter(
+      (key) =>
+        config.fields[key].visible &&
+        config.fields[key].editable &&
+        (key !== 'submitterSettlementAmount' ||
+          config.settlementAmount.mode === 'FREE'),
+    );
+    return normalizeAmountFormulas(value, allowed);
   }
 
   private async getForm(publicToken: string, requireActive: boolean) {
@@ -475,6 +498,7 @@ export class PublicFormsService {
     const receiverName = this.clean(
       this.visibleValue(config, 'receiverName', dto.receiverName, ''),
     );
+    const amountFormulas = this.amountFormulas(config, dto.amountFormulas);
 
     try {
       return await this.prisma.$transaction(
@@ -558,6 +582,10 @@ export class PublicFormsService {
                 Number(defaults.paymentDiscountAmount ?? 0),
               ),
               submitterSettlementAmount: settlementAmount,
+              customData:
+                amountFormulas && Object.keys(amountFormulas).length
+                  ? ({ amountFormulas } as Prisma.InputJsonValue)
+                  : undefined,
               notes: this.clean(
                 this.visibleValue(config, 'notes', dto.notes, ''),
               ),
@@ -647,6 +675,10 @@ export class PublicFormsService {
       submitterSettlementAmount: order.submitterSettlementAmount,
       submitterSettlementStatus: order.submitterSettlementStatus,
       notes: order.notes,
+      amountFormulas: amountFormulasFromCustomData(
+        order.customData,
+        PUBLIC_AMOUNT_FORMULA_KEYS,
+      ),
       createdAt: order.createdAt,
       canEdit:
         order.reviewStatus === ReviewStatus.REJECTED ||
@@ -784,6 +816,37 @@ export class PublicFormsService {
     }
     this.assertRequiredFields(config, merged);
 
+    const existingCustomData = existing.customData;
+    let customData: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+    if (dto.amountFormulas !== undefined) {
+      const currentData =
+        existingCustomData &&
+        typeof existingCustomData === 'object' &&
+        !Array.isArray(existingCustomData)
+          ? { ...(existingCustomData as Record<string, unknown>) }
+          : {};
+      const currentFormulas =
+        currentData.amountFormulas &&
+        typeof currentData.amountFormulas === 'object' &&
+        !Array.isArray(currentData.amountFormulas)
+          ? { ...(currentData.amountFormulas as Record<string, string>) }
+          : {};
+      for (const [key, formula] of Object.entries(
+        this.amountFormulas(config, dto.amountFormulas) ?? {},
+      )) {
+        if (formula) currentFormulas[key] = formula;
+        else delete currentFormulas[key];
+      }
+      if (Object.keys(currentFormulas).length) {
+        currentData.amountFormulas = currentFormulas;
+      } else {
+        delete currentData.amountFormulas;
+      }
+      customData = Object.keys(currentData).length
+        ? (currentData as Prisma.InputJsonValue)
+        : Prisma.JsonNull;
+    }
+
     const platform = await this.prisma.platform.findFirst({
       where: { id: merged.platformId, enabled: true },
     });
@@ -830,6 +893,7 @@ export class PublicFormsService {
               config,
               merged.submitterSettlementAmount,
             ),
+            ...(dto.amountFormulas !== undefined ? { customData } : {}),
             notes: this.clean(merged.notes),
           },
         });

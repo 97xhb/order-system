@@ -37,6 +37,7 @@ import {
   inferScanAmountFromRebate,
 } from './scan-rebate';
 import { orderTableFieldOptions } from '../submitters/payout-query-fields';
+import { normalizeAmountFormulas } from './amount-formulas';
 
 @Injectable()
 export class OrdersService {
@@ -45,29 +46,6 @@ export class OrdersService {
   private clean(value: string | undefined | null) {
     const normalized = value?.trim();
     return normalized ? normalized : null;
-  }
-
-  private amountFormulas(value: Record<string, string> | undefined) {
-    if (!value) return undefined;
-    const allowed = new Set([
-      'orderAmount',
-      'paymentDiscountAmount',
-      'submitterSettlementAmount',
-      'scanAmount',
-      'saleAmount',
-    ]);
-    const formulas: Record<string, string> = {};
-    for (const [key, formula] of Object.entries(value)) {
-      if (!allowed.has(key) || typeof formula !== 'string') continue;
-      const normalized = formula.trim();
-      if (!normalized) {
-        formulas[key] = '';
-        continue;
-      }
-      if (!normalized.startsWith('=') || normalized.length > 500) continue;
-      formulas[key] = normalized;
-    }
-    return formulas;
   }
 
   private auditReason(value: Prisma.JsonValue | null) {
@@ -503,7 +481,7 @@ export class OrdersService {
             profitRuleSnapshot: profit.profitRuleSnapshot,
             notes: this.clean(dto.notes),
             customData: (() => {
-              const formulas = this.amountFormulas(dto.amountFormulas);
+              const formulas = normalizeAmountFormulas(dto.amountFormulas);
               const savedFormulas = Object.fromEntries(
                 Object.entries(formulas ?? {}).filter(([, formula]) => formula),
               );
@@ -802,7 +780,7 @@ export class OrdersService {
           existingCustomData.fundingTypeOther = fundingTypeOther;
         else delete existingCustomData.fundingTypeOther;
         if (dto.amountFormulas !== undefined) {
-          const formulas = this.amountFormulas(dto.amountFormulas);
+          const formulas = normalizeAmountFormulas(dto.amountFormulas);
           const current =
             existingCustomData.amountFormulas &&
             typeof existingCustomData.amountFormulas === 'object' &&
@@ -1512,7 +1490,7 @@ export class OrdersService {
         ? { ...(existing.customData as Record<string, unknown>) }
         : {};
     if (dto.amountFormulas !== undefined) {
-      const formulas = this.amountFormulas(dto.amountFormulas);
+      const formulas = normalizeAmountFormulas(dto.amountFormulas);
       const current =
         customData.amountFormulas &&
         typeof customData.amountFormulas === 'object' &&

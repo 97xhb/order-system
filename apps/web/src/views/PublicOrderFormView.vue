@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
+import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 import { useSystemStore } from '../stores/system';
 
 type FieldKey =
@@ -98,6 +99,7 @@ interface MyOrder {
   rebateScanned: boolean | null;
   submitterSettlementAmount: string | number;
   submitterSettlementStatus: string;
+  amountFormulas: Record<string, string>;
   notes: string | null;
   canEdit: boolean;
   canDelete: boolean;
@@ -149,6 +151,7 @@ const form = reactive({
   paymentDiscountAmount: 0 as number | undefined,
   rebateScanned: undefined as boolean | undefined,
   submitterSettlementAmount: undefined as number | undefined,
+  amountFormulas: {} as Record<string, string>,
   notes: '',
 });
 
@@ -251,6 +254,7 @@ const payoutTypeLabels: Record<string, string> = {
 
 const applyDefaults = () => {
   const defaults = data.value?.form.scheme.defaultValues ?? {};
+  form.amountFormulas = {};
   form.platformId = String(defaults.platformId ?? data.value?.options.platforms[0]?.id ?? '');
   form.categoryId = '';
   form.productName = data.value?.form.scheme.name || data.value?.form.scheme.productName || '';
@@ -436,6 +440,7 @@ const editOrder = (order: MyOrder) => {
     paymentDiscountAmount: Number(order.paymentDiscountAmount),
     rebateScanned: order.rebateScanned ?? undefined,
     submitterSettlementAmount: Number(order.submitterSettlementAmount),
+    amountFormulas: { ...(order.amountFormulas ?? {}) },
     notes: order.notes ?? '',
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -753,27 +758,26 @@ onMounted(() => void load());
                 v-if="field('orderAmount').visible"
                 label="下单金额"
                 :required="field('orderAmount').required"
-                ><el-input-number
+              >
+                <MoneyFormulaInput
                   v-model="form.orderAmount"
+                  v-model:formula="form.amountFormulas.orderAmount"
                   :disabled="!canEditField('orderAmount')"
-                  :min="0"
-                  :precision="2"
-                  :step="0.01"
-                  :controls="false"
-              /></el-form-item>
+                  placeholder="数字或 =100+5"
+                />
+              </el-form-item>
               <el-form-item
                 v-if="field('paymentDiscountAmount').visible"
                 label="支付优惠"
                 :required="field('paymentDiscountAmount').required"
-                ><el-input-number
-                  v-model="form.paymentDiscountAmount"
-                  :disabled="!canEditField('paymentDiscountAmount')"
-                  :min="0"
-                  :precision="2"
-                  :controls="false"
-                />
-                <div class="field-help">未使用支付优惠可留空或填 0。</div></el-form-item
               >
+                <MoneyFormulaInput
+                  v-model="form.paymentDiscountAmount"
+                  v-model:formula="form.amountFormulas.paymentDiscountAmount"
+                  :disabled="!canEditField('paymentDiscountAmount')"
+                />
+                <div class="field-help">未使用支付优惠可留空或填 0。</div>
+              </el-form-item>
               <el-form-item
                 v-if="field('rebateScanned').visible"
                 label="扫码返利"
@@ -814,14 +818,12 @@ onMounted(() => void load());
                 label="结算金额"
                 :required="field('submitterSettlementAmount').required"
               >
-                <el-input-number
+                <MoneyFormulaInput
                   v-if="fieldConfig?.settlementAmount.mode === 'FREE'"
                   v-model="form.submitterSettlementAmount"
+                  v-model:formula="form.amountFormulas.submitterSettlementAmount"
                   :disabled="!canEditField('submitterSettlementAmount')"
-                  :min="0"
-                  :precision="2"
-                  :step="0.01"
-                  :controls="false"
+                  placeholder="数字或 =100+5"
                 />
                 <el-radio-group
                   v-else-if="fieldConfig?.settlementAmount.mode === 'PRESET'"
