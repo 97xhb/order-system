@@ -103,7 +103,7 @@ try {
 
     $forbiddenEntries = @(
       $entryNames | Where-Object {
-        $_ -match '(^|/)(\.env$|\.env\.docker$|node_modules|dist|\.local-data|release|梨花熊返利源码\.e$)' -or
+        $_ -match '(^|[\\/])(\.env|\.env\.docker|node_modules|dist|\.local-data|release|梨花熊返利源码\.e)([\\/]|$)' -or
         $_ -match '\.(log|tsbuildinfo)$'
       }
     )
