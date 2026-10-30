@@ -1439,6 +1439,13 @@ export class OrdersService {
       },
     });
     if (!existing) throw new NotFoundException('订单不存在');
+    if (existing.reviewStatus !== ReviewStatus.APPROVED) {
+      throw new ConflictException(
+        this.isTextColorOnlyUpdate(dto)
+          ? '订单审核确认后才能修改颜色'
+          : '订单审核确认后才能更新寄件和回款状态',
+      );
+    }
     if (this.isTextColorOnlyUpdate(dto)) {
       const textColor = dto.textColor?.toUpperCase() ?? null;
       return this.prisma.$transaction(async (transaction) => {
@@ -1462,9 +1469,6 @@ export class OrdersService {
         });
         return order;
       });
-    }
-    if (existing.reviewStatus !== ReviewStatus.APPROVED) {
-      throw new ConflictException('订单审核确认后才能更新寄件和回款状态');
     }
 
     const saleAmount = new Prisma.Decimal(

@@ -21,6 +21,7 @@ import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
+import OrderColorPopover from '../components/OrderColorPopover.vue';
 import OrderBatchCreateView from './OrderBatchCreateView.vue';
 import OrderCreateView from './OrderCreateView.vue';
 
@@ -235,10 +236,6 @@ const logisticsPhoneSuffix = ref('');
 const activeQuickView = ref('all');
 const batchEditVisible = ref(false);
 const batchEditSaving = ref(false);
-const rowColorPickerId = ref<string | null>(null);
-const rowColorDialogVisible = ref(false);
-const rowColorDraft = ref('');
-const rowColorSaving = ref(false);
 const filterColorPickerVisible = ref(false);
 const filterColorDraft = ref('');
 const batchEditForm = reactive({
@@ -826,52 +823,18 @@ const orderRowClassName = ({ row }: { row: OrderRow }) =>
 const orderRowStyle = ({ row }: { row: OrderRow }) =>
   row.textColor ? { '--order-row-color': row.textColor } : {};
 const updateTextColor = async (row: OrderRow, color: string | null) => {
-  const previous = row.textColor;
   const textColor = color?.toUpperCase() ?? null;
-  row.textColor = textColor;
   try {
     await http.patch(`/admin/orders/${row.id}/progress`, {
       textColor,
       reason: '订单列表修改文本颜色',
     });
+    row.textColor = textColor;
     ElMessage.success(textColor ? '订单文本颜色已更新' : '订单文本颜色已恢复默认');
     return true;
   } catch (error) {
-    row.textColor = previous;
     ElMessage.error(getApiErrorMessage(error, '文本颜色修改失败'));
     return false;
-  }
-};
-const openRowColorPicker = (row: OrderRow) => {
-  if (rowColorSaving.value) return;
-  rowColorPickerId.value = row.id;
-  rowColorDraft.value = row.textColor ?? '';
-  rowColorDialogVisible.value = true;
-};
-const closeRowColorPicker = () => {
-  if (rowColorSaving.value) return;
-  rowColorDialogVisible.value = false;
-  rowColorPickerId.value = null;
-  rowColorDraft.value = '';
-};
-const handleRowColorDialogClosed = () => {
-  rowColorPickerId.value = null;
-  rowColorDraft.value = '';
-};
-const confirmRowColor = async () => {
-  if (!rowColorPickerId.value || rowColorSaving.value) return;
-  const row = rows.value.find((item) => item.id === rowColorPickerId.value);
-  if (!row) {
-    closeRowColorPicker();
-    return;
-  }
-  rowColorSaving.value = true;
-  try {
-    if (await updateTextColor(row, rowColorDraft.value || null)) {
-      rowColorDialogVisible.value = false;
-    }
-  } finally {
-    rowColorSaving.value = false;
   }
 };
 const openFilterColorPicker = () => {
@@ -2530,15 +2493,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
             <template #default="{ row }">
               <template v-if="column.key === 'serialNo'">
                 <div class="serial-number-cell">
-                  <button
-                    type="button"
-                    class="order-color-dot"
-                    :class="{ 'has-color': row.textColor }"
-                    :style="{ '--order-color-dot': row.textColor || 'transparent' }"
-                    title="修改订单文本颜色"
-                    aria-label="修改订单文本颜色"
-                    aria-haspopup="dialog"
-                    @click.stop="openRowColorPicker(row)"
+                  <OrderColorPopover
+                    v-if="row.reviewStatus === 'APPROVED'"
+                    :color="row.textColor"
+                    :presets="textColorPresets"
+                    :save="(color) => updateTextColor(row, color)"
                   />
                   <span>{{ row.displaySerialNo }}</span>
                 </div>
@@ -3213,54 +3172,6 @@ onBeforeUnmount(() => activeLoadController?.abort());
           @click="batchEdit"
           >确认修改</el-button
         >
-      </template>
-    </el-dialog>
-
-    <el-dialog
-      v-model="rowColorDialogVisible"
-      title="订单文本颜色"
-      width="min(360px, 92vw)"
-      append-to-body
-      :close-on-click-modal="false"
-      :close-on-press-escape="!rowColorSaving"
-      :show-close="!rowColorSaving"
-      @closed="handleRowColorDialogClosed"
-    >
-      <div class="text-color-picker-panel">
-        <div class="text-color-picker-heading">
-          <strong>选择订单颜色</strong>
-          <span>{{ rowColorDraft || '默认颜色' }}</span>
-        </div>
-        <div class="text-color-choice-grid">
-          <button
-            type="button"
-            class="text-color-choice text-color-choice--default"
-            :class="{ 'is-selected': !rowColorDraft }"
-            title="恢复默认颜色"
-            @click="rowColorDraft = ''"
-          >
-            恢复默认
-          </button>
-          <button
-            v-for="color in textColorPresets"
-            :key="color.value"
-            type="button"
-            class="text-color-choice"
-            :class="{ 'is-selected': rowColorDraft === color.value }"
-            :style="{ '--choice-color': color.value }"
-            :title="color.label"
-            :aria-label="color.label"
-            @click="rowColorDraft = color.value"
-          >
-            <span aria-hidden="true">✓</span>
-          </button>
-        </div>
-      </div>
-      <template #footer>
-        <el-button :disabled="rowColorSaving" @click="closeRowColorPicker">取消</el-button>
-        <el-button type="primary" :loading="rowColorSaving" @click="confirmRowColor">
-          确定
-        </el-button>
       </template>
     </el-dialog>
 

@@ -69,10 +69,35 @@ describe('OrdersService progress linkage', () => {
     ).toBe(SettlementStatus.PAID);
   });
 
-  it('allows updating only the text color before an order is approved', async () => {
+  it('rejects text color updates before an order is approved', async () => {
     const existing = {
       id: 'order-pending',
       reviewStatus: ReviewStatus.PENDING,
+      textColor: null,
+    };
+    const prisma = {
+      order: { findFirst: jest.fn(async () => existing) },
+      $transaction: jest.fn(),
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+
+    await expect(
+      service.updateProgress(
+        existing.id,
+        {
+          textColor: '#2563eb',
+          reason: '订单列表修改文本颜色',
+        },
+        admin,
+      ),
+    ).rejects.toThrow('订单审核确认后才能修改颜色');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('updates only the text color without recalculating approved order progress', async () => {
+    const existing = {
+      id: 'order-approved',
+      reviewStatus: ReviewStatus.APPROVED,
       textColor: null,
     };
     const orderUpdate = jest.fn(
