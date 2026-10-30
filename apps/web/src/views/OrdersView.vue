@@ -235,6 +235,12 @@ const logisticsPhoneSuffix = ref('');
 const activeQuickView = ref('all');
 const batchEditVisible = ref(false);
 const batchEditSaving = ref(false);
+const rowColorPickerId = ref<string | null>(null);
+const rowColorPickerVisibility = reactive<Record<string, boolean>>({});
+const rowColorDraft = ref('');
+const rowColorSaving = ref(false);
+const filterColorPickerVisible = ref(false);
+const filterColorDraft = ref('');
 const batchEditForm = reactive({
   purchaseAddress: '',
   receiverName: '',
@@ -394,10 +400,20 @@ const dispatchStatusType = (value: unknown) =>
   dispatchStatusTypes[value as DispatchStatus] ?? 'info';
 const textColorPresets = [
   { label: '红色', value: '#DC2626' },
+  { label: '玫红', value: '#E11D48' },
   { label: '橙色', value: '#EA580C' },
+  { label: '琥珀', value: '#D97706' },
+  { label: '黄色', value: '#CA8A04' },
+  { label: '青柠', value: '#65A30D' },
   { label: '绿色', value: '#059669' },
+  { label: '青绿', value: '#0D9488' },
+  { label: '青色', value: '#0891B2' },
+  { label: '天蓝', value: '#0284C7' },
   { label: '蓝色', value: '#2563EB' },
-  { label: '紫色', value: '#7C3AED' },
+  { label: '靛蓝', value: '#4F46E5' },
+  { label: '紫罗兰', value: '#7C3AED' },
+  { label: '紫色', value: '#9333EA' },
+  { label: '粉色', value: '#DB2777' },
   { label: '灰色', value: '#64748B' },
 ];
 const submitterSettlementStatusLabels: Record<StoredSettlementStatus, string> = {
@@ -796,22 +812,56 @@ const updateTextColor = async (row: OrderRow, color: string | null) => {
       reason: '订单列表修改文本颜色',
     });
     ElMessage.success(textColor ? '订单文本颜色已更新' : '订单文本颜色已恢复默认');
+    return true;
   } catch (error) {
     row.textColor = previous;
     ElMessage.error(getApiErrorMessage(error, '文本颜色修改失败'));
+    return false;
   }
 };
-const handleTextColorInput = (row: OrderRow, event: Event) => {
-  const input = event.target as HTMLInputElement;
-  void updateTextColor(row, input.value);
+const openRowColorPicker = (row: OrderRow) => {
+  if (rowColorSaving.value) return;
+  rowColorPickerId.value = row.id;
+  rowColorDraft.value = row.textColor ?? '';
 };
-const handleBatchTextColorInput = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  batchEditForm.textColor = input.value.toUpperCase();
+const closeRowColorPicker = () => {
+  if (rowColorSaving.value) return;
+  const rowId = rowColorPickerId.value;
+  if (rowId) rowColorPickerVisibility[rowId] = false;
+  rowColorPickerId.value = null;
+  rowColorDraft.value = '';
 };
-const handleFilterTextColorInput = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  filters.textColor = input.value.toUpperCase();
+const handleRowColorPickerHidden = (row: OrderRow) => {
+  if (rowColorPickerId.value !== row.id) return;
+  rowColorPickerId.value = null;
+  rowColorDraft.value = '';
+};
+const confirmRowColor = async () => {
+  if (!rowColorPickerId.value || rowColorSaving.value) return;
+  const row = rows.value.find((item) => item.id === rowColorPickerId.value);
+  if (!row) {
+    closeRowColorPicker();
+    return;
+  }
+  rowColorSaving.value = true;
+  try {
+    if (await updateTextColor(row, rowColorDraft.value || null)) {
+      rowColorPickerVisibility[row.id] = false;
+    }
+  } finally {
+    rowColorSaving.value = false;
+  }
+};
+const openFilterColorPicker = () => {
+  filterColorDraft.value = filters.textColor;
+};
+const confirmFilterColor = () => {
+  filters.textColor = filterColorDraft.value;
+  filterColorPickerVisible.value = false;
+};
+const cancelFilterColor = () => {
+  filterColorDraft.value = filters.textColor;
+  filterColorPickerVisible.value = false;
 };
 const isColumnVisible = (key: string) => visibleColumnSet.value.has(key);
 const isCopyColumnSelected = (key: string) => copyColumnSet.value.has(key);
@@ -2061,19 +2111,60 @@ onMounted(() => {
             </el-form-item>
             <el-form-item label="文本颜色">
               <div class="text-color-filter">
-                <span
-                  class="order-color-dot"
-                  :class="{ 'has-color': filters.textColor }"
-                  :style="{ '--order-color-dot': filters.textColor || 'transparent' }"
-                  title="按文本颜色筛选"
+                <el-popover
+                  v-model:visible="filterColorPickerVisible"
+                  placement="bottom-start"
+                  :width="300"
+                  trigger="click"
+                  @show="openFilterColorPicker"
                 >
-                  <input
-                    type="color"
-                    :value="filters.textColor || '#334155'"
-                    aria-label="按订单文本颜色筛选"
-                    @input="handleFilterTextColorInput"
-                  />
-                </span>
+                  <template #reference>
+                    <button
+                      type="button"
+                      class="order-color-dot"
+                      :class="{ 'has-color': filters.textColor }"
+                      :style="{ '--order-color-dot': filters.textColor || 'transparent' }"
+                      title="按文本颜色筛选"
+                      aria-haspopup="dialog"
+                    />
+                  </template>
+                  <div class="text-color-picker-panel" @keydown.esc.prevent="cancelFilterColor">
+                    <div class="text-color-picker-heading">
+                      <strong>按文本颜色筛选</strong>
+                      <span>{{ filterColorDraft || '全部颜色' }}</span>
+                    </div>
+                    <div class="text-color-choice-grid">
+                      <button
+                        type="button"
+                        class="text-color-choice text-color-choice--default"
+                        :class="{ 'is-selected': !filterColorDraft }"
+                        title="全部颜色"
+                        @click="filterColorDraft = ''"
+                      >
+                        全部颜色
+                      </button>
+                      <button
+                        v-for="color in textColorPresets"
+                        :key="color.value"
+                        type="button"
+                        class="text-color-choice"
+                        :class="{ 'is-selected': filterColorDraft === color.value }"
+                        :style="{ '--choice-color': color.value }"
+                        :title="color.label"
+                        :aria-label="color.label"
+                        @click="filterColorDraft = color.value"
+                      >
+                        <span aria-hidden="true">✓</span>
+                      </button>
+                    </div>
+                    <div class="text-color-picker-actions">
+                      <el-button size="small" @click="cancelFilterColor">取消</el-button>
+                      <el-button size="small" type="primary" @click="confirmFilterColor">
+                        确定
+                      </el-button>
+                    </div>
+                  </div>
+                </el-popover>
                 <span class="text-color-filter-value">{{ filters.textColor || '全部颜色' }}</span>
                 <el-button
                   v-if="filters.textColor"
@@ -2393,22 +2484,73 @@ onMounted(() => {
             <template #default="{ row }">
               <template v-if="column.key === 'serialNo'">
                 <div class="serial-number-cell">
-                  <span
-                    class="order-color-dot"
-                    :class="{ 'has-color': row.textColor }"
-                    :style="{ '--order-color-dot': row.textColor || 'transparent' }"
-                    title="修改文本颜色，右键恢复默认"
-                    @contextmenu.prevent="updateTextColor(row, null)"
+                  <el-popover
+                    v-model:visible="rowColorPickerVisibility[row.id]"
+                    placement="right-start"
+                    :width="300"
+                    trigger="click"
+                    @show="openRowColorPicker(row)"
+                    @hide="handleRowColorPickerHidden(row)"
                   >
-                    <input
-                      type="color"
-                      :value="row.textColor || '#334155'"
-                      aria-label="修改订单文本颜色"
-                      @change="handleTextColorInput(row, $event)"
-                      @keydown.backspace.prevent="updateTextColor(row, null)"
-                      @keydown.delete.prevent="updateTextColor(row, null)"
-                    />
-                  </span>
+                    <template #reference>
+                      <button
+                        type="button"
+                        class="order-color-dot"
+                        :class="{ 'has-color': row.textColor }"
+                        :style="{ '--order-color-dot': row.textColor || 'transparent' }"
+                        title="修改订单文本颜色"
+                        aria-label="修改订单文本颜色"
+                        aria-haspopup="dialog"
+                      />
+                    </template>
+                    <div class="text-color-picker-panel" @keydown.esc.prevent="closeRowColorPicker">
+                      <div class="text-color-picker-heading">
+                        <strong>订单文本颜色</strong>
+                        <span>{{ rowColorDraft || '默认颜色' }}</span>
+                      </div>
+                      <div class="text-color-choice-grid">
+                        <button
+                          type="button"
+                          class="text-color-choice text-color-choice--default"
+                          :class="{ 'is-selected': !rowColorDraft }"
+                          title="恢复默认颜色"
+                          @click="rowColorDraft = ''"
+                        >
+                          恢复默认
+                        </button>
+                        <button
+                          v-for="color in textColorPresets"
+                          :key="color.value"
+                          type="button"
+                          class="text-color-choice"
+                          :class="{ 'is-selected': rowColorDraft === color.value }"
+                          :style="{ '--choice-color': color.value }"
+                          :title="color.label"
+                          :aria-label="color.label"
+                          @click="rowColorDraft = color.value"
+                        >
+                          <span aria-hidden="true">✓</span>
+                        </button>
+                      </div>
+                      <div class="text-color-picker-actions">
+                        <el-button
+                          size="small"
+                          :disabled="rowColorSaving"
+                          @click="closeRowColorPicker"
+                        >
+                          取消
+                        </el-button>
+                        <el-button
+                          size="small"
+                          type="primary"
+                          :loading="rowColorSaving"
+                          @click="confirmRowColor"
+                        >
+                          确定
+                        </el-button>
+                      </div>
+                    </div>
+                  </el-popover>
                   <span>{{ row.displaySerialNo }}</span>
                 </div>
               </template>
@@ -2929,19 +3071,6 @@ onMounted(() => {
                 :aria-label="color.label"
                 @click="batchEditForm.textColor = color.value"
               />
-              <span
-                class="order-color-dot"
-                :class="{ 'has-color': batchEditForm.textColor }"
-                :style="{ '--order-color-dot': batchEditForm.textColor || 'transparent' }"
-                title="自定义颜色"
-              >
-                <input
-                  type="color"
-                  :value="batchEditForm.textColor || '#334155'"
-                  aria-label="自定义批量文本颜色"
-                  @input="handleBatchTextColorInput"
-                />
-              </span>
             </div>
           </label>
           <label class="batch-edit-field">
@@ -3807,6 +3936,84 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
 }
+.text-color-picker-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.text-color-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.text-color-picker-heading strong {
+  color: var(--app-heading);
+  font-size: 13px;
+}
+.text-color-picker-heading span {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.text-color-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 5px;
+}
+.text-color-choice {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--choice-color) 74%, var(--app-border));
+  border-radius: 7px;
+  color: var(--app-muted);
+  background: var(--choice-color);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--app-card-solid) 24%, transparent);
+}
+.text-color-choice > span {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0;
+  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.46);
+}
+.text-color-choice:hover {
+  transform: translateY(-1px);
+}
+.text-color-choice.is-selected {
+  box-shadow:
+    0 0 0 2px var(--app-card-solid),
+    0 0 0 4px var(--app-primary);
+}
+.text-color-choice.is-selected > span {
+  opacity: 1;
+}
+.text-color-choice--default {
+  aspect-ratio: auto;
+  min-height: 28px;
+  grid-column: 1 / -1;
+  border-color: var(--app-border);
+  color: var(--app-text);
+  background: var(--app-control);
+  font-size: 11px;
+  font-weight: 650;
+}
+.text-color-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--app-border);
+  gap: 7px;
+}
+.text-color-picker-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
 .batch-color-options {
   display: flex;
   min-height: 38px;
@@ -4081,6 +4288,7 @@ onMounted(() => {
   height: 14px;
   flex: 0 0 14px;
   place-items: center;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--app-muted) 42%, transparent);
   border-radius: 50%;
   background: var(--order-color-dot);
@@ -4090,19 +4298,9 @@ onMounted(() => {
 .order-color-dot:not(.has-color) {
   background: conic-gradient(#f97316, #eab308, #22c55e, #3b82f6, #a855f7, #f97316);
 }
-.order-color-dot:focus-within {
+.order-color-dot:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--app-primary) 62%, transparent);
   outline-offset: 2px;
-}
-.order-color-dot input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 .order-table :deep(.vxe-body--row) {
   height: auto !important;
