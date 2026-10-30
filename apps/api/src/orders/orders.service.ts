@@ -1052,8 +1052,10 @@ export class OrdersService {
       andFilters.push({ shipmentStatus: query.shipmentStatus });
     if (query.dispatchStatus)
       andFilters.push({ dispatchStatus: query.dispatchStatus });
-    if (query.textColor)
-      andFilters.push({ textColor: query.textColor.toUpperCase() });
+    if (query.textColor) {
+      const textColor = query.textColor.toUpperCase();
+      andFilters.push({ textColor: textColor === 'NONE' ? null : textColor });
+    }
     if (query.receivableStatus) {
       andFilters.push({ receivableStatus: query.receivableStatus });
     }

@@ -863,6 +863,8 @@ const cancelFilterColor = () => {
   filterColorDraft.value = filters.textColor;
   filterColorPickerVisible.value = false;
 };
+const textColorFilterLabel = () =>
+  filters.textColor === 'NONE' ? '未标记颜色' : filters.textColor || '全部颜色';
 const isColumnVisible = (key: string) => visibleColumnSet.value.has(key);
 const isCopyColumnSelected = (key: string) => copyColumnSet.value.has(key);
 
@@ -2122,8 +2124,13 @@ onMounted(() => {
                     <button
                       type="button"
                       class="order-color-dot"
-                      :class="{ 'has-color': filters.textColor }"
-                      :style="{ '--order-color-dot': filters.textColor || 'transparent' }"
+                      :class="{ 'has-color': filters.textColor && filters.textColor !== 'NONE' }"
+                      :style="{
+                        '--order-color-dot':
+                          filters.textColor && filters.textColor !== 'NONE'
+                            ? filters.textColor
+                            : 'transparent',
+                      }"
                       title="按文本颜色筛选"
                       aria-haspopup="dialog"
                     />
@@ -2131,17 +2138,28 @@ onMounted(() => {
                   <div class="text-color-picker-panel" @keydown.esc.prevent="cancelFilterColor">
                     <div class="text-color-picker-heading">
                       <strong>按文本颜色筛选</strong>
-                      <span>{{ filterColorDraft || '全部颜色' }}</span>
+                      <span>{{
+                        filterColorDraft === 'NONE' ? '未标记颜色' : filterColorDraft || '全部颜色'
+                      }}</span>
                     </div>
                     <div class="text-color-choice-grid">
                       <button
                         type="button"
-                        class="text-color-choice text-color-choice--default"
+                        class="text-color-choice text-color-choice--default text-color-choice--half"
                         :class="{ 'is-selected': !filterColorDraft }"
                         title="全部颜色"
                         @click="filterColorDraft = ''"
                       >
                         全部颜色
+                      </button>
+                      <button
+                        type="button"
+                        class="text-color-choice text-color-choice--default text-color-choice--half"
+                        :class="{ 'is-selected': filterColorDraft === 'NONE' }"
+                        title="筛选没有标记颜色的订单"
+                        @click="filterColorDraft = 'NONE'"
+                      >
+                        未标记
                       </button>
                       <button
                         v-for="color in textColorPresets"
@@ -2165,7 +2183,7 @@ onMounted(() => {
                     </div>
                   </div>
                 </el-popover>
-                <span class="text-color-filter-value">{{ filters.textColor || '全部颜色' }}</span>
+                <span class="text-color-filter-value">{{ textColorFilterLabel() }}</span>
                 <el-button
                   v-if="filters.textColor"
                   text
@@ -4003,6 +4021,9 @@ onMounted(() => {
   background: var(--app-control);
   font-size: 11px;
   font-weight: 650;
+}
+.text-color-choice--half {
+  grid-column: span 4;
 }
 .text-color-picker-actions {
   display: flex;

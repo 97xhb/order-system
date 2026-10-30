@@ -426,6 +426,7 @@ describe('OrdersService deletion and ordering', () => {
       platformIds: 'platform-vip',
       submitterIds: 'submitter-7727',
       categoryIds: 'category-beauty',
+      textColor: 'NONE',
       receivableStatus: SettlementStatus.UNPAID,
       submitterSettlementStatus: SettlementStatus.PAID,
     });
@@ -438,6 +439,7 @@ describe('OrdersService deletion and ordering', () => {
             { platformId: { in: ['platform-vip'] } },
             { submitterId: { in: ['submitter-7727'] } },
             { categoryId: { in: ['category-beauty'] } },
+            { textColor: null },
             { receivableStatus: SettlementStatus.UNPAID },
             { submitterSettlementStatus: SettlementStatus.PAID },
           ]),

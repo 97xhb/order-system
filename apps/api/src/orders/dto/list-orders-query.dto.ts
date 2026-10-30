@@ -85,7 +85,7 @@ export class ListOrdersQueryDto {
 
   @ApiPropertyOptional({ example: '#2563EB' })
   @IsOptional()
-  @Matches(/^#[0-9a-fA-F]{6}$/)
+  @Matches(/^(?:#[0-9a-fA-F]{6}|NONE)$/)
   textColor?: string;
 
   @ApiPropertyOptional({ enum: ORDER_SETTLEMENT_STATUSES })
