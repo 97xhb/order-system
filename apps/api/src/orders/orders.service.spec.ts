@@ -69,6 +69,60 @@ describe('OrdersService progress linkage', () => {
     ).toBe(SettlementStatus.PAID);
   });
 
+  it('allows updating only the text color before an order is approved', async () => {
+    const existing = {
+      id: 'order-pending',
+      reviewStatus: ReviewStatus.PENDING,
+      textColor: null,
+    };
+    const orderUpdate = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        ...existing,
+        ...data,
+      }),
+    );
+    const auditCreate = jest.fn(async () => ({}));
+    const transaction = {
+      order: { update: orderUpdate },
+      auditLog: { create: auditCreate },
+    };
+    const prisma = {
+      order: { findFirst: jest.fn(async () => existing) },
+      $transaction: jest.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+
+    const result = await service.updateProgress(
+      existing.id,
+      {
+        textColor: '#2563eb',
+        reason: '订单列表修改文本颜色',
+      },
+      admin,
+    );
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: existing.id },
+      data: { textColor: '#2563EB' },
+    });
+    expect(auditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'ORDER_TEXT_COLOR_UPDATED',
+          beforeData: { textColor: null },
+          afterData: {
+            textColor: '#2563EB',
+            reason: '订单列表修改文本颜色',
+          },
+        }),
+      }),
+    );
+    expect(result.textColor).toBe('#2563EB');
+  });
+
   it('marks the shipment as delivered when customer payment is completed', async () => {
     const decimal = (value: number) => new Prisma.Decimal(value);
     const existing = {
@@ -367,6 +421,7 @@ describe('OrdersService deletion and ordering', () => {
         findMany: orderFindMany,
         count: jest.fn(async () => 0),
         aggregate: jest.fn(async () => ({
+          _count: { _all: 0 },
           _sum: {
             submitterSettlementAmount: null,
             settledProfit: null,
@@ -407,6 +462,7 @@ describe('OrdersService deletion and ordering', () => {
         findMany: orderFindMany,
         count: jest.fn(async () => 0),
         aggregate: jest.fn(async () => ({
+          _count: { _all: 0 },
           _sum: {
             submitterSettlementAmount: null,
             settledProfit: null,
@@ -455,6 +511,7 @@ describe('OrdersService deletion and ordering', () => {
         findMany: orderFindMany,
         count: jest.fn(async () => 0),
         aggregate: jest.fn(async () => ({
+          _count: { _all: 0 },
           _sum: {
             submitterSettlementAmount: null,
             settledProfit: null,
@@ -491,6 +548,52 @@ describe('OrdersService deletion and ordering', () => {
     );
   });
 
+  it('skips unchanged filter options and summary aggregation for lightweight list reloads', async () => {
+    const count = jest.fn(
+      async ({ where }: { where: Record<string, unknown> }) =>
+        'reviewStatus' in where ? 4 : 3,
+    );
+    const aggregate = jest.fn();
+    const platformFindMany = jest.fn(async () => []);
+    const categoryFindMany = jest.fn(async () => []);
+    const schemeFindMany = jest.fn(async () => []);
+    const submitterFindMany = jest.fn(async () => []);
+    const customFieldFindMany = jest.fn(async () => []);
+    const prisma = {
+      order: {
+        findMany: jest.fn(async () => []),
+        count,
+        aggregate,
+      },
+      platform: { findMany: platformFindMany },
+      category: { findMany: categoryFindMany },
+      orderScheme: { findMany: schemeFindMany },
+      submitter: { findMany: submitterFindMany },
+      customFieldDefinition: { findMany: customFieldFindMany },
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+
+    const result = await service.list({
+      includeOptions: false,
+      includeSummary: false,
+    });
+
+    expect(aggregate).not.toHaveBeenCalled();
+    expect(platformFindMany).not.toHaveBeenCalled();
+    expect(categoryFindMany).not.toHaveBeenCalled();
+    expect(schemeFindMany).not.toHaveBeenCalled();
+    expect(submitterFindMany).not.toHaveBeenCalled();
+    expect(customFieldFindMany).not.toHaveBeenCalled();
+    expect(result.pagination.total).toBe(3);
+    expect(result.quickCounts.pendingReview).toBe(4);
+    expect(result.summary).toEqual({
+      submitterSettlementAmount: '0',
+      settledProfit: '0',
+      saleAmount: '0',
+    });
+    expect(result.options).toBeNull();
+  });
+
   it('returns all edit reasons with timestamps and order custom-field metadata', async () => {
     const decimal = (value: number) => new Prisma.Decimal(value);
     const order = {
@@ -516,6 +619,7 @@ describe('OrdersService deletion and ordering', () => {
         findMany: jest.fn(async () => [order]),
         count: jest.fn(async () => 1),
         aggregate: jest.fn(async () => ({
+          _count: { _all: 1 },
           _sum: {
             submitterSettlementAmount: decimal(60),
             settledProfit: decimal(20),
@@ -570,6 +674,6 @@ describe('OrdersService deletion and ordering', () => {
       settledProfit: '20',
       saleAmount: '100',
     });
-    expect(result.options.customFields).toEqual([customField]);
+    expect(result.options?.customFields).toEqual([customField]);
   });
 });

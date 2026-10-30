@@ -14,7 +14,7 @@ import {
   Van,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { SheetData } from 'write-excel-file/browser';
 import { getApiErrorMessage } from '../lib/api-error';
@@ -124,7 +124,7 @@ interface OrdersResponse {
     submitterSettlementAmount: string | number;
     settledProfit: string | number;
     saleAmount: string | number;
-  };
+  } | null;
   quickCounts: {
     pendingReview: number;
   };
@@ -135,7 +135,7 @@ interface OrdersResponse {
     submitters: OptionItem[];
     customFields: CustomFieldOption[];
     orderTableFields: OrderTableFieldMeta[];
-  };
+  } | null;
 }
 
 interface LogisticsQueryResult {
@@ -177,7 +177,7 @@ const defaultCopyColumnKeys = ['inboundTrackingNo', 'shipmentTrackingNo'];
 const serialSortStorageKey = 'order-system:order-serial-sort';
 
 const rows = ref<OrderRow[]>([]);
-const options = reactive<OrdersResponse['options']>({
+const options = reactive<NonNullable<OrdersResponse['options']>>({
   platforms: [],
   categories: [],
   schemes: [],
@@ -236,7 +236,7 @@ const activeQuickView = ref('all');
 const batchEditVisible = ref(false);
 const batchEditSaving = ref(false);
 const rowColorPickerId = ref<string | null>(null);
-const rowColorPickerVisibility = reactive<Record<string, boolean>>({});
+const rowColorDialogVisible = ref(false);
 const rowColorDraft = ref('');
 const rowColorSaving = ref(false);
 const filterColorPickerVisible = ref(false);
@@ -321,6 +321,8 @@ const batchEditCount = computed(
     batchEditStatusFields.value.filter((item) => item.value !== null).length,
 );
 let latestLoadRequest = 0;
+let activeLoadController: AbortController | null = null;
+const optionsLoaded = ref(false);
 const visibleColumnKeys = ref<string[]>([...baseDefaultVisibleColumnKeys]);
 const columnOrderKeys = ref<string[]>([...baseDefaultVisibleColumnKeys]);
 const route = useRoute();
@@ -673,10 +675,18 @@ const orderQueryParams = (page: number, pageSize: number) => ({
 
 const load = async () => {
   const requestId = ++latestLoadRequest;
+  activeLoadController?.abort();
+  const controller = new AbortController();
+  activeLoadController = controller;
   loading.value = true;
   try {
     const response = await http.get<OrdersResponse>('/admin/orders', {
-      params: orderQueryParams(pagination.page, pagination.pageSize),
+      params: {
+        ...orderQueryParams(pagination.page, pagination.pageSize),
+        includeOptions: !optionsLoaded.value,
+        includeSummary: activeFilterCount.value > 0,
+      },
+      signal: controller.signal,
     });
     if (requestId !== latestLoadRequest) return;
     rows.value = withDisplaySerialNumbers(
@@ -685,18 +695,31 @@ const load = async () => {
       serialSort.value,
     );
     selectedRows.value = [];
-    Object.assign(options, response.data.options);
-    Object.assign(filteredSummary, response.data.summary);
+    if (response.data.options) {
+      Object.assign(options, response.data.options);
+      optionsLoaded.value = true;
+      loadVisibleColumns();
+      loadCopyColumnKeys();
+    }
+    Object.assign(
+      filteredSummary,
+      response.data.summary ?? {
+        submitterSettlementAmount: 0,
+        settledProfit: 0,
+        saleAmount: 0,
+      },
+    );
     pendingCount.value = response.data.quickCounts.pendingReview;
-    loadVisibleColumns();
-    loadCopyColumnKeys();
     pagination.total = response.data.pagination.total;
     appliedFilterCount.value = activeFilterCount.value;
   } catch (error) {
     if (requestId !== latestLoadRequest) return;
     ElMessage.error(getApiErrorMessage(error, '订单列表加载失败'));
   } finally {
-    if (requestId === latestLoadRequest) loading.value = false;
+    if (requestId === latestLoadRequest) {
+      loading.value = false;
+      if (activeLoadController === controller) activeLoadController = null;
+    }
   }
 };
 
@@ -823,16 +846,15 @@ const openRowColorPicker = (row: OrderRow) => {
   if (rowColorSaving.value) return;
   rowColorPickerId.value = row.id;
   rowColorDraft.value = row.textColor ?? '';
+  rowColorDialogVisible.value = true;
 };
 const closeRowColorPicker = () => {
   if (rowColorSaving.value) return;
-  const rowId = rowColorPickerId.value;
-  if (rowId) rowColorPickerVisibility[rowId] = false;
+  rowColorDialogVisible.value = false;
   rowColorPickerId.value = null;
   rowColorDraft.value = '';
 };
-const handleRowColorPickerHidden = (row: OrderRow) => {
-  if (rowColorPickerId.value !== row.id) return;
+const handleRowColorDialogClosed = () => {
   rowColorPickerId.value = null;
   rowColorDraft.value = '';
 };
@@ -846,7 +868,7 @@ const confirmRowColor = async () => {
   rowColorSaving.value = true;
   try {
     if (await updateTextColor(row, rowColorDraft.value || null)) {
-      rowColorPickerVisibility[row.id] = false;
+      rowColorDialogVisible.value = false;
     }
   } finally {
     rowColorSaving.value = false;
@@ -1387,7 +1409,11 @@ const exportTimestamp = () => {
 
 const filteredRowsForSpreadsheet = async () => {
   const pageSize = 200;
-  const frozenParams = orderQueryParams(1, pageSize);
+  const frozenParams = {
+    ...orderQueryParams(1, pageSize),
+    includeOptions: false,
+    includeSummary: false,
+  };
   const firstResponse = await http.get<OrdersResponse>('/admin/orders', {
     params: frozenParams,
   });
@@ -1934,6 +1960,8 @@ onMounted(() => {
   }
   void load();
 });
+
+onBeforeUnmount(() => activeLoadController?.abort());
 </script>
 
 <template>
@@ -2502,73 +2530,16 @@ onMounted(() => {
             <template #default="{ row }">
               <template v-if="column.key === 'serialNo'">
                 <div class="serial-number-cell">
-                  <el-popover
-                    v-model:visible="rowColorPickerVisibility[row.id]"
-                    placement="right-start"
-                    :width="300"
-                    trigger="click"
-                    @show="openRowColorPicker(row)"
-                    @hide="handleRowColorPickerHidden(row)"
-                  >
-                    <template #reference>
-                      <button
-                        type="button"
-                        class="order-color-dot"
-                        :class="{ 'has-color': row.textColor }"
-                        :style="{ '--order-color-dot': row.textColor || 'transparent' }"
-                        title="修改订单文本颜色"
-                        aria-label="修改订单文本颜色"
-                        aria-haspopup="dialog"
-                      />
-                    </template>
-                    <div class="text-color-picker-panel" @keydown.esc.prevent="closeRowColorPicker">
-                      <div class="text-color-picker-heading">
-                        <strong>订单文本颜色</strong>
-                        <span>{{ rowColorDraft || '默认颜色' }}</span>
-                      </div>
-                      <div class="text-color-choice-grid">
-                        <button
-                          type="button"
-                          class="text-color-choice text-color-choice--default"
-                          :class="{ 'is-selected': !rowColorDraft }"
-                          title="恢复默认颜色"
-                          @click="rowColorDraft = ''"
-                        >
-                          恢复默认
-                        </button>
-                        <button
-                          v-for="color in textColorPresets"
-                          :key="color.value"
-                          type="button"
-                          class="text-color-choice"
-                          :class="{ 'is-selected': rowColorDraft === color.value }"
-                          :style="{ '--choice-color': color.value }"
-                          :title="color.label"
-                          :aria-label="color.label"
-                          @click="rowColorDraft = color.value"
-                        >
-                          <span aria-hidden="true">✓</span>
-                        </button>
-                      </div>
-                      <div class="text-color-picker-actions">
-                        <el-button
-                          size="small"
-                          :disabled="rowColorSaving"
-                          @click="closeRowColorPicker"
-                        >
-                          取消
-                        </el-button>
-                        <el-button
-                          size="small"
-                          type="primary"
-                          :loading="rowColorSaving"
-                          @click="confirmRowColor"
-                        >
-                          确定
-                        </el-button>
-                      </div>
-                    </div>
-                  </el-popover>
+                  <button
+                    type="button"
+                    class="order-color-dot"
+                    :class="{ 'has-color': row.textColor }"
+                    :style="{ '--order-color-dot': row.textColor || 'transparent' }"
+                    title="修改订单文本颜色"
+                    aria-label="修改订单文本颜色"
+                    aria-haspopup="dialog"
+                    @click.stop="openRowColorPicker(row)"
+                  />
                   <span>{{ row.displaySerialNo }}</span>
                 </div>
               </template>
@@ -3242,6 +3213,54 @@ onMounted(() => {
           @click="batchEdit"
           >确认修改</el-button
         >
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="rowColorDialogVisible"
+      title="订单文本颜色"
+      width="min(360px, 92vw)"
+      append-to-body
+      :close-on-click-modal="false"
+      :close-on-press-escape="!rowColorSaving"
+      :show-close="!rowColorSaving"
+      @closed="handleRowColorDialogClosed"
+    >
+      <div class="text-color-picker-panel">
+        <div class="text-color-picker-heading">
+          <strong>选择订单颜色</strong>
+          <span>{{ rowColorDraft || '默认颜色' }}</span>
+        </div>
+        <div class="text-color-choice-grid">
+          <button
+            type="button"
+            class="text-color-choice text-color-choice--default"
+            :class="{ 'is-selected': !rowColorDraft }"
+            title="恢复默认颜色"
+            @click="rowColorDraft = ''"
+          >
+            恢复默认
+          </button>
+          <button
+            v-for="color in textColorPresets"
+            :key="color.value"
+            type="button"
+            class="text-color-choice"
+            :class="{ 'is-selected': rowColorDraft === color.value }"
+            :style="{ '--choice-color': color.value }"
+            :title="color.label"
+            :aria-label="color.label"
+            @click="rowColorDraft = color.value"
+          >
+            <span aria-hidden="true">✓</span>
+          </button>
+        </div>
+      </div>
+      <template #footer>
+        <el-button :disabled="rowColorSaving" @click="closeRowColorPicker">取消</el-button>
+        <el-button type="primary" :loading="rowColorSaving" @click="confirmRowColor">
+          确定
+        </el-button>
       </template>
     </el-dialog>
 

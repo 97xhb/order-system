@@ -1,6 +1,6 @@
 {
   "name": "order-registration-system",
-  "version": "1.2.9",
+  "version": "1.2.10",
   "private": true,
   "packageManager": "pnpm@11.21.0",
   "scripts": {

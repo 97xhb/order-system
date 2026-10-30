@@ -11,3 +11,15 @@ describe('ListOrdersQueryDto text color', () => {
     expect(errors.some((error) => error.property === 'textColor')).toBe(false);
   });
 });
+
+describe('ListOrdersQueryDto lightweight list flags', () => {
+  it('converts query string booleans', () => {
+    const query = plainToInstance(ListOrdersQueryDto, {
+      includeOptions: 'false',
+      includeSummary: 'false',
+    });
+
+    expect(query.includeOptions).toBe(false);
+    expect(query.includeSummary).toBe(false);
+  });
+});

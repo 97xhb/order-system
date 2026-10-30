@@ -465,6 +465,7 @@ model Order {
   @@index([customerId, orderedAt])
   @@index([profitRuleId])
   @@index([rebateScanned, deletedAt])
+  @@index([deletedAt, serialNo])
   @@map("orders")
 }
 

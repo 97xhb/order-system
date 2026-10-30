@@ -72,6 +72,26 @@ export class OrdersService {
     );
   }
 
+  private isTextColorOnlyUpdate(dto: UpdateOrderProgressDto) {
+    return (
+      dto.textColor !== undefined &&
+      dto.shipmentTrackingNo === undefined &&
+      dto.dispatchStatus === undefined &&
+      dto.receiverName === undefined &&
+      dto.orderAmount === undefined &&
+      dto.inboundTrackingNo === undefined &&
+      dto.purchaseAddress === undefined &&
+      dto.shipmentStatus === undefined &&
+      dto.saleAmount === undefined &&
+      dto.customerReceivedAmount === undefined &&
+      dto.receivableStatus === undefined &&
+      dto.submitterSettlementAmount === undefined &&
+      dto.submitterPaidAmount === undefined &&
+      dto.submitterSettlementStatus === undefined &&
+      dto.amountFormulas === undefined
+    );
+  }
+
   private ids(value: string | undefined) {
     return value
       ?.split(',')
@@ -983,6 +1003,8 @@ export class OrdersService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
     const serialSort = query.serialSort ?? 'asc';
+    const includeOptions = query.includeOptions !== false;
+    const includeSummary = query.includeSummary !== false;
     const keyword = this.clean(query.keyword);
     const platformIds = this.ids(query.platformIds);
     const submitterIds = this.ids(query.submitterIds);
@@ -1075,88 +1097,123 @@ export class OrdersService {
     // 不同筛选字段全部放进同一个 AND 组；同一字段的多选仍通过 in 表示任一选项匹配。
     const where: Prisma.OrderWhereInput = { AND: andFilters };
 
-    const [
-      items,
-      total,
-      summary,
-      platforms,
-      categories,
-      schemes,
-      submitters,
-      pendingReviewCount,
-      customFields,
-    ] = await Promise.all([
-      this.prisma.order.findMany({
-        where,
-        orderBy: [{ serialNo: serialSort }, { createdAt: serialSort }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          platform: { select: { id: true, name: true } },
-          submitter: { select: { id: true, code: true, name: true } },
-          category: { select: { id: true, name: true } },
-          scheme: { select: { id: true, name: true } },
-          customer: { select: { id: true, name: true } },
-          externalIdentity: { select: { displayCode: true } },
-          shipmentLink: {
-            include: {
-              shipment: {
-                select: {
-                  id: true,
-                  trackingNo: true,
-                  carrier: true,
-                  shippedAt: true,
+    const totalRequest = includeSummary
+      ? this.prisma.order.aggregate({
+          where,
+          _count: { _all: true },
+          _sum: {
+            submitterSettlementAmount: true,
+            settledProfit: true,
+            saleAmount: true,
+          },
+        })
+      : this.prisma.order.count({ where });
+    const optionsRequest = includeOptions
+      ? Promise.all([
+          this.prisma.platform.findMany({
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true },
+          }),
+          this.prisma.category.findMany({
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true },
+          }),
+          this.prisma.orderScheme.findMany({
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true },
+          }),
+          this.prisma.submitter.findMany({
+            orderBy: { name: 'asc' },
+            select: { id: true, code: true, name: true },
+          }),
+          this.prisma.customFieldDefinition.findMany({
+            where: { scope: CustomFieldScope.ORDER, enabled: true },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            select: {
+              id: true,
+              key: true,
+              label: true,
+              type: true,
+              showInTable: true,
+              filterable: true,
+              sortOrder: true,
+            },
+          }),
+        ]).then(
+          ([platforms, categories, schemes, submitters, customFields]) => ({
+            platforms,
+            categories,
+            schemes,
+            submitters,
+            customFields,
+            orderTableFields: orderTableFieldOptions(),
+          }),
+        )
+      : Promise.resolve(null);
+
+    const [items, totalResult, pendingReviewCount, optionsResult] =
+      await Promise.all([
+        this.prisma.order.findMany({
+          where,
+          orderBy: [{ serialNo: serialSort }, { createdAt: serialSort }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          select: {
+            id: true,
+            serialNo: true,
+            reviewStatus: true,
+            orderedAt: true,
+            productNameSnapshot: true,
+            platformOrderNo: true,
+            inboundTrackingNo: true,
+            purchaseAddress: true,
+            receiverName: true,
+            dispatchStatus: true,
+            textColor: true,
+            fundingType: true,
+            customData: true,
+            shipmentStatus: true,
+            orderAmount: true,
+            paymentDiscountAmount: true,
+            saleAmount: true,
+            customerReceivedAmount: true,
+            receivableStatus: true,
+            submitterSettlementAmount: true,
+            submitterPaidAmount: true,
+            submitterSettlementStatus: true,
+            scanAmount: true,
+            platformRebateAmount: true,
+            expectedProfit: true,
+            settledProfit: true,
+            rebateScanned: true,
+            notes: true,
+            platform: { select: { id: true, name: true } },
+            submitter: { select: { id: true, code: true, name: true } },
+            category: { select: { id: true, name: true } },
+            shipmentLink: {
+              select: {
+                shipment: {
+                  select: {
+                    trackingNo: true,
+                  },
                 },
               },
             },
+            customValues: {
+              select: { definitionId: true, value: true },
+            },
           },
-          customValues: {
-            select: { definitionId: true, value: true },
-          },
-        },
-      }),
-      this.prisma.order.count({ where }),
-      this.prisma.order.aggregate({
-        where,
-        _sum: {
-          submitterSettlementAmount: true,
-          settledProfit: true,
-          saleAmount: true,
-        },
-      }),
-      this.prisma.platform.findMany({
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-        select: { id: true, name: true },
-      }),
-      this.prisma.category.findMany({
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-        select: { id: true, name: true },
-      }),
-      this.prisma.orderScheme.findMany({
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-        select: { id: true, name: true },
-      }),
-      this.prisma.submitter.findMany({
-        orderBy: { name: 'asc' },
-        select: { id: true, code: true, name: true },
-      }),
-      this.prisma.order.count({
-        where: { deletedAt: null, reviewStatus: ReviewStatus.PENDING },
-      }),
-      this.prisma.customFieldDefinition.findMany({
-        where: { scope: CustomFieldScope.ORDER, enabled: true },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        select: {
-          id: true,
-          key: true,
-          label: true,
-          type: true,
-          showInTable: true,
-          filterable: true,
-          sortOrder: true,
-        },
-      }),
-    ]);
+        }),
+        totalRequest,
+        this.prisma.order.count({
+          where: { deletedAt: null, reviewStatus: ReviewStatus.PENDING },
+        }),
+        optionsRequest,
+      ]);
+    const total =
+      typeof totalResult === 'number' ? totalResult : totalResult._count._all;
+    const summaryResult =
+      typeof totalResult === 'number' ? null : totalResult._sum;
 
     const editLogs = items.length
       ? await this.prisma.auditLog.findMany({
@@ -1202,21 +1259,14 @@ export class OrdersService {
       },
       summary: {
         submitterSettlementAmount:
-          summary._sum.submitterSettlementAmount?.toString() ?? '0',
-        settledProfit: summary._sum.settledProfit?.toString() ?? '0',
-        saleAmount: summary._sum.saleAmount?.toString() ?? '0',
+          summaryResult?.submitterSettlementAmount?.toString() ?? '0',
+        settledProfit: summaryResult?.settledProfit?.toString() ?? '0',
+        saleAmount: summaryResult?.saleAmount?.toString() ?? '0',
       },
       quickCounts: {
         pendingReview: pendingReviewCount,
       },
-      options: {
-        platforms,
-        categories,
-        schemes,
-        submitters,
-        customFields,
-        orderTableFields: orderTableFieldOptions(),
-      },
+      options: optionsResult,
     };
   }
 
@@ -1389,6 +1439,30 @@ export class OrdersService {
       },
     });
     if (!existing) throw new NotFoundException('订单不存在');
+    if (this.isTextColorOnlyUpdate(dto)) {
+      const textColor = dto.textColor?.toUpperCase() ?? null;
+      return this.prisma.$transaction(async (transaction) => {
+        const order = await transaction.order.update({
+          where: { id },
+          data: { textColor },
+        });
+        await transaction.auditLog.create({
+          data: {
+            actorAdminId: admin.id,
+            source: 'ADMIN_WEB',
+            action: 'ORDER_TEXT_COLOR_UPDATED',
+            entityType: 'Order',
+            entityId: id,
+            beforeData: { textColor: existing.textColor },
+            afterData: {
+              textColor: order.textColor,
+              reason: this.clean(dto.reason),
+            },
+          },
+        });
+        return order;
+      });
+    }
     if (existing.reviewStatus !== ReviewStatus.APPROVED) {
       throw new ConflictException('订单审核确认后才能更新寄件和回款状态');
     }

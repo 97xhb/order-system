@@ -118,6 +118,34 @@ export class ListOrdersQueryDto {
   @IsBoolean()
   exceptionOnly?: boolean;
 
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      '是否返回平台、品类、方案、下单人等筛选选项；列表重置查询可传 false 复用前端缓存',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  includeOptions?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      '是否返回当前筛选结果的金额汇总；无筛选条件时列表页可传 false 跳过全表聚合',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  includeSummary?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
