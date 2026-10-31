@@ -8,7 +8,7 @@ import { http } from '../lib/http';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
-type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 type ShipmentStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'DELIVERED' | 'EXCEPTION';
 type SettlementStatus = 'UNPAID' | 'PAID' | 'EXCEPTION';
 type StoredSettlementStatus = SettlementStatus | 'PARTIAL';
@@ -111,7 +111,7 @@ const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
   { value: 'NOT_SHIPPED', label: '未发货' },
   { value: 'SHIPPED', label: '已发货' },
   { value: 'PARTIALLY_SHIPPED', label: '部分发货' },
-  { value: 'EXCEPTION', label: '异常' },
+  { value: 'DELIVERED', label: '已签收' },
   { value: 'CANCELLED', label: '已取消' },
 ];
 const shipmentStatusOptions: Array<{ value: ShipmentStatus; label: string }> = [

@@ -6,7 +6,7 @@ import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
-type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 
 interface OptionItem {
   id: string;
@@ -204,7 +204,7 @@ const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
   { value: 'NOT_SHIPPED', label: '未发货' },
   { value: 'SHIPPED', label: '已发货' },
   { value: 'PARTIALLY_SHIPPED', label: '部分发货' },
-  { value: 'EXCEPTION', label: '异常' },
+  { value: 'DELIVERED', label: '已签收' },
   { value: 'CANCELLED', label: '已取消' },
 ];
 const handleBatchInboundTrackingInput = (row: BatchOrderRow, value: string) => {
@@ -426,7 +426,7 @@ const dispatchStatusByText = (value: string): DispatchStatus => {
   if (!normalized) return 'NOT_SHIPPED';
   if (normalized.includes('部分') || normalized === 'partially_shipped') return 'PARTIALLY_SHIPPED';
   if (normalized.includes('取消') || normalized === 'cancelled') return 'CANCELLED';
-  if (normalized.includes('异常') || normalized === 'exception') return 'EXCEPTION';
+  if (normalized.includes('签收') || normalized === 'delivered') return 'DELIVERED';
   if (normalized.includes('已发') || normalized === 'shipped') return 'SHIPPED';
   return 'NOT_SHIPPED';
 };

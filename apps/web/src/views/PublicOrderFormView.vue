@@ -25,7 +25,7 @@ type FieldKey =
   | 'rebateScanned'
   | 'submitterSettlementAmount'
   | 'notes';
-type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 
 const system = useSystemStore();
 
@@ -209,7 +209,7 @@ const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
   { value: 'NOT_SHIPPED', label: '未发货' },
   { value: 'SHIPPED', label: '已发货' },
   { value: 'PARTIALLY_SHIPPED', label: '部分发货' },
-  { value: 'EXCEPTION', label: '异常' },
+  { value: 'DELIVERED', label: '已签收' },
   { value: 'CANCELLED', label: '已取消' },
 ];
 const selectFundingType = (value: (typeof fundingTypeOptions)[number]['value']) => {

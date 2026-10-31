@@ -91,7 +91,7 @@ const fieldDescriptions: Record<FieldKey, string> = {
   productName: '下单人填写本次实际商品、方案和数量，支持多行',
   orderedAt: '订单实际下单日期',
   platformOrderNo: '平台生成的订单编号',
-  dispatchStatus: '未发货、已发货、部分发货、异常或已取消',
+  dispatchStatus: '未发货、已发货、部分发货、已签收或已取消',
   inboundTrackingNo: '平台发货后的物流单号',
   purchaseAddress: '下单时填写的收货地址',
   receiverName: '订单对应的收货佬，默认仅后台可见',

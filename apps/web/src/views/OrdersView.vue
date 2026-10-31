@@ -33,7 +33,7 @@ interface OptionItem {
 }
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
-type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'EXCEPTION' | 'CANCELLED';
+type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 type ShipmentStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'DELIVERED' | 'EXCEPTION';
 type SettlementStatus = 'UNPAID' | 'PAID' | 'EXCEPTION';
 type StoredSettlementStatus = SettlementStatus | 'PARTIAL';
@@ -271,7 +271,7 @@ const batchDispatchStatusOptions: Array<{ label: string; value: DispatchStatus |
   { label: '未发货', value: 'NOT_SHIPPED' },
   { label: '已发货', value: 'SHIPPED' },
   { label: '部分发货', value: 'PARTIALLY_SHIPPED' },
-  { label: '异常', value: 'EXCEPTION' },
+  { label: '已签收', value: 'DELIVERED' },
   { label: '已取消', value: 'CANCELLED' },
 ];
 const batchShipmentStatusOptions: Array<{ label: string; value: ShipmentStatus | null }> = [
@@ -381,7 +381,7 @@ const dispatchStatusLabels: Record<DispatchStatus, string> = {
   NOT_SHIPPED: '未发货',
   SHIPPED: '已发货',
   PARTIALLY_SHIPPED: '部分发货',
-  EXCEPTION: '异常',
+  DELIVERED: '已签收',
   CANCELLED: '已取消',
 };
 const dispatchStatusTypes: Record<
@@ -389,9 +389,9 @@ const dispatchStatusTypes: Record<
   'primary' | 'success' | 'warning' | 'danger' | 'info'
 > = {
   NOT_SHIPPED: 'info',
-  SHIPPED: 'success',
+  SHIPPED: 'primary',
   PARTIALLY_SHIPPED: 'warning',
-  EXCEPTION: 'danger',
+  DELIVERED: 'success',
   CANCELLED: 'info',
 };
 const dispatchStatusLabel = (value: unknown) =>
@@ -2082,7 +2082,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 <el-option label="未发货" value="NOT_SHIPPED" />
                 <el-option label="已发货" value="SHIPPED" />
                 <el-option label="部分发货" value="PARTIALLY_SHIPPED" />
-                <el-option label="异常" value="EXCEPTION" />
+                <el-option label="已签收" value="DELIVERED" />
                 <el-option label="已取消" value="CANCELLED" />
               </el-select>
             </el-form-item>

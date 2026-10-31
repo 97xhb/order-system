@@ -1038,7 +1038,6 @@ export class OrdersService {
       andFilters.push({
         OR: [
           { reviewStatus: ReviewStatus.REJECTED },
-          { dispatchStatus: DispatchStatus.EXCEPTION },
           { shipmentStatus: ShipmentStatus.EXCEPTION },
           { receivableStatus: SettlementStatus.EXCEPTION },
           { submitterSettlementStatus: SettlementStatus.EXCEPTION },

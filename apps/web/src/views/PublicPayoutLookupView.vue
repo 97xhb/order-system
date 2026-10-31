@@ -51,7 +51,7 @@ const fallbackQueryFieldOptions: PayoutQueryFieldOption[] = [
     key: 'dispatchStatus',
     orderColumnKey: 'dispatchStatus',
     label: '发货状态',
-    description: '未发货、已发货、部分发货、异常或已取消',
+    description: '未发货、已发货、部分发货、已签收或已取消',
     width: 96,
     defaultVisible: false,
     publicAllowed: true,
@@ -279,7 +279,7 @@ const dispatchStatusLabels: Record<string, string> = {
   NOT_SHIPPED: '未发货',
   SHIPPED: '已发货',
   PARTIALLY_SHIPPED: '部分发货',
-  EXCEPTION: '异常',
+  DELIVERED: '已签收',
   CANCELLED: '已取消',
 };
 
