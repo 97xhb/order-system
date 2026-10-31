@@ -220,10 +220,10 @@ const selectRebateScanned = (value: boolean) => {
   if (!canEditField('rebateScanned')) return;
   form.rebateScanned = value;
 };
+const syncDispatchStatusWithTracking = (status: DispatchStatus, inboundTrackingNo: string) =>
+  inboundTrackingNo.trim() && status === 'NOT_SHIPPED' ? 'SHIPPED' : status;
 const handleInboundTrackingInput = (value: string) => {
-  if (value.trim() && form.dispatchStatus === 'NOT_SHIPPED') {
-    form.dispatchStatus = 'SHIPPED';
-  }
+  form.dispatchStatus = syncDispatchStatusWithTracking(form.dispatchStatus, value);
 };
 const statusLabels: Record<string, string> = {
   DRAFT: '草稿',
@@ -424,6 +424,7 @@ const deletePayout = async (method: { id: string; label: string }) => {
 const editOrder = (order: MyOrder) => {
   editingId.value = order.id;
   editingReviewStatus.value = order.reviewStatus;
+  const inboundTrackingNo = order.inboundTrackingNo ?? '';
   Object.assign(form, {
     wechatNickname: order.wechatNickname ?? '',
     platformId: order.platform.id,
@@ -431,8 +432,11 @@ const editOrder = (order: MyOrder) => {
     productName: order.productName,
     orderedAt: formatBusinessDate(order.orderedAt),
     platformOrderNo: order.platformOrderNo ?? '',
-    dispatchStatus: order.dispatchStatus ?? 'NOT_SHIPPED',
-    inboundTrackingNo: order.inboundTrackingNo ?? '',
+    dispatchStatus: syncDispatchStatusWithTracking(
+      order.dispatchStatus ?? 'NOT_SHIPPED',
+      inboundTrackingNo,
+    ),
+    inboundTrackingNo,
     purchaseAddress: order.purchaseAddress ?? '',
     receiverName: order.receiverName ?? '',
     fundingType: order.fundingType,

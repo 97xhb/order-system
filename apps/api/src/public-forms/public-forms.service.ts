@@ -63,6 +63,16 @@ export class PublicFormsService {
     return normalized ? normalized : null;
   }
 
+  private syncDispatchStatusWithTracking(
+    inboundTrackingNo: string | null | undefined,
+    dispatchStatus: DispatchStatus,
+  ) {
+    return this.clean(inboundTrackingNo) &&
+      dispatchStatus === DispatchStatus.NOT_SHIPPED
+      ? DispatchStatus.SHIPPED
+      : dispatchStatus;
+  }
+
   private encryptionKey() {
     return this.appConfig.getOrThrow<string>('DATA_ENCRYPTION_KEY');
   }
@@ -489,11 +499,14 @@ export class PublicFormsService {
     const inboundTrackingNo = this.clean(
       this.visibleValue(config, 'inboundTrackingNo', dto.inboundTrackingNo, ''),
     );
-    const dispatchStatus = this.visibleValue(
-      config,
-      'dispatchStatus',
-      dto.dispatchStatus,
-      inboundTrackingNo ? DispatchStatus.SHIPPED : DispatchStatus.NOT_SHIPPED,
+    const dispatchStatus = this.syncDispatchStatusWithTracking(
+      inboundTrackingNo,
+      this.visibleValue(
+        config,
+        'dispatchStatus',
+        dto.dispatchStatus,
+        inboundTrackingNo ? DispatchStatus.SHIPPED : DispatchStatus.NOT_SHIPPED,
+      ),
     );
     const receiverName = this.clean(
       this.visibleValue(config, 'receiverName', dto.receiverName, ''),
@@ -807,13 +820,10 @@ export class PublicFormsService {
       ),
       notes: editableValue('notes', dto.notes, existing.notes ?? ''),
     };
-    if (
-      dto.inboundTrackingNo?.trim() &&
-      dto.dispatchStatus === undefined &&
-      merged.dispatchStatus === DispatchStatus.NOT_SHIPPED
-    ) {
-      merged.dispatchStatus = DispatchStatus.SHIPPED;
-    }
+    merged.dispatchStatus = this.syncDispatchStatusWithTracking(
+      merged.inboundTrackingNo,
+      merged.dispatchStatus ?? existing.dispatchStatus,
+    );
     this.assertRequiredFields(config, merged);
 
     const existingCustomData = existing.customData;

@@ -176,4 +176,28 @@ describe('PublicFormsService rejected order resubmission', () => {
       }),
     );
   });
+
+  it('marks the order as shipped when a tracking number is provided', async () => {
+    const { service, orderUpdate } = createService(false);
+
+    await service.updateMine(
+      'token-1',
+      rejectedOrder.id,
+      identity as never,
+      {
+        inboundTrackingNo: 'YT123456789',
+        dispatchStatus: DispatchStatus.NOT_SHIPPED,
+      },
+      {},
+    );
+
+    expect(orderUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          inboundTrackingNo: 'YT123456789',
+          dispatchStatus: DispatchStatus.SHIPPED,
+        }),
+      }),
+    );
+  });
 });
