@@ -454,7 +454,6 @@ model Order {
   customValues     OrderCustomFieldValue[]
   affiliateOrders  AffiliateOrder[]
 
-  @@unique([platformId, platformOrderNo])
   @@index([orderedAt])
   @@index([reviewStatus, deletedAt])
   @@index([shipmentStatus, deletedAt])
