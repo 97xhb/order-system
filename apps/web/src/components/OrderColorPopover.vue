@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-
-interface ColorPreset {
-  label: string;
-  value: string;
-}
+import type { TextColorPreset } from '../lib/text-colors';
+import TextColorPalette from './TextColorPalette.vue';
 
 const props = defineProps<{
   color: string | null;
-  presets: ColorPreset[];
+  presets: readonly TextColorPreset[];
   save: (color: string | null) => Promise<boolean>;
 }>();
 
@@ -66,30 +63,12 @@ const confirm = async () => {
         <strong>订单文本颜色</strong>
         <span>{{ draft || '默认颜色' }}</span>
       </div>
-      <div class="text-color-choice-grid">
-        <button
-          type="button"
-          class="text-color-choice text-color-choice--default"
-          :class="{ 'is-selected': !draft }"
-          title="恢复默认颜色"
-          @click="draft = ''"
-        >
-          恢复默认
-        </button>
-        <button
-          v-for="preset in presets"
-          :key="preset.value"
-          type="button"
-          class="text-color-choice"
-          :class="{ 'is-selected': draft === preset.value }"
-          :style="{ '--choice-color': preset.value }"
-          :title="preset.label"
-          :aria-label="preset.label"
-          @click="draft = preset.value"
-        >
-          <span aria-hidden="true">✓</span>
-        </button>
-      </div>
+      <TextColorPalette
+        :presets="presets"
+        :selected="draft"
+        default-label="恢复默认"
+        @select="draft = $event || ''"
+      />
       <div class="text-color-picker-actions">
         <el-button size="small" :disabled="saving" @click="close">取消</el-button>
         <el-button size="small" type="primary" :loading="saving" @click="confirm"> 确定 </el-button>
@@ -118,54 +97,6 @@ const confirm = async () => {
   color: var(--app-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-}
-.text-color-choice-grid {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 5px;
-}
-.text-color-choice {
-  position: relative;
-  display: grid;
-  width: 100%;
-  aspect-ratio: 1;
-  min-height: 24px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--choice-color) 74%, var(--app-border));
-  border-radius: 7px;
-  color: var(--app-muted);
-  background: var(--choice-color);
-  cursor: pointer;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--app-card-solid) 24%, transparent);
-}
-.text-color-choice > span {
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-  opacity: 0;
-  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.46);
-}
-.text-color-choice:hover {
-  transform: translateY(-1px);
-}
-.text-color-choice.is-selected {
-  box-shadow:
-    0 0 0 2px var(--app-card-solid),
-    0 0 0 4px var(--app-primary);
-}
-.text-color-choice.is-selected > span {
-  opacity: 1;
-}
-.text-color-choice--default {
-  aspect-ratio: auto;
-  min-height: 28px;
-  grid-column: 1 / -1;
-  border-color: var(--app-border);
-  color: var(--app-text);
-  background: var(--app-control);
-  font-size: 11px;
-  font-weight: 650;
 }
 .text-color-picker-actions {
   display: flex;

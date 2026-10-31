@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue';
+import { TEXT_COLOR_PRESETS } from '../lib/text-colors';
+import TextColorPalette from './TextColorPalette.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -22,7 +24,8 @@ const emit = defineEmits<{
 }>();
 
 const editor = ref<HTMLElement | null>(null);
-const color = ref('#d92d20');
+const color = ref<string | null>(null);
+const colorVisible = ref(false);
 const fontSize = ref('3');
 const plainTextLength = ref(0);
 const sizeOptions = [
@@ -87,6 +90,15 @@ const applyFontSize = (value: string) => {
   execCommand('fontSize', value);
 };
 
+const applyTextColor = (value: string | null) => {
+  const element = editor.value;
+  if (!element) return;
+  const nextColor = value || getComputedStyle(element).color;
+  color.value = value;
+  execCommand('foreColor', nextColor);
+  colorVisible.value = false;
+};
+
 const handlePaste = (event: ClipboardEvent) => {
   event.preventDefault();
   restoreSelection();
@@ -146,10 +158,42 @@ onMounted(() => nextTick(renderValue));
           {{ option.label }}
         </button>
       </div>
-      <label class="rich-color-control" title="文字颜色">
-        <span>颜色</span>
-        <input v-model="color" type="color" @input="execCommand('foreColor', color)" />
-      </label>
+      <el-popover
+        v-model:visible="colorVisible"
+        placement="bottom-start"
+        :width="300"
+        trigger="click"
+      >
+        <template #reference>
+          <button
+            type="button"
+            class="rich-tool-button rich-color-trigger"
+            title="文字颜色"
+            aria-label="文字颜色"
+            aria-haspopup="dialog"
+            @mousedown.prevent="rememberSelection"
+          >
+            <span class="rich-color-letter" aria-hidden="true">A</span>
+            <span
+              class="rich-color-indicator"
+              :style="{ '--rich-color-current': color || 'var(--app-text)' }"
+              aria-hidden="true"
+            />
+          </button>
+        </template>
+        <div class="rich-color-picker-panel" @mousedown.prevent>
+          <div class="rich-color-picker-heading">
+            <strong>文字颜色</strong>
+            <span>{{ color || '默认颜色' }}</span>
+          </div>
+          <TextColorPalette
+            :presets="TEXT_COLOR_PRESETS"
+            :selected="color"
+            default-label="恢复默认"
+            @select="applyTextColor"
+          />
+        </div>
+      </el-popover>
       <button
         type="button"
         class="rich-tool-button rich-clear-button"
@@ -241,26 +285,47 @@ onMounted(() => nextTick(renderValue));
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary) 10%, var(--app-card-solid));
 }
-.rich-color-control {
+.rich-color-trigger {
+  position: relative;
   display: inline-flex;
-  height: 30px;
+  width: 34px;
   align-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  color: var(--app-muted);
-  background: var(--app-card-solid);
-  cursor: pointer;
-  font-size: 11px;
-  gap: 5px;
+  justify-content: center;
+  padding: 0 0 4px;
 }
-.rich-color-control input {
-  width: 19px;
-  height: 19px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
+.rich-color-letter {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+.rich-color-indicator {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  left: 6px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--rich-color-current);
+}
+.rich-color-picker-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rich-color-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rich-color-picker-heading strong {
+  color: var(--app-heading);
+  font-size: 13px;
+}
+.rich-color-picker-heading span {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .rich-text-editor {
   min-height: var(--rich-text-min-height);
