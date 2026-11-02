@@ -293,11 +293,22 @@ export class OrdersService {
     submittedAmount: number | undefined,
     currentAmount: Prisma.Decimal,
     targetAmount: Prisma.Decimal,
+    context?: {
+      targetChanged?: boolean;
+      currentStatus?: SettlementStatus;
+    },
   ) {
     if (status === SettlementStatus.PAID) return targetAmount;
     if (status === SettlementStatus.UNPAID) return new Prisma.Decimal(0);
     if (submittedAmount !== undefined) {
       return new Prisma.Decimal(submittedAmount);
+    }
+    if (
+      context?.targetChanged &&
+      status === undefined &&
+      context.currentStatus === SettlementStatus.PAID
+    ) {
+      return targetAmount;
     }
     return currentAmount;
   }
@@ -734,12 +745,20 @@ export class OrdersService {
           dto.customerReceivedAmount,
           existing.customerReceivedAmount,
           saleAmount,
+          {
+            targetChanged: dto.saleAmount !== undefined,
+            currentStatus: existing.receivableStatus,
+          },
         );
         const submitterPaidAmount = this.amountForManualStatus(
           requestedSubmitterSettlementStatus,
           dto.submitterPaidAmount,
           existing.submitterPaidAmount,
           submitterSettlementAmount,
+          {
+            targetChanged: dto.submitterSettlementAmount !== undefined,
+            currentStatus: existing.submitterSettlementStatus,
+          },
         );
         const receivableStatus =
           requestedReceivableStatus ??
@@ -1525,12 +1544,20 @@ export class OrdersService {
       dto.customerReceivedAmount,
       existing.customerReceivedAmount,
       saleAmount,
+      {
+        targetChanged: dto.saleAmount !== undefined,
+        currentStatus: existing.receivableStatus,
+      },
     );
     const submitterPaidAmount = this.amountForManualStatus(
       requestedSubmitterSettlementStatus,
       dto.submitterPaidAmount,
       existing.submitterPaidAmount,
       submitterSettlementAmount,
+      {
+        targetChanged: dto.submitterSettlementAmount !== undefined,
+        currentStatus: existing.submitterSettlementStatus,
+      },
     );
     const receivableStatus =
       requestedReceivableStatus ??

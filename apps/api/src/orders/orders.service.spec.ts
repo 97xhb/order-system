@@ -338,6 +338,120 @@ describe('OrdersService progress linkage', () => {
       }),
     );
   });
+
+  it('recalculates paid profit on every batch amount update', async () => {
+    const decimal = (value: number) => new Prisma.Decimal(value);
+    let existing = {
+      id: 'order-repeat-profit',
+      reviewStatus: ReviewStatus.APPROVED,
+      shipmentStatus: ShipmentStatus.DELIVERED,
+      dispatchStatus: DispatchStatus.SHIPPED,
+      receivableStatus: SettlementStatus.PAID,
+      submitterSettlementStatus: SettlementStatus.PAID,
+      saleAmount: decimal(6330),
+      customerReceivedAmount: decimal(6330),
+      orderAmount: decimal(6000),
+      submitterSettlementAmount: decimal(3139),
+      submitterPaidAmount: decimal(3139),
+      paymentDiscountAmount: decimal(0),
+      platformRebateAmount: decimal(100),
+      shippingCostAmount: decimal(0),
+      serviceFeeAmount: decimal(0),
+      otherIncomeAmount: decimal(0),
+      otherCostAmount: decimal(0),
+      profitAdjustment: decimal(0),
+      expectedProfit: decimal(9291),
+      settledProfit: decimal(9291),
+      profitRuleSnapshot: {
+        definition: {
+          schemaVersion: 1,
+          roundingScale: 2,
+          terms: [
+            { field: 'CUSTOMER_RECEIVED_AMOUNT', operation: 'ADD' },
+            { field: 'SUBMITTER_SETTLEMENT_AMOUNT', operation: 'SUBTRACT' },
+            { field: 'ORDER_AMOUNT', operation: 'ADD' },
+            { field: 'PLATFORM_REBATE_AMOUNT', operation: 'ADD' },
+          ],
+        },
+        requiresFullCustomerPayment: true,
+      },
+      inboundTrackingNo: null,
+      purchaseAddress: null,
+      receiverName: null,
+      textColor: null,
+      customData: null,
+      shipmentLink: null,
+    };
+    const orderUpdate = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => {
+        existing = { ...existing, ...data };
+        return existing;
+      },
+    );
+    const transaction = {
+      order: { update: orderUpdate },
+      shipment: { update: jest.fn() },
+      auditLog: { create: jest.fn(async () => ({})) },
+    };
+    const prisma = {
+      order: { findFirst: jest.fn(async () => existing) },
+      $transaction: jest.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+    const amountFormulas = {
+      orderAmount: '',
+      submitterSettlementAmount: '',
+      saleAmount: '',
+    };
+
+    await service.updateProgress(
+      existing.id,
+      {
+        saleAmount: 3165,
+        submitterSettlementAmount: 3000,
+        orderAmount: 3500,
+        amountFormulas,
+        reason: '订单列表批量修改字段',
+      },
+      admin,
+    );
+    await service.updateProgress(
+      existing.id,
+      {
+        saleAmount: 2000,
+        submitterSettlementAmount: 2500,
+        orderAmount: 2200,
+        amountFormulas,
+        reason: '订单列表批量修改字段',
+      },
+      admin,
+    );
+
+    const firstUpdate = orderUpdate.mock.calls[0][0].data as {
+      customerReceivedAmount: Prisma.Decimal;
+      submitterPaidAmount: Prisma.Decimal;
+      expectedProfit: Prisma.Decimal;
+      settledProfit: Prisma.Decimal;
+    };
+    expect(firstUpdate.customerReceivedAmount.toNumber()).toBe(3165);
+    expect(firstUpdate.submitterPaidAmount.toNumber()).toBe(3000);
+    expect(firstUpdate.expectedProfit.toNumber()).toBe(3765);
+    expect(firstUpdate.settledProfit.toNumber()).toBe(3765);
+
+    const secondUpdate = orderUpdate.mock.calls[1][0].data as {
+      customerReceivedAmount: Prisma.Decimal;
+      submitterPaidAmount: Prisma.Decimal;
+      expectedProfit: Prisma.Decimal;
+      settledProfit: Prisma.Decimal;
+    };
+    expect(secondUpdate.customerReceivedAmount.toNumber()).toBe(2000);
+    expect(secondUpdate.submitterPaidAmount.toNumber()).toBe(2500);
+    expect(secondUpdate.expectedProfit.toNumber()).toBe(1800);
+    expect(secondUpdate.settledProfit.toNumber()).toBe(1800);
+  });
 });
 
 describe('OrdersService deletion and ordering', () => {
