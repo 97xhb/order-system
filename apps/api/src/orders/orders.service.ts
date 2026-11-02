@@ -1022,6 +1022,7 @@ export class OrdersService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
     const serialSort = query.serialSort ?? 'asc';
+    const submitterOrderCountSort = query.submitterOrderCountSort;
     const includeOptions = query.includeOptions !== false;
     const includeSummary = query.includeSummary !== false;
     const keyword = this.clean(query.keyword);
@@ -1169,65 +1170,140 @@ export class OrdersService {
         )
       : Promise.resolve(null);
 
-    const [items, totalResult, pendingReviewCount, optionsResult] =
-      await Promise.all([
-        this.prisma.order.findMany({
+    const orderSelect = {
+      id: true,
+      serialNo: true,
+      reviewStatus: true,
+      orderedAt: true,
+      productNameSnapshot: true,
+      platformOrderNo: true,
+      inboundTrackingNo: true,
+      purchaseAddress: true,
+      receiverName: true,
+      dispatchStatus: true,
+      textColor: true,
+      fundingType: true,
+      customData: true,
+      shipmentStatus: true,
+      orderAmount: true,
+      paymentDiscountAmount: true,
+      saleAmount: true,
+      customerReceivedAmount: true,
+      receivableStatus: true,
+      submitterSettlementAmount: true,
+      submitterPaidAmount: true,
+      submitterSettlementStatus: true,
+      scanAmount: true,
+      platformRebateAmount: true,
+      expectedProfit: true,
+      settledProfit: true,
+      rebateScanned: true,
+      notes: true,
+      platform: { select: { id: true, name: true } },
+      submitter: { select: { id: true, code: true, name: true } },
+      category: { select: { id: true, name: true } },
+      shipmentLink: {
+        select: {
+          shipment: {
+            select: {
+              trackingNo: true,
+            },
+          },
+        },
+      },
+      customValues: {
+        select: { definitionId: true, value: true },
+      },
+    } satisfies Prisma.OrderSelect;
+    const serialItemsRequest = submitterOrderCountSort
+      ? Promise.resolve(null)
+      : this.prisma.order.findMany({
           where,
           orderBy: [{ serialNo: serialSort }, { createdAt: serialSort }],
           skip: (page - 1) * pageSize,
           take: pageSize,
-          select: {
-            id: true,
-            serialNo: true,
-            reviewStatus: true,
-            orderedAt: true,
-            productNameSnapshot: true,
-            platformOrderNo: true,
-            inboundTrackingNo: true,
-            purchaseAddress: true,
-            receiverName: true,
-            dispatchStatus: true,
-            textColor: true,
-            fundingType: true,
-            customData: true,
-            shipmentStatus: true,
-            orderAmount: true,
-            paymentDiscountAmount: true,
-            saleAmount: true,
-            customerReceivedAmount: true,
-            receivableStatus: true,
-            submitterSettlementAmount: true,
-            submitterPaidAmount: true,
-            submitterSettlementStatus: true,
-            scanAmount: true,
-            platformRebateAmount: true,
-            expectedProfit: true,
-            settledProfit: true,
-            rebateScanned: true,
-            notes: true,
-            platform: { select: { id: true, name: true } },
-            submitter: { select: { id: true, code: true, name: true } },
-            category: { select: { id: true, name: true } },
-            shipmentLink: {
-              select: {
-                shipment: {
-                  select: {
-                    trackingNo: true,
-                  },
-                },
-              },
+          select: orderSelect,
+        });
+    const submitterGroupsRequest = submitterOrderCountSort
+      ? this.prisma.order.groupBy({
+          by: ['submitterId'],
+          where,
+          _count: { _all: true },
+        })
+      : Promise.resolve(null);
+    const [
+      serialItems,
+      totalResult,
+      pendingReviewCount,
+      optionsResult,
+      submitterGroups,
+    ] = await Promise.all([
+      serialItemsRequest,
+      totalRequest,
+      this.prisma.order.count({
+        where: { deletedAt: null, reviewStatus: ReviewStatus.PENDING },
+      }),
+      optionsRequest,
+      submitterGroupsRequest,
+    ]);
+    type OrderListRow = Prisma.OrderGetPayload<{
+      select: typeof orderSelect;
+    }> & { submitterOrderCount?: number };
+    let items = (serialItems ?? []) as OrderListRow[];
+    if (submitterGroups) {
+      const rankedGroups = [...submitterGroups].sort((left, right) => {
+        const countDifference = left._count._all - right._count._all;
+        if (countDifference !== 0) {
+          return submitterOrderCountSort === 'asc'
+            ? countDifference
+            : -countDifference;
+        }
+        return left.submitterId.localeCompare(right.submitterId);
+      });
+      let remainingOffset = (page - 1) * pageSize;
+      let remainingTake = pageSize;
+      const pageGroups: Array<{
+        submitterId: string;
+        skip: number;
+        take: number;
+        count: number;
+      }> = [];
+      for (const group of rankedGroups) {
+        const count = group._count._all;
+        if (remainingOffset >= count) {
+          remainingOffset -= count;
+          continue;
+        }
+        const take = Math.min(count - remainingOffset, remainingTake);
+        pageGroups.push({
+          submitterId: group.submitterId,
+          skip: remainingOffset,
+          take,
+          count,
+        });
+        remainingTake -= take;
+        remainingOffset = 0;
+        if (remainingTake <= 0) break;
+      }
+      const groupedItems = await Promise.all(
+        pageGroups.map(async (group) => {
+          const groupItems = await this.prisma.order.findMany({
+            where: {
+              AND: [where, { submitterId: group.submitterId }],
             },
-            customValues: {
-              select: { definitionId: true, value: true },
-            },
-          },
+            orderBy: [{ serialNo: serialSort }, { createdAt: serialSort }],
+            skip: group.skip,
+            take: group.take,
+            select: orderSelect,
+          });
+          return groupItems.map((order) => ({
+            ...order,
+            submitterOrderCount: group.count,
+          }));
         }),
-        totalRequest,
-        this.prisma.order.count({
-          where: { deletedAt: null, reviewStatus: ReviewStatus.PENDING },
-        }),
-        optionsRequest,
-      ]);
+      );
+      items = groupedItems.flat();
+    }
     const total =
       typeof totalResult === 'number' ? totalResult : totalResult._count._all;
     const summaryResult =

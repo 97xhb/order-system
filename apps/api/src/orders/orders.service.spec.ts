@@ -594,6 +594,92 @@ describe('OrdersService deletion and ordering', () => {
     );
   });
 
+  it('sorts orders by each submitter order count within the current filter', async () => {
+    const decimal = (value: number) => new Prisma.Decimal(value);
+    const makeOrder = (
+      id: string,
+      submitterId: string,
+      submitterName: string,
+    ) => ({
+      id,
+      serialNo: Number(id.replace(/\D/g, '')),
+      saleAmount: decimal(100),
+      customerReceivedAmount: decimal(0),
+      submitterSettlementAmount: decimal(80),
+      submitterPaidAmount: decimal(0),
+      submitter: { id: submitterId, name: submitterName, code: submitterId },
+    });
+    const orderFindMany = jest.fn(
+      async ({
+        where,
+      }: {
+        where: { AND: Array<{ submitterId?: string }> };
+      }) => {
+        const submitterId = where.AND.at(-1)?.submitterId;
+        if (submitterId === 'submitter-large') {
+          return [
+            makeOrder('order-1', submitterId, '大客户'),
+            makeOrder('order-2', submitterId, '大客户'),
+            makeOrder('order-3', submitterId, '大客户'),
+          ];
+        }
+        if (submitterId === 'submitter-small') {
+          return [makeOrder('order-4', submitterId, '小客户')];
+        }
+        return [];
+      },
+    );
+    const prisma = {
+      order: {
+        findMany: orderFindMany,
+        groupBy: jest.fn(async () => [
+          { submitterId: 'submitter-small', _count: { _all: 1 } },
+          { submitterId: 'submitter-large', _count: { _all: 3 } },
+        ]),
+        count: jest.fn(async () => 4),
+        aggregate: jest.fn(),
+      },
+      auditLog: { findMany: jest.fn(async () => []) },
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+
+    const result = await service.list({
+      page: 1,
+      pageSize: 4,
+      includeOptions: false,
+      includeSummary: false,
+      submitterOrderCountSort: 'desc',
+    });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'order-1',
+        submitterOrderCount: 3,
+      }),
+      expect.objectContaining({
+        id: 'order-2',
+        submitterOrderCount: 3,
+      }),
+      expect.objectContaining({
+        id: 'order-3',
+        submitterOrderCount: 3,
+      }),
+      expect.objectContaining({
+        id: 'order-4',
+        submitterOrderCount: 1,
+      }),
+    ]);
+    expect(orderFindMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [expect.anything(), { submitterId: 'submitter-small' }],
+        },
+        skip: 0,
+        take: 1,
+      }),
+    );
+  });
+
   it('requires independent order filters to match together', async () => {
     const orderFindMany = jest.fn(async () => []);
     const prisma = {

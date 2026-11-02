@@ -39,6 +39,9 @@ type SettlementStatus = 'UNPAID' | 'PAID' | 'EXCEPTION';
 type StoredSettlementStatus = SettlementStatus | 'PARTIAL';
 type ReviewStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
 type SerialSort = 'asc' | 'desc';
+type SubmitterOrderCountSort = 'asc' | 'desc';
+type OrderSortCommand =
+  'serial-asc' | 'serial-desc' | 'submitter-count-desc' | 'submitter-count-asc';
 type CustomFieldType =
   | 'TEXT'
   | 'LONG_TEXT'
@@ -113,6 +116,7 @@ interface OrderApiRow {
   notes: string | null;
   editReasonHistory: EditReasonEntry[];
   customValues: OrderCustomFieldValue[];
+  submitterOrderCount?: number;
 }
 
 interface OrderRow extends OrderApiRow {
@@ -334,6 +338,7 @@ const pagination = reactive({ page: 1, pageSize: 50, total: 0 });
 const serialSort = ref<SerialSort>(
   localStorage.getItem(serialSortStorageKey) === 'desc' ? 'desc' : 'asc',
 );
+const submitterOrderCountSort = ref<SubmitterOrderCountSort | null>(null);
 const filters = reactive({
   keyword: '',
   dateRange: [] as string[],
@@ -637,6 +642,7 @@ const orderQueryParams = (page: number, pageSize: number) => ({
   page,
   pageSize,
   serialSort: serialSort.value,
+  submitterOrderCountSort: submitterOrderCountSort.value ?? undefined,
   keyword: filters.keyword || undefined,
   orderedFrom: filters.dateRange[0],
   orderedTo: filters.dateRange[1],
@@ -710,9 +716,24 @@ const query = () => {
   void load();
 };
 
-const toggleSerialSort = () => {
-  serialSort.value = serialSort.value === 'asc' ? 'desc' : 'asc';
-  localStorage.setItem(serialSortStorageKey, serialSort.value);
+const orderSortLabel = computed(() => {
+  if (submitterOrderCountSort.value === 'desc') return '下单人报单量多到少';
+  if (submitterOrderCountSort.value === 'asc') return '下单人报单量少到多';
+  return serialSort.value === 'asc' ? '序号正序' : '序号倒序';
+});
+const orderSortIcon = computed(() =>
+  submitterOrderCountSort.value === 'asc' ||
+  (!submitterOrderCountSort.value && serialSort.value === 'asc')
+    ? ArrowUp
+    : ArrowDown,
+);
+const changeOrderSort = (command: OrderSortCommand) => {
+  submitterOrderCountSort.value =
+    command === 'submitter-count-desc' ? 'desc' : command === 'submitter-count-asc' ? 'asc' : null;
+  if (command === 'serial-asc' || command === 'serial-desc') {
+    serialSort.value = command === 'serial-asc' ? 'asc' : 'desc';
+    localStorage.setItem(serialSortStorageKey, serialSort.value);
+  }
   pagination.page = 1;
   void load();
 };
@@ -2249,14 +2270,23 @@ onBeforeUnmount(() => activeLoadController?.abort());
           >
             {{ selectedRows.length ? `导出所选 ${selectedRows.length} 笔` : '导出 XLSX' }}
           </el-button>
-          <el-button
-            class="serial-sort-button"
-            round
-            :icon="serialSort === 'asc' ? ArrowUp : ArrowDown"
-            @click="toggleSerialSort"
-          >
-            {{ serialSort === 'asc' ? '序号正序' : '序号倒序' }}
-          </el-button>
+          <el-dropdown trigger="click" @command="changeOrderSort">
+            <el-button class="serial-sort-button" round :icon="orderSortIcon">
+              {{ orderSortLabel }}
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="serial-asc">序号正序</el-dropdown-item>
+                <el-dropdown-item command="serial-desc">序号倒序</el-dropdown-item>
+                <el-dropdown-item divided command="submitter-count-desc">
+                  下单人报单量：多到少
+                </el-dropdown-item>
+                <el-dropdown-item command="submitter-count-asc">
+                  下单人报单量：少到多
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-popover placement="bottom-end" :width="360" trigger="click">
             <template #reference>
               <el-button round :icon="Setting">列设置</el-button>
@@ -2488,7 +2518,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
               </template>
               <template v-else-if="column.key === 'orderedAt'">{{ date(row.orderedAt) }}</template>
               <template v-else-if="column.key === 'platform'">{{ row.platform.name }}</template>
-              <template v-else-if="column.key === 'submitter'">{{ row.submitter.name }}</template>
+              <template v-else-if="column.key === 'submitter'">
+                <div class="submitter-volume-cell">
+                  <span>{{ row.submitter.name }}</span>
+                  <small v-if="row.submitterOrderCount !== undefined">
+                    {{ row.submitterOrderCount }} 笔
+                  </small>
+                </div>
+              </template>
               <template v-else-if="column.key === 'category'">
                 {{ row.category?.name || '-' }}
               </template>
@@ -2727,7 +2764,12 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 <time>{{ date(row.orderedAt) }}</time>
               </div>
               <strong class="product-lines">{{ row.productNameSnapshot }}</strong>
-              <small>{{ row.platform.name }} · {{ row.submitter.name }}</small>
+              <small>
+                {{ row.platform.name }} · {{ row.submitter.name }}
+                <template v-if="row.submitterOrderCount !== undefined">
+                  · 报单 {{ row.submitterOrderCount }} 笔
+                </template>
+              </small>
             </div>
             <el-tag :type="statusTypes[row.reviewStatus]" size="small">
               {{ statusLabels[row.reviewStatus] }}
@@ -3330,6 +3372,29 @@ onBeforeUnmount(() => activeLoadController?.abort());
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.submitter-volume-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+.submitter-volume-cell > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.submitter-volume-cell > small {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, var(--app-card-solid));
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.6;
 }
 
 /* 运单号与手机尾号分开显示，避免混在一起被当成运单号提交给快递接口。 */

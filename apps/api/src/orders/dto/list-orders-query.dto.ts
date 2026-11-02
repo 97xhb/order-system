@@ -42,6 +42,14 @@ export class ListOrdersQueryDto {
   @IsIn(['asc', 'desc'])
   serialSort?: 'asc' | 'desc';
 
+  @ApiPropertyOptional({
+    enum: ['asc', 'desc'],
+    description: '按当前筛选结果中的下单人报单量排序',
+  })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  submitterOrderCountSort?: 'asc' | 'desc';
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
