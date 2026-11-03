@@ -3047,11 +3047,16 @@ onBeforeUnmount(() => activeLoadController?.abort());
               />
             </div>
           </label>
-          <label class="batch-edit-field">
+          <label class="batch-edit-field batch-edit-field--wide">
             <span class="batch-edit-label">寄件运单号</span>
             <el-input
               v-model="batchEditForm.shipmentTrackingNo"
-              placeholder="留空不修改，填单号自动改为已寄出"
+              type="textarea"
+              :rows="2"
+              maxlength="150"
+              clearable
+              resize="vertical"
+              placeholder="留空不修改，支持多行填写，填单号自动改为已寄出"
             />
           </label>
           <div class="status-grid batch-status-grid">

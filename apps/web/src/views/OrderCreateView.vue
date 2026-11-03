@@ -913,11 +913,15 @@ onMounted(async () => {
                 {{ option.label }}
               </button>
             </div>
-            <el-form-item label="寄件运单号">
+            <el-form-item label="寄件运单号" class="compact-textarea">
               <el-input
                 v-model="form.shipmentTrackingNo"
+                type="textarea"
+                :rows="2"
+                maxlength="150"
                 clearable
-                placeholder="多个订单可填写相同运单号"
+                resize="vertical"
+                placeholder="支持多行填写寄件运单号"
               />
             </el-form-item>
             <el-form-item label="收货佬">
