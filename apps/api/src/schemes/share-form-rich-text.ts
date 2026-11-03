@@ -32,7 +32,7 @@ export function sanitizeShareFormRichText(value: string | null | undefined) {
       span: ['style'],
       p: ['style'],
       div: ['style'],
-      img: ['src', 'alt'],
+      img: ['src', 'alt', 'style'],
     },
     allowedStyles: {
       '*': {
@@ -41,6 +41,9 @@ export function sanitizeShareFormRichText(value: string | null | undefined) {
         'font-weight': [/^(400|500|600|700|bold)$/],
         'text-decoration': [/^(none|underline)$/],
         'text-align': [/^(left|center|right)$/],
+      },
+      img: {
+        width: [/^(?:[2-9]\d|100)%$/],
       },
     },
     allowedSchemesByTag: {

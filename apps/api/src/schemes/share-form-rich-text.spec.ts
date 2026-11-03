@@ -48,15 +48,19 @@ describe('sanitizeShareFormRichText', () => {
     ].join('');
     const result = sanitizeShareFormRichText(`
       <p>方案图片</p>
-      <img src="${safeDataUrl}" alt="商品图片" onerror="alert(1)">
+      <img src="${safeDataUrl}" alt="商品图片" style="width:65%" onerror="alert(1)">
       <img src="https://example.com/remote.png">
       <img src="${unsafeSvgDataUrl}">
+      <img src="${safeDataUrl}" alt="超宽图片" style="width:110%">
     `);
 
-    expect(result).toContain(`<img src="${safeDataUrl}" alt="商品图片" />`);
+    expect(result).toContain(
+      `<img src="${safeDataUrl}" alt="商品图片" style="width:65%" />`,
+    );
     expect(result).not.toContain('https://example.com');
     expect(result).not.toContain('svg+xml');
     expect(result).not.toContain('onerror');
+    expect(result).not.toContain('width:110%');
   });
 
   it('extracts readable multiline text from formatted scheme content', () => {

@@ -34,6 +34,8 @@ const fontSize = ref('3');
 const plainTextLength = ref(0);
 const imageInput = ref<HTMLInputElement | null>(null);
 const imageUploading = ref(false);
+const selectedImage = ref<HTMLImageElement | null>(null);
+const imageWidth = ref(100);
 const sizeOptions = [
   { label: '小字', value: '2' },
   { label: '正文', value: '3' },
@@ -50,6 +52,14 @@ const editorText = (element: HTMLElement) =>
 
 const hasEditorImages = (element: HTMLElement) => Boolean(element.querySelector('img'));
 
+const serializeEditorContent = (element: HTMLElement) => {
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone
+    .querySelectorAll('img.is-image-selected')
+    .forEach((image) => image.classList.remove('is-image-selected'));
+  return clone.innerHTML.trim();
+};
+
 const emitContent = () => {
   const element = editor.value;
   if (!element) return;
@@ -57,12 +67,13 @@ const emitContent = () => {
   const hasImages = hasEditorImages(element);
   plainTextLength.value = visibleText.length;
   emit('update:plainText', visibleText || (hasImages ? '[图片]' : ''));
-  emit('update:modelValue', visibleText || hasImages ? element.innerHTML.trim() : '');
+  emit('update:modelValue', visibleText || hasImages ? serializeEditorContent(element) : '');
 };
 
 const renderValue = () => {
   const element = editor.value;
-  if (!element || element.innerHTML === props.modelValue) return;
+  if (!element || serializeEditorContent(element) === props.modelValue) return;
+  selectedImage.value = null;
   element.innerHTML = props.modelValue;
   const visibleText = editorText(element);
   plainTextLength.value = visibleText.length;
@@ -110,6 +121,50 @@ const applyTextColor = (value: string | null) => {
 
 const chooseImage = () => {
   imageInput.value?.click();
+};
+
+const imageWidthPercent = (image: HTMLImageElement) => {
+  const parsed = Number.parseFloat(image.style.width);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.min(100, Math.max(20, Math.round(parsed / 5) * 5));
+};
+
+const clearSelectedImage = () => {
+  selectedImage.value?.classList.remove('is-image-selected');
+  selectedImage.value = null;
+};
+
+const handleEditorClick = (event: MouseEvent) => {
+  const target = event.target;
+  if (!(target instanceof HTMLImageElement)) {
+    clearSelectedImage();
+    return;
+  }
+  if (!editor.value?.contains(target)) return;
+  clearSelectedImage();
+  selectedImage.value = target;
+  imageWidth.value = imageWidthPercent(target);
+  target.classList.add('is-image-selected');
+};
+
+const applyImageWidth = (value: number | number[]) => {
+  const image = selectedImage.value;
+  if (!image || !editor.value?.contains(image)) {
+    clearSelectedImage();
+    return;
+  }
+  const nextValue = Array.isArray(value) ? value[0] : value;
+  const normalized = Math.min(100, Math.max(20, Math.round(nextValue / 5) * 5));
+  imageWidth.value = normalized;
+  image.style.width = `${normalized}%`;
+  emitContent();
+};
+
+const handleEditorInput = () => {
+  if (selectedImage.value && !editor.value?.contains(selectedImage.value)) {
+    clearSelectedImage();
+  }
+  emitContent();
 };
 
 const loadImage = (file: File) =>
@@ -174,6 +229,7 @@ const insertImage = (dataUrl: string) => {
   const image = document.createElement('img');
   image.src = dataUrl;
   image.alt = '方案图片';
+  image.style.width = '100%';
   const lineBreak = document.createElement('br');
   range.deleteContents();
   range.insertNode(image);
@@ -183,6 +239,10 @@ const insertImage = (dataUrl: string) => {
   selection?.removeAllRanges();
   selection?.addRange(range);
   savedRange = range.cloneRange();
+  clearSelectedImage();
+  selectedImage.value = image;
+  imageWidth.value = 100;
+  image.classList.add('is-image-selected');
   emitContent();
 };
 
@@ -334,6 +394,21 @@ onMounted(() => nextTick(renderValue));
         清除格式
       </button>
     </div>
+    <div v-if="selectedImage" class="rich-image-size-panel">
+      <span class="rich-image-size-label">图片宽度</span>
+      <el-slider
+        v-model="imageWidth"
+        :min="20"
+        :max="100"
+        :step="5"
+        :show-tooltip="false"
+        @input="applyImageWidth"
+      />
+      <span class="rich-image-size-value">{{ imageWidth }}%</span>
+      <button type="button" class="rich-image-size-reset" @click="applyImageWidth(100)">
+        恢复默认
+      </button>
+    </div>
     <div
       ref="editor"
       class="rich-text-editor"
@@ -343,7 +418,8 @@ onMounted(() => nextTick(renderValue));
         '--rich-text-min-height': `${minHeight}px`,
         '--rich-text-max-height': `${maxHeight}px`,
       }"
-      @input="emitContent"
+      @input="handleEditorInput"
+      @click="handleEditorClick"
       @keyup="rememberSelection"
       @mouseup="rememberSelection"
       @focus="rememberSelection"
@@ -415,6 +491,47 @@ onMounted(() => nextTick(renderValue));
 }
 .rich-image-input {
   display: none;
+}
+.rich-image-size-panel {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-primary) 6%, var(--app-card-solid));
+  gap: 10px;
+}
+.rich-image-size-panel :deep(.el-slider) {
+  min-width: 100px;
+  flex: 1;
+}
+.rich-image-size-label,
+.rich-image-size-value {
+  flex: 0 0 auto;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+.rich-image-size-value {
+  min-width: 38px;
+  color: var(--app-primary);
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rich-image-size-reset {
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  color: var(--app-text);
+  background: var(--app-card-solid);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.rich-image-size-reset:hover {
+  border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
+  color: var(--app-primary);
 }
 .rich-size-buttons {
   display: inline-flex;
@@ -488,6 +605,10 @@ onMounted(() => nextTick(renderValue));
   height: auto;
   margin: 10px auto;
   border-radius: 10px;
+}
+.rich-text-editor :deep(img.is-image-selected) {
+  outline: 3px solid color-mix(in srgb, var(--app-primary) 72%, transparent);
+  outline-offset: 3px;
 }
 .rich-text-editor:empty::before {
   color: var(--app-muted);
