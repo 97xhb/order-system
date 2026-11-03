@@ -603,7 +603,7 @@ onMounted(() => nextTick(renderValue));
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 10px auto;
+  margin: 10px 0;
   border-radius: 10px;
 }
 .rich-text-editor :deep(img.is-image-selected) {

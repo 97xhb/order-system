@@ -837,7 +837,16 @@ onBeforeUnmount(() => {
               v-model="schemeForm.shareTitle"
               placeholder="默认：在线报单系统" /></el-form-item
         ></template>
-        <el-form-item label="方案说明" class="span-two">
+        <el-form-item class="span-two scheme-description-form-item">
+          <template #label>
+            <div class="scheme-description-heading">
+              <span class="scheme-description-mark">注</span>
+              <div>
+                <strong>方案说明</strong>
+                <small>公开报单页按填写说明样式展示</small>
+              </div>
+            </div>
+          </template>
           <RichTextEditor
             v-model="schemeForm.description"
             :max-length="5_000"
@@ -1291,6 +1300,59 @@ onBeforeUnmount(() => {
 }
 .description-form-item {
   margin-bottom: 0 !important;
+}
+.scheme-description-form-item {
+  padding: 13px;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 251, 235, 0.82);
+}
+.scheme-description-form-item :deep(.el-form-item__label) {
+  width: 100%;
+  height: auto;
+  margin-bottom: 10px;
+  padding: 0;
+  line-height: 1.4;
+}
+.scheme-description-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.scheme-description-heading > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.scheme-description-heading strong {
+  color: #92400e;
+  font-size: 15px;
+}
+.scheme-description-heading small {
+  margin-top: 2px;
+  color: #b7791f;
+  font-size: 11px;
+}
+.scheme-description-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 10px;
+  color: #b45309;
+  background: #fef3c7;
+  font-size: 13px;
+  font-weight: 800;
+}
+.scheme-description-form-item :deep(.rich-text-field) {
+  border-color: rgba(245, 158, 11, 0.2);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: none;
+}
+.scheme-description-form-item :deep(.rich-text-toolbar) {
+  border-bottom-color: rgba(245, 158, 11, 0.15);
+  background: rgba(254, 243, 199, 0.58);
 }
 .switch-stack {
   width: 100%;

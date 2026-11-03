@@ -5,8 +5,8 @@ import { useRoute } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
-import FieldHint from '../components/FieldHint.vue';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
+import OrderFieldLabel from '../components/OrderFieldLabel.vue';
 import { useSystemStore } from '../stores/system';
 
 type FieldKey =
@@ -562,9 +562,17 @@ onMounted(() => void load());
               {{ data.form.scheme.productName }}
             </div>
           </div>
-          <div v-if="data.form.scheme.description" class="scheme-summary-description">
-            <span>方案说明</span>
-            <div class="scheme-summary-description-content" v-html="data.form.scheme.description" />
+        </section>
+        <section v-if="data.form.scheme.description" class="form-description-card">
+          <div class="form-description-heading">
+            <span class="form-description-mark">注</span>
+            <div>
+              <strong>方案说明</strong>
+              <small>提交前请先阅读以下说明</small>
+            </div>
+          </div>
+          <div class="form-description-content">
+            <div class="form-description" v-html="data.form.scheme.description" />
           </div>
         </section>
         <el-form :model="form" label-position="top" class="public-form" @submit.prevent="submit">
@@ -579,24 +587,33 @@ onMounted(() => void load());
             <div class="form-section-grid">
               <el-form-item
                 v-if="field('wechatNickname').visible"
-                label="下单人（微信昵称）"
                 :required="field('wechatNickname').required"
-                ><el-input
+              >
+                <template #label>
+                  <OrderFieldLabel
+                    label="下单人（微信昵称）"
+                    :hint="field('wechatNickname').note"
+                    :color="field('wechatNickname').noteColor"
+                  />
+                </template>
+                <el-input
                   v-model="form.wechatNickname"
                   :disabled="!canEditField('wechatNickname')"
                   clearable
                   placeholder="填写当前微信昵称"
                 />
-                <FieldHint
-                  :text="field('wechatNickname').note"
-                  :color="field('wechatNickname').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('platformId').visible"
-                label="平台"
                 :required="field('platformId').required"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="平台"
+                    :hint="field('platformId').note"
+                    :color="field('platformId').noteColor"
+                  />
+                </template>
                 <el-select
                   v-model="form.platformId"
                   :disabled="!canEditField('platformId')"
@@ -607,16 +624,18 @@ onMounted(() => void load());
                     :label="platform.name"
                     :value="platform.id"
                 /></el-select>
-                <FieldHint
-                  :text="field('platformId').note"
-                  :color="field('platformId').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('categoryId').visible"
-                label="品类"
                 :required="field('categoryId').required"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="品类"
+                    :hint="field('categoryId').note"
+                    :color="field('categoryId').noteColor"
+                  />
+                </template>
                 <el-select
                   v-model="form.categoryId"
                   :disabled="!canEditField('categoryId')"
@@ -630,17 +649,19 @@ onMounted(() => void load());
                     :value="category.id"
                   />
                 </el-select>
-                <FieldHint
-                  :text="field('categoryId').note"
-                  :color="field('categoryId').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('productName').visible"
-                label="商品/方案*数量"
                 :required="field('productName').required"
                 class="span-two"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="商品/方案*数量"
+                    :hint="field('productName').note"
+                    :color="field('productName').noteColor"
+                  />
+                </template>
                 <el-input
                   v-model="form.productName"
                   :disabled="!canEditField('productName')"
@@ -650,28 +671,37 @@ onMounted(() => void load());
                   show-word-limit
                   placeholder="填写本次实际报单内容，支持多行；未填写可由管理员补充"
                 />
-                <FieldHint
-                  :text="field('productName').note"
-                  :color="field('productName').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('orderedAt').visible"
-                label="下单日期"
                 :required="field('orderedAt').required"
-                ><el-date-picker
+              >
+                <template #label>
+                  <OrderFieldLabel
+                    label="下单日期"
+                    :hint="field('orderedAt').note"
+                    :color="field('orderedAt').noteColor"
+                  />
+                </template>
+                <el-date-picker
                   v-model="form.orderedAt"
                   :disabled="!canEditField('orderedAt')"
                   type="date"
                   value-format="YYYY-MM-DD"
                 />
-                <FieldHint :text="field('orderedAt').note" :color="field('orderedAt').noteColor" />
               </el-form-item>
               <el-form-item
                 v-if="field('platformOrderNo').visible"
-                label="平台订单号"
                 :required="field('platformOrderNo').required"
-                ><el-input
+              >
+                <template #label>
+                  <OrderFieldLabel
+                    label="平台订单号"
+                    :hint="field('platformOrderNo').note"
+                    :color="field('platformOrderNo').noteColor"
+                  />
+                </template>
+                <el-input
                   v-model="form.platformOrderNo"
                   :disabled="!canEditField('platformOrderNo')"
                   type="textarea"
@@ -679,17 +709,19 @@ onMounted(() => void load());
                   maxlength="800"
                   placeholder="支持多行填写平台订单号"
                 />
-                <FieldHint
-                  :text="field('platformOrderNo').note"
-                  :color="field('platformOrderNo').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('dispatchStatus').visible"
-                label="发货状态"
                 :required="field('dispatchStatus').required"
                 class="span-two"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="发货状态"
+                    :hint="field('dispatchStatus').note"
+                    :color="field('dispatchStatus').noteColor"
+                  />
+                </template>
                 <div
                   class="status-options dispatch-status-options"
                   role="radiogroup"
@@ -712,54 +744,59 @@ onMounted(() => void load());
                     {{ option.label }}
                   </button>
                 </div>
-                <FieldHint
-                  :text="field('dispatchStatus').note"
-                  :color="field('dispatchStatus').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('inboundTrackingNo').visible"
-                label="平台运单号"
                 :required="field('inboundTrackingNo').required"
-                ><el-input
+              >
+                <template #label>
+                  <OrderFieldLabel
+                    label="平台运单号"
+                    :hint="field('inboundTrackingNo').note"
+                    :color="field('inboundTrackingNo').noteColor"
+                  />
+                </template>
+                <el-input
                   v-model="form.inboundTrackingNo"
                   :disabled="!canEditField('inboundTrackingNo')"
                   placeholder="未发货可留空"
                   @input="handleInboundTrackingInput"
                 />
-                <FieldHint
-                  :text="field('inboundTrackingNo').note"
-                  :color="field('inboundTrackingNo').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('purchaseAddress').visible"
-                label="下单地址"
                 :required="field('purchaseAddress').required"
                 class="span-two"
-                ><el-input
+              >
+                <template #label>
+                  <OrderFieldLabel
+                    label="下单地址"
+                    :hint="field('purchaseAddress').note"
+                    :color="field('purchaseAddress').noteColor"
+                  />
+                </template>
+                <el-input
                   v-model="form.purchaseAddress"
                   :disabled="!canEditField('purchaseAddress')"
                   type="textarea"
                   :rows="2"
                 />
-                <FieldHint
-                  :text="field('purchaseAddress').note"
-                  :color="field('purchaseAddress').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('receiverName').visible"
-                label="收货佬"
                 :required="field('receiverName').required"
-                ><el-input
+              >
+                <template #label>
+                  <OrderFieldLabel
+                    label="收货佬"
+                    :hint="field('receiverName').note"
+                    :color="field('receiverName').noteColor"
+                  />
+                </template>
+                <el-input
                   v-model="form.receiverName"
                   :disabled="!canEditField('receiverName')"
                   maxlength="100"
-                />
-                <FieldHint
-                  :text="field('receiverName').note"
-                  :color="field('receiverName').noteColor"
                 />
               </el-form-item>
             </div>
@@ -776,10 +813,16 @@ onMounted(() => void load());
             <div class="form-section-grid">
               <el-form-item
                 v-if="field('fundingType').visible"
-                label="支付方式"
                 :required="field('fundingType').required"
                 class="span-two funding-item"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="支付方式"
+                    :hint="field('fundingType').note"
+                    :color="field('fundingType').noteColor"
+                  />
+                </template>
                 <div class="funding-options" role="radiogroup" aria-label="支付方式">
                   <button
                     v-for="option in fundingTypeOptions"
@@ -798,49 +841,55 @@ onMounted(() => void load());
                     </span>
                   </button>
                 </div>
-                <FieldHint
-                  :text="field('fundingType').note"
-                  :color="field('fundingType').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('orderAmount').visible"
-                label="下单金额"
                 :required="field('orderAmount').required"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="下单金额"
+                    :hint="field('orderAmount').note"
+                    :color="field('orderAmount').noteColor"
+                  />
+                </template>
                 <MoneyFormulaInput
                   v-model="form.orderAmount"
                   v-model:formula="form.amountFormulas.orderAmount"
                   :disabled="!canEditField('orderAmount')"
                   placeholder="数字或 =100+5"
                 />
-                <FieldHint
-                  :text="field('orderAmount').note"
-                  :color="field('orderAmount').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('paymentDiscountAmount').visible"
-                label="支付优惠"
                 :required="field('paymentDiscountAmount').required"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="支付优惠"
+                    :hint="field('paymentDiscountAmount').note"
+                    :color="field('paymentDiscountAmount').noteColor"
+                  />
+                </template>
                 <MoneyFormulaInput
                   v-model="form.paymentDiscountAmount"
                   v-model:formula="form.amountFormulas.paymentDiscountAmount"
                   :disabled="!canEditField('paymentDiscountAmount')"
                 />
                 <div class="field-help">未使用支付优惠可留空或填 0。</div>
-                <FieldHint
-                  :text="field('paymentDiscountAmount').note"
-                  :color="field('paymentDiscountAmount').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('rebateScanned').visible"
-                label="扫码返利"
                 :required="field('rebateScanned').required"
                 class="span-two"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="扫码返利"
+                    :hint="field('rebateScanned').note"
+                    :color="field('rebateScanned').noteColor"
+                  />
+                </template>
                 <div
                   class="funding-options scan-choice-options"
                   role="radiogroup"
@@ -869,16 +918,18 @@ onMounted(() => void load());
                     <span><strong>已扫码</strong><small>金额由管理员核对</small></span>
                   </button>
                 </div>
-                <FieldHint
-                  :text="field('rebateScanned').note"
-                  :color="field('rebateScanned').noteColor"
-                />
               </el-form-item>
               <el-form-item
                 v-if="field('submitterSettlementAmount').visible"
-                label="结算金额"
                 :required="field('submitterSettlementAmount').required"
               >
+                <template #label>
+                  <OrderFieldLabel
+                    label="结算金额"
+                    :hint="field('submitterSettlementAmount').note"
+                    :color="field('submitterSettlementAmount').noteColor"
+                  />
+                </template>
                 <MoneyFormulaInput
                   v-if="fieldConfig?.settlementAmount.mode === 'FREE'"
                   v-model="form.submitterSettlementAmount"
@@ -905,10 +956,6 @@ onMounted(() => void load());
                   :controls="false"
                   :disabled="true"
                 />
-                <FieldHint
-                  :text="field('submitterSettlementAmount').note"
-                  :color="field('submitterSettlementAmount').noteColor"
-                />
               </el-form-item>
             </div>
           </section>
@@ -924,16 +971,22 @@ onMounted(() => void load());
             <div class="form-section-grid">
               <el-form-item
                 v-if="field('notes').visible"
-                label="备注"
                 :required="field('notes').required"
                 class="span-two"
-                ><el-input
+              >
+                <template #label>
+                  <OrderFieldLabel
+                    label="备注"
+                    :hint="field('notes').note"
+                    :color="field('notes').noteColor"
+                  />
+                </template>
+                <el-input
                   v-model="form.notes"
                   :disabled="!canEditField('notes')"
                   type="textarea"
                   :rows="3"
                 />
-                <FieldHint :text="field('notes').note" :color="field('notes').noteColor" />
               </el-form-item>
               <div class="submit-area span-two">
                 <el-button v-if="editingId" size="large" @click="clearForNext">取消修改</el-button
@@ -1442,11 +1495,11 @@ footer {
   margin-bottom: 0;
 }
 .scheme-summary-product-rich :deep(img),
-.scheme-summary-description-content :deep(img) {
+.form-description :deep(img) {
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 10px auto;
+  margin: 10px 0;
   border-radius: 10px;
 }
 .scheme-summary-description-content :deep(p),
@@ -1520,6 +1573,13 @@ footer {
   display: grid;
   margin-top: 14px;
   gap: 14px;
+}
+.public-form :deep(.el-form-item__label) {
+  height: auto;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  padding-bottom: 0;
+  line-height: 1.4;
 }
 .form-section {
   padding: 18px 18px 2px;
