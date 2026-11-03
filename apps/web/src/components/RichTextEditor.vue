@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Picture } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import { nextTick, onMounted, ref, watch } from 'vue';
 import { TEXT_COLOR_PRESETS } from '../lib/text-colors';
 import TextColorPalette from './TextColorPalette.vue';
@@ -8,12 +10,14 @@ const props = withDefaults(
     modelValue: string;
     placeholder?: string;
     maxLength?: number;
+    maxHtmlLength?: number;
     minHeight?: number;
     maxHeight?: number;
   }>(),
   {
     placeholder: '',
     maxLength: 5_000,
+    maxHtmlLength: 1_000_000,
     minHeight: 120,
     maxHeight: 320,
   },
@@ -28,6 +32,8 @@ const color = ref<string | null>(null);
 const colorVisible = ref(false);
 const fontSize = ref('3');
 const plainTextLength = ref(0);
+const imageInput = ref<HTMLInputElement | null>(null);
+const imageUploading = ref(false);
 const sizeOptions = [
   { label: '小字', value: '2' },
   { label: '正文', value: '3' },
@@ -36,28 +42,31 @@ const sizeOptions = [
 ] as const;
 let savedRange: Range | null = null;
 
-const emitContent = () => {
-  const element = editor.value;
-  if (!element) return;
-  const plainText = element.innerText
+const editorText = (element: HTMLElement) =>
+  element.innerText
     .replace(/\u00a0/g, ' ')
     .replace(/\r\n/g, '\n')
     .trim();
-  plainTextLength.value = plainText.length;
-  emit('update:plainText', plainText);
-  emit('update:modelValue', plainText ? element.innerHTML.trim() : '');
+
+const hasEditorImages = (element: HTMLElement) => Boolean(element.querySelector('img'));
+
+const emitContent = () => {
+  const element = editor.value;
+  if (!element) return;
+  const visibleText = editorText(element);
+  const hasImages = hasEditorImages(element);
+  plainTextLength.value = visibleText.length;
+  emit('update:plainText', visibleText || (hasImages ? '[图片]' : ''));
+  emit('update:modelValue', visibleText || hasImages ? element.innerHTML.trim() : '');
 };
 
 const renderValue = () => {
   const element = editor.value;
   if (!element || element.innerHTML === props.modelValue) return;
   element.innerHTML = props.modelValue;
-  const plainText = element.innerText
-    .replace(/\u00a0/g, ' ')
-    .replace(/\r\n/g, '\n')
-    .trim();
-  plainTextLength.value = plainText.length;
-  emit('update:plainText', plainText);
+  const visibleText = editorText(element);
+  plainTextLength.value = visibleText.length;
+  emit('update:plainText', visibleText || (hasEditorImages(element) ? '[图片]' : ''));
 };
 
 const rememberSelection = () => {
@@ -97,6 +106,109 @@ const applyTextColor = (value: string | null) => {
   color.value = value;
   execCommand('foreColor', nextColor);
   colorVisible.value = false;
+};
+
+const chooseImage = () => {
+  imageInput.value?.click();
+};
+
+const loadImage = (file: File) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('图片读取失败，请更换图片后重试'));
+    };
+    image.src = objectUrl;
+  });
+
+const compressImage = async (file: File) => {
+  const image = await loadImage(file);
+  const sourceWidth = image.naturalWidth;
+  const sourceHeight = image.naturalHeight;
+  if (!sourceWidth || !sourceHeight) throw new Error('无法识别图片尺寸');
+
+  const maxEdge = 1_600;
+  const maxDataUrlLength = 180_000;
+  let scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+  let quality = 0.82;
+
+  for (let attempt = 0; attempt < 7; attempt += 1) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('浏览器无法处理这张图片');
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/webp', quality);
+    if (dataUrl.length <= maxDataUrlLength) return dataUrl;
+    scale *= 0.82;
+    quality = Math.max(0.45, quality - 0.07);
+  }
+
+  throw new Error('图片压缩后仍然过大，请选择更小的图片');
+};
+
+const insertImage = (dataUrl: string) => {
+  const element = editor.value;
+  if (!element) return;
+  if (element.innerHTML.length + dataUrl.length + 64 > props.maxHtmlLength) {
+    throw new Error('方案内容中的图片总大小过大，请删除部分图片后重试');
+  }
+  element.focus();
+  restoreSelection();
+
+  const selection = window.getSelection();
+  let range = savedRange;
+  if (!range || !element.contains(range.commonAncestorContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+  }
+
+  const image = document.createElement('img');
+  image.src = dataUrl;
+  image.alt = '方案图片';
+  const lineBreak = document.createElement('br');
+  range.deleteContents();
+  range.insertNode(image);
+  image.after(lineBreak);
+  range.setStartAfter(lineBreak);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  savedRange = range.cloneRange();
+  emitContent();
+};
+
+const handleImageSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
+    ElMessage.warning('仅支持 PNG、JPG 或 WebP 图片');
+    return;
+  }
+  if (file.size > 15 * 1024 * 1024) {
+    ElMessage.warning('原始图片不能超过 15MB');
+    return;
+  }
+
+  imageUploading.value = true;
+  try {
+    insertImage(await compressImage(file));
+    ElMessage.success('图片已插入');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '图片处理失败');
+  } finally {
+    imageUploading.value = false;
+  }
 };
 
 const handlePaste = (event: ClipboardEvent) => {
@@ -196,6 +308,24 @@ onMounted(() => nextTick(renderValue));
       </el-popover>
       <button
         type="button"
+        class="rich-tool-button rich-image-button"
+        title="插入图片，自动压缩"
+        :disabled="imageUploading"
+        @mousedown.prevent
+        @click="chooseImage"
+      >
+        <el-icon><Picture /></el-icon>
+        {{ imageUploading ? '处理中' : '图片' }}
+      </button>
+      <input
+        ref="imageInput"
+        class="rich-image-input"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        @change="handleImageSelected"
+      />
+      <button
+        type="button"
         class="rich-tool-button rich-clear-button"
         title="清除格式"
         @mousedown.prevent
@@ -272,6 +402,20 @@ onMounted(() => nextTick(renderValue));
 .rich-clear-button {
   min-width: 74px;
 }
+.rich-image-button {
+  display: inline-flex;
+  min-width: 58px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.rich-image-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.rich-image-input {
+  display: none;
+}
 .rich-size-buttons {
   display: inline-flex;
   gap: 4px;
@@ -337,6 +481,13 @@ onMounted(() => nextTick(renderValue));
   font-size: 14px;
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+.rich-text-editor :deep(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 10px auto;
+  border-radius: 10px;
 }
 .rich-text-editor:empty::before {
   color: var(--app-muted);

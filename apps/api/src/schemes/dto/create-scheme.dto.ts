@@ -41,17 +41,17 @@ export class CreateSchemeDto {
   productName!: string;
 
   @ApiPropertyOptional({
-    description: '方案内容富文本 HTML，保存前会清洗',
+    description: '方案内容富文本 HTML，可包含压缩图片数据，保存前会清洗',
   })
   @IsOptional()
   @IsString()
-  @MaxLength(50_000)
+  @MaxLength(1_000_000)
   productNameHtml?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(50_000)
+  @MaxLength(1_000_000)
   description?: string;
 
   @ApiPropertyOptional()

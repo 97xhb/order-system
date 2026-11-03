@@ -3366,7 +3366,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .tracking-cell,
 .mobile-tracking-value {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
   gap: 3px;
 }
@@ -3374,9 +3374,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .tracking-cell > span,
 .mobile-tracking-value > span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 .submitter-volume-cell {

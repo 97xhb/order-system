@@ -6,6 +6,9 @@ const COLOR_PATTERNS = [
   /^rgba\(\s*(?:\d{1,3}\s*,\s*){3}(?:0|1|0?\.\d+)\s*\)$/i,
 ];
 
+const SAFE_IMAGE_DATA_URL =
+  /^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/]+={0,2}$/i;
+
 export function sanitizeShareFormRichText(value: string | null | undefined) {
   const input = value?.trim();
   if (!input) return null;
@@ -22,12 +25,14 @@ export function sanitizeShareFormRichText(value: string | null | undefined) {
       'u',
       'span',
       'font',
+      'img',
     ],
     allowedAttributes: {
       font: ['color', 'size'],
       span: ['style'],
       p: ['style'],
       div: ['style'],
+      img: ['src', 'alt'],
     },
     allowedStyles: {
       '*': {
@@ -38,6 +43,13 @@ export function sanitizeShareFormRichText(value: string | null | undefined) {
         'text-align': [/^(left|center|right)$/],
       },
     },
+    allowedSchemesByTag: {
+      img: ['data'],
+    },
+    allowProtocolRelative: false,
+    exclusiveFilter: (frame) =>
+      frame.tag === 'img' &&
+      !SAFE_IMAGE_DATA_URL.test(frame.attribs.src?.trim() ?? ''),
     disallowedTagsMode: 'discard',
   });
 

@@ -39,12 +39,18 @@ describe('scheme content limits', () => {
   });
 
   it('accepts sanitized rich HTML separately from plain text', async () => {
+    const imageData = [
+      'data:',
+      'image',
+      '/png',
+      ';base64,',
+      'iVBORw0KGgo=',
+    ].join('');
     const errors = await validate(
       plainToInstance(CreateSchemeDto, {
         name: '测试方案',
         productName: '红色大字',
-        productNameHtml:
-          '<p><strong>红色</strong><span style="color:#d92d20">大字</span></p>',
+        productNameHtml: `<p><strong>红色</strong><span style="color:#d92d20">大字</span></p><img src="${imageData}">`,
       }),
     );
 

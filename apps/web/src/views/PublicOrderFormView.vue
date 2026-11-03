@@ -1441,6 +1441,14 @@ footer {
 .scheme-summary-product-rich :deep(div:last-child) {
   margin-bottom: 0;
 }
+.scheme-summary-product-rich :deep(img),
+.scheme-summary-description-content :deep(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 10px auto;
+  border-radius: 10px;
+}
 .scheme-summary-description-content :deep(p),
 .scheme-summary-description-content :deep(div) {
   margin: 0 0 5px;

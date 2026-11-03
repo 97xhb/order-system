@@ -31,6 +31,34 @@ describe('sanitizeShareFormRichText', () => {
     expect(sanitizeShareFormRichText('   ')).toBeNull();
   });
 
+  it('keeps compressed image data and rejects remote or unsafe image sources', () => {
+    const safeDataUrl = [
+      'data:',
+      'image',
+      '/png',
+      ';base64,',
+      'iVBORw0KGgo=',
+    ].join('');
+    const unsafeSvgDataUrl = [
+      'data:',
+      'image',
+      '/svg+xml',
+      ';base64,',
+      'PHN2Zz48L3N2Zz4=',
+    ].join('');
+    const result = sanitizeShareFormRichText(`
+      <p>方案图片</p>
+      <img src="${safeDataUrl}" alt="商品图片" onerror="alert(1)">
+      <img src="https://example.com/remote.png">
+      <img src="${unsafeSvgDataUrl}">
+    `);
+
+    expect(result).toContain(`<img src="${safeDataUrl}" alt="商品图片" />`);
+    expect(result).not.toContain('https://example.com');
+    expect(result).not.toContain('svg+xml');
+    expect(result).not.toContain('onerror');
+  });
+
   it('extracts readable multiline text from formatted scheme content', () => {
     expect(
       richTextToPlainText(
