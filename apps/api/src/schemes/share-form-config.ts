@@ -25,6 +25,8 @@ export interface ShareFormFieldRule {
   /** Whether the external submitter may provide or change this field. */
   editable: boolean;
   required: boolean;
+  note?: string;
+  noteColor?: string;
 }
 
 export interface ShareFormFieldConfig {
@@ -128,9 +130,33 @@ export function normalizeShareFormFieldConfig(
       if (!editable && rule.required) {
         throw new Error(`只读字段 ${key} 不能设置为必填`);
       }
+      if (rule.note !== undefined && typeof rule.note !== 'string') {
+        throw new Error(`字段 ${key} 的填写提示格式不正确`);
+      }
+      const note = typeof rule.note === 'string' ? rule.note.trim() : '';
+      if (note.length > 200) {
+        throw new Error(`字段 ${key} 的填写提示不能超过 200 字`);
+      }
+      if (
+        rule.noteColor !== undefined &&
+        (typeof rule.noteColor !== 'string' ||
+          (rule.noteColor !== '' && !/^#[0-9a-fA-F]{6}$/.test(rule.noteColor)))
+      ) {
+        throw new Error(`字段 ${key} 的提示颜色格式不正确`);
+      }
+      const noteColor =
+        typeof rule.noteColor === 'string' && rule.noteColor
+          ? rule.noteColor.toUpperCase()
+          : undefined;
       return [
         key,
-        { visible: rule.visible, editable, required: rule.required },
+        {
+          visible: rule.visible,
+          editable,
+          required: rule.required,
+          ...(note ? { note } : {}),
+          ...(noteColor ? { noteColor } : {}),
+        },
       ];
     }),
   ) as Record<ShareFormFieldKey, ShareFormFieldRule>;

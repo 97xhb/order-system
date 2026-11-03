@@ -6,6 +6,7 @@ import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
+import FieldNoteColorPopover from '../components/FieldNoteColorPopover.vue';
 import RichTextEditor from '../components/RichTextEditor.vue';
 
 type FieldKey =
@@ -28,7 +29,16 @@ type FieldKey =
 
 interface FieldConfig {
   schemaVersion: 1;
-  fields: Record<FieldKey, { visible: boolean; editable: boolean; required: boolean }>;
+  fields: Record<
+    FieldKey,
+    {
+      visible: boolean;
+      editable: boolean;
+      required: boolean;
+      note?: string;
+      noteColor?: string;
+    }
+  >;
   settlementAmount: {
     mode: 'FREE' | 'PRESET' | 'FIXED' | 'ADMIN_ONLY';
     fixedAmount?: number;
@@ -109,6 +119,7 @@ const fieldModes: Array<{ value: FieldMode; label: string }> = [
   { value: 'READ_ONLY', label: '只读' },
   { value: 'EDITABLE', label: '可填写' },
 ];
+const DEFAULT_FIELD_NOTE_COLOR = '#64748B';
 const fixedRequiredFields = new Set<FieldKey>(['wechatNickname', 'platformId']);
 
 const fieldMode = (key: FieldKey): FieldMode => {
@@ -178,6 +189,11 @@ const normalizeFieldConfig = (value: FieldConfig | null | undefined): FieldConfi
         visible: rule.visible,
         editable: typeof rule.editable === 'boolean' ? rule.editable : rule.visible,
         required: rule.required,
+        note: typeof rule.note === 'string' ? rule.note : '',
+        noteColor:
+          typeof rule.noteColor === 'string' && rule.noteColor
+            ? rule.noteColor
+            : DEFAULT_FIELD_NOTE_COLOR,
       };
     }
   });
@@ -844,7 +860,7 @@ onBeforeUnmount(() => {
           <span class="share-dialog-mark">报</span>
           <div class="share-dialog-copy">
             <strong>配置在线报单</strong>
-            <small>设置公开链接、填写说明和订单字段权限</small>
+            <small>设置公开链接、字段提示和订单字段权限</small>
           </div>
           <el-tag :type="statusTypes[shareForm.status]" effect="light" round>
             {{ statusLabels[shareForm.status] }}
@@ -915,23 +931,6 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="share-config-card description-config-card">
-          <div class="share-section-heading">
-            <span class="share-section-step is-description">02</span>
-            <div>
-              <strong>报单注释 / 填写说明</strong>
-              <small>支持加粗、字号和文字颜色，公开报单页按保存格式显示</small>
-            </div>
-          </div>
-          <el-form-item class="description-form-item">
-            <RichTextEditor
-              v-model="shareForm.description"
-              :max-length="5_000"
-              placeholder="例如：请核对订单号、金额；提交后先等待管理员确认。"
-            />
-          </el-form-item>
-        </section>
-
         <div class="config-title">
           <strong>订单列表分类与填写权限</strong
           ><span>分类标题与订单列表保持一致；每张卡片可设置隐藏、只读、可填写和是否必填。</span>
@@ -978,6 +977,19 @@ onBeforeUnmount(() => {
             >
               {{ shareForm.fieldConfig.fields[key].required ? '必填' : '选填' }}
             </button>
+            <div v-if="shareForm.fieldConfig.fields[key].visible" class="field-note-editor">
+              <span>项下提示</span>
+              <el-input
+                v-model="shareForm.fieldConfig.fields[key].note"
+                size="small"
+                maxlength="200"
+                placeholder="填写给下单人的提示，可留空"
+              />
+              <FieldNoteColorPopover
+                v-model="shareForm.fieldConfig.fields[key].noteColor"
+                :default-color="DEFAULT_FIELD_NOTE_COLOR"
+              />
+            </div>
           </section>
         </div>
 
@@ -1409,6 +1421,21 @@ onBeforeUnmount(() => {
   border-color: color-mix(in srgb, var(--app-danger) 38%, var(--app-border));
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 8%, transparent);
+}
+.field-note-editor {
+  display: flex;
+  align-items: center;
+  margin-top: 8px;
+  gap: 6px;
+}
+.field-note-editor > span {
+  flex: 0 0 auto;
+  color: var(--app-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+.field-note-editor :deep(.el-input) {
+  min-width: 0;
 }
 .count-cell {
   display: inline-flex;

@@ -37,6 +37,48 @@ describe('share form field config', () => {
     expect(config.fields.submitterSettlementAmount.visible).toBe(false);
   });
 
+  it('keeps per-field hints and colors while accepting legacy configs', () => {
+    const config = normalizeShareFormFieldConfig({
+      ...DEFAULT_SHARE_FORM_FIELD_CONFIG,
+      fields: {
+        ...DEFAULT_SHARE_FORM_FIELD_CONFIG.fields,
+        platformOrderNo: {
+          visible: true,
+          editable: true,
+          required: true,
+          note: '  请填写平台生成的完整订单号  ',
+          noteColor: '#2563eb',
+        },
+      },
+    });
+
+    expect(config.fields.platformOrderNo).toMatchObject({
+      note: '请填写平台生成的完整订单号',
+      noteColor: '#2563EB',
+    });
+    expect(
+      normalizeShareFormFieldConfig(DEFAULT_SHARE_FORM_FIELD_CONFIG).fields
+        .notes,
+    ).toEqual({ visible: true, editable: true, required: false });
+  });
+
+  it('rejects invalid per-field hint colors', () => {
+    expect(() =>
+      normalizeShareFormFieldConfig({
+        ...DEFAULT_SHARE_FORM_FIELD_CONFIG,
+        fields: {
+          ...DEFAULT_SHARE_FORM_FIELD_CONFIG.fields,
+          notes: {
+            visible: true,
+            editable: true,
+            required: false,
+            noteColor: 'blue',
+          },
+        },
+      }),
+    ).toThrow('字段 notes 的提示颜色格式不正确');
+  });
+
   it('keeps legacy configs editable and supports read-only fields', () => {
     const config = normalizeShareFormFieldConfig({
       ...DEFAULT_SHARE_FORM_FIELD_CONFIG,

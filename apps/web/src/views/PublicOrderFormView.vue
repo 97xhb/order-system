@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
+import FieldHint from '../components/FieldHint.vue';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 import { useSystemStore } from '../stores/system';
 
@@ -30,7 +31,16 @@ type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVER
 const system = useSystemStore();
 
 interface FieldConfig {
-  fields: Record<FieldKey, { visible: boolean; editable: boolean; required: boolean }>;
+  fields: Record<
+    FieldKey,
+    {
+      visible: boolean;
+      editable: boolean;
+      required: boolean;
+      note?: string;
+      noteColor?: string;
+    }
+  >;
   settlementAmount: {
     mode: 'FREE' | 'PRESET' | 'FIXED' | 'ADMIN_ONLY';
     fixedAmount?: number;
@@ -557,19 +567,6 @@ onMounted(() => void load());
             <div class="scheme-summary-description-content" v-html="data.form.scheme.description" />
           </div>
         </section>
-        <section v-if="data.form.description" class="form-description-card">
-          <div class="form-description-heading">
-            <span class="form-description-mark">注</span>
-            <div>
-              <strong>填写说明</strong>
-              <small>提交前请先核对以下要求</small>
-            </div>
-          </div>
-          <div class="form-description-content">
-            <div class="form-description" v-html="data.form.description" />
-          </div>
-        </section>
-
         <el-form :model="form" label-position="top" class="public-form" @submit.prevent="submit">
           <section class="form-section">
             <div class="form-section-heading">
@@ -589,7 +586,12 @@ onMounted(() => void load());
                   :disabled="!canEditField('wechatNickname')"
                   clearable
                   placeholder="填写当前微信昵称"
-              /></el-form-item>
+                />
+                <FieldHint
+                  :text="field('wechatNickname').note"
+                  :color="field('wechatNickname').noteColor"
+                />
+              </el-form-item>
               <el-form-item
                 v-if="field('platformId').visible"
                 label="平台"
@@ -603,8 +605,13 @@ onMounted(() => void load());
                     v-for="platform in data.options.platforms"
                     :key="platform.id"
                     :label="platform.name"
-                    :value="platform.id" /></el-select
-              ></el-form-item>
+                    :value="platform.id"
+                /></el-select>
+                <FieldHint
+                  :text="field('platformId').note"
+                  :color="field('platformId').noteColor"
+                />
+              </el-form-item>
               <el-form-item
                 v-if="field('categoryId').visible"
                 label="品类"
@@ -623,6 +630,10 @@ onMounted(() => void load());
                     :value="category.id"
                   />
                 </el-select>
+                <FieldHint
+                  :text="field('categoryId').note"
+                  :color="field('categoryId').noteColor"
+                />
               </el-form-item>
               <el-form-item
                 v-if="field('productName').visible"
@@ -639,6 +650,10 @@ onMounted(() => void load());
                   show-word-limit
                   placeholder="填写本次实际报单内容，支持多行；未填写可由管理员补充"
                 />
+                <FieldHint
+                  :text="field('productName').note"
+                  :color="field('productName').noteColor"
+                />
               </el-form-item>
               <el-form-item
                 v-if="field('orderedAt').visible"
@@ -649,7 +664,9 @@ onMounted(() => void load());
                   :disabled="!canEditField('orderedAt')"
                   type="date"
                   value-format="YYYY-MM-DD"
-              /></el-form-item>
+                />
+                <FieldHint :text="field('orderedAt').note" :color="field('orderedAt').noteColor" />
+              </el-form-item>
               <el-form-item
                 v-if="field('platformOrderNo').visible"
                 label="平台订单号"
@@ -661,7 +678,12 @@ onMounted(() => void load());
                   :autosize="{ minRows: 2, maxRows: 6 }"
                   maxlength="800"
                   placeholder="支持多行填写平台订单号"
-              /></el-form-item>
+                />
+                <FieldHint
+                  :text="field('platformOrderNo').note"
+                  :color="field('platformOrderNo').noteColor"
+                />
+              </el-form-item>
               <el-form-item
                 v-if="field('dispatchStatus').visible"
                 label="发货状态"
@@ -690,6 +712,10 @@ onMounted(() => void load());
                     {{ option.label }}
                   </button>
                 </div>
+                <FieldHint
+                  :text="field('dispatchStatus').note"
+                  :color="field('dispatchStatus').noteColor"
+                />
               </el-form-item>
               <el-form-item
                 v-if="field('inboundTrackingNo').visible"
@@ -700,7 +726,12 @@ onMounted(() => void load());
                   :disabled="!canEditField('inboundTrackingNo')"
                   placeholder="未发货可留空"
                   @input="handleInboundTrackingInput"
-              /></el-form-item>
+                />
+                <FieldHint
+                  :text="field('inboundTrackingNo').note"
+                  :color="field('inboundTrackingNo').noteColor"
+                />
+              </el-form-item>
               <el-form-item
                 v-if="field('purchaseAddress').visible"
                 label="下单地址"
@@ -711,7 +742,12 @@ onMounted(() => void load());
                   :disabled="!canEditField('purchaseAddress')"
                   type="textarea"
                   :rows="2"
-              /></el-form-item>
+                />
+                <FieldHint
+                  :text="field('purchaseAddress').note"
+                  :color="field('purchaseAddress').noteColor"
+                />
+              </el-form-item>
               <el-form-item
                 v-if="field('receiverName').visible"
                 label="收货佬"
@@ -720,7 +756,12 @@ onMounted(() => void load());
                   v-model="form.receiverName"
                   :disabled="!canEditField('receiverName')"
                   maxlength="100"
-              /></el-form-item>
+                />
+                <FieldHint
+                  :text="field('receiverName').note"
+                  :color="field('receiverName').noteColor"
+                />
+              </el-form-item>
             </div>
           </section>
 
@@ -757,6 +798,10 @@ onMounted(() => void load());
                     </span>
                   </button>
                 </div>
+                <FieldHint
+                  :text="field('fundingType').note"
+                  :color="field('fundingType').noteColor"
+                />
               </el-form-item>
               <el-form-item
                 v-if="field('orderAmount').visible"
@@ -768,6 +813,10 @@ onMounted(() => void load());
                   v-model:formula="form.amountFormulas.orderAmount"
                   :disabled="!canEditField('orderAmount')"
                   placeholder="数字或 =100+5"
+                />
+                <FieldHint
+                  :text="field('orderAmount').note"
+                  :color="field('orderAmount').noteColor"
                 />
               </el-form-item>
               <el-form-item
@@ -781,6 +830,10 @@ onMounted(() => void load());
                   :disabled="!canEditField('paymentDiscountAmount')"
                 />
                 <div class="field-help">未使用支付优惠可留空或填 0。</div>
+                <FieldHint
+                  :text="field('paymentDiscountAmount').note"
+                  :color="field('paymentDiscountAmount').noteColor"
+                />
               </el-form-item>
               <el-form-item
                 v-if="field('rebateScanned').visible"
@@ -816,6 +869,10 @@ onMounted(() => void load());
                     <span><strong>已扫码</strong><small>金额由管理员核对</small></span>
                   </button>
                 </div>
+                <FieldHint
+                  :text="field('rebateScanned').note"
+                  :color="field('rebateScanned').noteColor"
+                />
               </el-form-item>
               <el-form-item
                 v-if="field('submitterSettlementAmount').visible"
@@ -848,6 +905,10 @@ onMounted(() => void load());
                   :controls="false"
                   :disabled="true"
                 />
+                <FieldHint
+                  :text="field('submitterSettlementAmount').note"
+                  :color="field('submitterSettlementAmount').noteColor"
+                />
               </el-form-item>
             </div>
           </section>
@@ -871,7 +932,9 @@ onMounted(() => void load());
                   :disabled="!canEditField('notes')"
                   type="textarea"
                   :rows="3"
-              /></el-form-item>
+                />
+                <FieldHint :text="field('notes').note" :color="field('notes').noteColor" />
+              </el-form-item>
               <div class="submit-area span-two">
                 <el-button v-if="editingId" size="large" @click="clearForNext">取消修改</el-button
                 ><el-button
