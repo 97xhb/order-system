@@ -397,7 +397,7 @@ const dispatchStatusTypes: Record<
   SHIPPED: 'primary',
   PARTIALLY_SHIPPED: 'warning',
   DELIVERED: 'success',
-  CANCELLED: 'info',
+  CANCELLED: 'danger',
 };
 const dispatchStatusLabel = (value: unknown) =>
   dispatchStatusLabels[value as DispatchStatus] ?? '未发货';

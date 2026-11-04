@@ -370,6 +370,12 @@ a {
   background: rgba(59, 130, 246, 0.12);
 }
 
+.status-choice.status-partially_shipped.is-selected {
+  border-color: rgba(217, 119, 6, 0.3);
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+
 .status-choice.status-delivered.is-selected,
 .status-choice.status-paid.is-selected {
   border-color: rgba(5, 150, 105, 0.28);
@@ -377,6 +383,7 @@ a {
   background: rgba(16, 185, 129, 0.13);
 }
 
+.status-choice.status-cancelled.is-selected,
 .status-choice.status-exception.is-selected {
   border-color: rgba(220, 38, 38, 0.26);
   color: #dc2626;
