@@ -20,6 +20,11 @@ import type { SheetData } from 'write-excel-file/browser';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
+import {
+  extractProductQuantity,
+  MONEY_FORMULA_VARIABLE_LABELS,
+  parseMoneyInput,
+} from '../lib/money-formula';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 import OrderColorPopover from '../components/OrderColorPopover.vue';
 import { TEXT_COLOR_PRESETS } from '../lib/text-colors';
@@ -243,6 +248,26 @@ const batchEditVisible = ref(false);
 const batchEditSaving = ref(false);
 const filterColorPickerVisible = ref(false);
 const filterColorDraft = ref('');
+type BatchEditAmountKey = 'orderAmount' | 'submitterSettlementAmount' | 'saleAmount';
+const batchEditAmountKeys: BatchEditAmountKey[] = [
+  'orderAmount',
+  'submitterSettlementAmount',
+  'saleAmount',
+];
+const batchEditVariableNames: Record<BatchEditAmountKey, string> = {
+  orderAmount: '下单金额',
+  submitterSettlementAmount: '结算金额',
+  saleAmount: '回款金额',
+};
+const numberFromRow = (value: string | number | null | undefined) => Number(value ?? 0) || 0;
+const orderFormulaVariables = (row: OrderRow) => ({
+  下单金额: numberFromRow(row.orderAmount),
+  支付优惠: numberFromRow(row.paymentDiscountAmount),
+  结算金额: numberFromRow(row.submitterSettlementAmount),
+  回款金额: numberFromRow(row.saleAmount),
+  扫码金额: numberFromRow(row.scanAmount),
+  数量: extractProductQuantity(row.productNameSnapshot),
+});
 const batchEditForm = reactive({
   purchaseAddress: '',
   receiverName: '',
@@ -256,6 +281,20 @@ const batchEditForm = reactive({
   shipmentStatus: null as ShipmentStatus | null,
   receivableStatus: null as SettlementStatus | null,
   submitterSettlementStatus: null as SettlementStatus | null,
+});
+const batchEditFormulaVariables = computed(() => {
+  const row = selectedRows.value[0];
+  if (!row) {
+    return {
+      下单金额: 0,
+      支付优惠: 0,
+      结算金额: 0,
+      回款金额: 0,
+      扫码金额: 0,
+      数量: 1,
+    };
+  }
+  return orderFormulaVariables(row);
 });
 const batchEditStatusFields = computed(
   () =>
@@ -1731,12 +1770,36 @@ const batchEdit = async () => {
     payload[item.key] = item.value;
     labels.push(item.label);
   }
-  payload.amountFormulas = {
-    orderAmount: batchEditForm.amountFormulas.orderAmount ?? '',
-    submitterSettlementAmount: batchEditForm.amountFormulas.submitterSettlementAmount ?? '',
-    saleAmount: batchEditForm.amountFormulas.saleAmount ?? '',
-  };
   try {
+    const rowPatches = selectedRows.value.map((row, index) => {
+      const rowPayload: Record<string, unknown> = { ...payload };
+      const rowVariables: Record<string, number> = {
+        ...orderFormulaVariables(row),
+      };
+      const rowFormulas: Record<string, string> = {
+        orderAmount: '',
+        submitterSettlementAmount: '',
+        saleAmount: '',
+      };
+      for (const key of batchEditAmountKeys) {
+        const formula = batchEditForm.amountFormulas[key]?.trim();
+        if (!formula) continue;
+        const variableName = batchEditVariableNames[key];
+        const variables = { ...rowVariables };
+        delete variables[variableName];
+        const calculated = parseMoneyInput(formula, variables);
+        if (calculated === null) {
+          throw new Error(
+            `第 ${index + 1} 笔订单的${variableName}公式无法计算，请检查变量和运算符号`,
+          );
+        }
+        rowPayload[key] = calculated;
+        rowVariables[variableName] = calculated;
+        rowFormulas[key] = formula;
+      }
+      rowPayload.amountFormulas = rowFormulas;
+      return { id: row.id, payload: rowPayload };
+    });
     await ElMessageBox.confirm(
       `确定将 ${selectedRows.value.length} 笔订单的 ${labels.join('、')} 统一修改为填写值吗？`,
       '批量修改订单',
@@ -1744,9 +1807,9 @@ const batchEdit = async () => {
     );
     batchEditSaving.value = true;
     const results = await Promise.allSettled(
-      selectedRows.value.map((row) =>
-        http.patch(`/admin/orders/${row.id}/progress`, {
-          ...payload,
+      rowPatches.map((item) =>
+        http.patch(`/admin/orders/${item.id}/progress`, {
+          ...item.payload,
           reason: '订单列表批量修改字段',
         }),
       ),
@@ -3165,13 +3228,19 @@ onBeforeUnmount(() => activeLoadController?.abort());
               </div>
             </div>
           </div>
+          <p class="batch-edit-formula-note">
+            金额公式会按每笔订单各自的下单金额和商品数量分别计算。
+          </p>
           <label class="batch-edit-field">
             <span class="batch-edit-label">下单金额</span>
             <MoneyFormulaInput
               v-model="batchEditForm.orderAmount"
               v-model:formula="batchEditForm.amountFormulas.orderAmount"
+              :variables="batchEditFormulaVariables"
+              :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+              variable-key="下单金额"
               class="batch-edit-money"
-              placeholder="留空不修改，可写 =100+5"
+              placeholder="留空不修改，可写 =100*{数量}"
             />
           </label>
           <label class="batch-edit-field">
@@ -3179,8 +3248,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
             <MoneyFormulaInput
               v-model="batchEditForm.submitterSettlementAmount"
               v-model:formula="batchEditForm.amountFormulas.submitterSettlementAmount"
+              :variables="batchEditFormulaVariables"
+              :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+              variable-key="结算金额"
               class="batch-edit-money"
-              placeholder="留空不修改，可写 =100+5"
+              placeholder="留空不修改，可写 ={下单金额}+20*{数量}"
             />
           </label>
           <label class="batch-edit-field">
@@ -3188,8 +3260,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
             <MoneyFormulaInput
               v-model="batchEditForm.saleAmount"
               v-model:formula="batchEditForm.amountFormulas.saleAmount"
+              :variables="batchEditFormulaVariables"
+              :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+              variable-key="回款金额"
               class="batch-edit-money"
-              placeholder="留空不修改，可写 =100+5"
+              placeholder="留空不修改，可写 ={下单金额}+20*{数量}"
             />
           </label>
         </div>
@@ -4097,6 +4172,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
   color: var(--app-primary);
 }
 
+.batch-edit-formula-note {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .batch-edit-money {
   width: 100%;
 }
@@ -4338,6 +4421,12 @@ onBeforeUnmount(() => activeLoadController?.abort());
   height: auto !important;
   min-height: 46px;
   align-items: stretch !important;
+}
+.order-table :deep(.vxe-body--row > .vxe-body--column) {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 68%, transparent);
+}
+.order-table :deep(.vxe-body--row:last-child > .vxe-body--column) {
+  border-bottom-color: transparent;
 }
 .order-table :deep(.vxe-body--column .vxe-cell) {
   display: flex;

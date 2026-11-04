@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Picture } from '@element-plus/icons-vue';
+import { Minus, Picture } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { nextTick, onMounted, ref, watch } from 'vue';
 import { TEXT_COLOR_PRESETS } from '../lib/text-colors';
@@ -50,7 +50,9 @@ const editorText = (element: HTMLElement) =>
     .replace(/\r\n/g, '\n')
     .trim();
 
-const hasEditorImages = (element: HTMLElement) => Boolean(element.querySelector('img'));
+const hasEditorRichContent = (element: HTMLElement) => Boolean(element.querySelector('img, hr'));
+const editorFallbackText = (element: HTMLElement) =>
+  element.querySelector('img') ? '[图片]' : element.querySelector('hr') ? '[分割线]' : '';
 
 const serializeEditorContent = (element: HTMLElement) => {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -64,10 +66,10 @@ const emitContent = () => {
   const element = editor.value;
   if (!element) return;
   const visibleText = editorText(element);
-  const hasImages = hasEditorImages(element);
+  const hasRichContent = hasEditorRichContent(element);
   plainTextLength.value = visibleText.length;
-  emit('update:plainText', visibleText || (hasImages ? '[图片]' : ''));
-  emit('update:modelValue', visibleText || hasImages ? serializeEditorContent(element) : '');
+  emit('update:plainText', visibleText || editorFallbackText(element));
+  emit('update:modelValue', visibleText || hasRichContent ? serializeEditorContent(element) : '');
 };
 
 const renderValue = () => {
@@ -77,7 +79,7 @@ const renderValue = () => {
   element.innerHTML = props.modelValue;
   const visibleText = editorText(element);
   plainTextLength.value = visibleText.length;
-  emit('update:plainText', visibleText || (hasEditorImages(element) ? '[图片]' : ''));
+  emit('update:plainText', visibleText || editorFallbackText(element));
 };
 
 const rememberSelection = () => {
@@ -246,6 +248,36 @@ const insertImage = (dataUrl: string) => {
   emitContent();
 };
 
+const insertDivider = () => {
+  const element = editor.value;
+  if (!element) return;
+  element.focus();
+  restoreSelection();
+
+  const selection = window.getSelection();
+  let range = savedRange;
+  if (!range || !element.contains(range.commonAncestorContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+  }
+
+  const divider = document.createElement('hr');
+  const paragraph = document.createElement('p');
+  paragraph.appendChild(document.createElement('br'));
+  range.deleteContents();
+  range.insertNode(divider);
+  divider.after(paragraph);
+
+  const nextRange = document.createRange();
+  nextRange.setStart(paragraph, 0);
+  nextRange.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(nextRange);
+  savedRange = nextRange.cloneRange();
+  emitContent();
+};
+
 const handleImageSelected = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -386,6 +418,16 @@ onMounted(() => nextTick(renderValue));
       />
       <button
         type="button"
+        class="rich-tool-button rich-divider-button"
+        title="插入分割线"
+        @mousedown.prevent
+        @click="insertDivider"
+      >
+        <el-icon><Minus /></el-icon>
+        分割线
+      </button>
+      <button
+        type="button"
         class="rich-tool-button rich-clear-button"
         title="清除格式"
         @mousedown.prevent
@@ -491,6 +533,12 @@ onMounted(() => nextTick(renderValue));
 }
 .rich-image-input {
   display: none;
+}
+.rich-divider-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 .rich-image-size-panel {
   display: flex;
@@ -609,6 +657,12 @@ onMounted(() => nextTick(renderValue));
 .rich-text-editor :deep(img.is-image-selected) {
   outline: 3px solid color-mix(in srgb, var(--app-primary) 72%, transparent);
   outline-offset: 3px;
+}
+.rich-text-editor :deep(hr) {
+  height: 0;
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
 }
 .rich-text-editor:empty::before {
   color: var(--app-muted);

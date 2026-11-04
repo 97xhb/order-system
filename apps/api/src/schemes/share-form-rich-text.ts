@@ -26,6 +26,7 @@ export function sanitizeShareFormRichText(value: string | null | undefined) {
       'span',
       'font',
       'img',
+      'hr',
     ],
     allowedAttributes: {
       font: ['color', 'size'],

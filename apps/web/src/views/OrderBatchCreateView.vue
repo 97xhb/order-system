@@ -4,6 +4,12 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
+import {
+  extractProductQuantity,
+  MONEY_FORMULA_VARIABLE_LABELS,
+  parseMoneyInput,
+} from '../lib/money-formula';
+import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 
 type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
 type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
@@ -66,6 +72,7 @@ interface BatchOrderRow {
   submitterSettlementAmount: string;
   scanAmount: string;
   saleAmount: string;
+  amountFormulas: Record<string, string>;
   notes: string;
   importPlatformName: string;
   importCategoryName: string;
@@ -179,16 +186,13 @@ const batchColumnStyle = (column: BatchColumnDefinition) => ({
 });
 const pasteHeaders = computed(() => batchColumns.value.map((column) => column.label));
 const pasteTemplate = computed(() => pasteHeaders.value.join('\t'));
-const moneyKeys: Array<
-  keyof Pick<
-    BatchOrderRow,
-    | 'orderAmount'
-    | 'paymentDiscountAmount'
-    | 'submitterSettlementAmount'
-    | 'scanAmount'
-    | 'saleAmount'
-  >
-> = [
+type BatchMoneyKey =
+  | 'orderAmount'
+  | 'paymentDiscountAmount'
+  | 'submitterSettlementAmount'
+  | 'scanAmount'
+  | 'saleAmount';
+const moneyKeys: BatchMoneyKey[] = [
   'orderAmount',
   'paymentDiscountAmount',
   'submitterSettlementAmount',
@@ -258,6 +262,7 @@ const createRow = (seed: Partial<BatchOrderRow> = {}): BatchOrderRow => {
     submitterSettlementAmount: '',
     scanAmount: '0',
     saleAmount: '',
+    amountFormulas: {},
     notes: '',
     importPlatformName: '',
     importCategoryName: '',
@@ -298,7 +303,11 @@ const duplicateRow = (row: BatchOrderRow) => {
     return;
   }
   const index = rows.value.findIndex((item) => item.key === row.key);
-  const duplicated = createRow({ ...row, error: '' });
+  const duplicated = createRow({
+    ...row,
+    amountFormulas: { ...row.amountFormulas },
+    error: '',
+  });
   rows.value.splice(index + 1, 0, duplicated);
 };
 
@@ -358,6 +367,26 @@ const normalizeNumberText = (value: string) =>
 const optionalNumber = (value: string) => {
   const normalized = normalizeNumberText(value);
   return normalized ? Number(normalized) : undefined;
+};
+
+const amountValue = (value: string) => {
+  const normalized = normalizeNumberText(value);
+  if (!normalized) return null;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+};
+
+const rowFormulaVariables = (row: BatchOrderRow) => ({
+  下单金额: amountValue(row.orderAmount) ?? 0,
+  支付优惠: amountValue(row.paymentDiscountAmount) ?? 0,
+  结算金额: amountValue(row.submitterSettlementAmount) ?? 0,
+  回款金额: amountValue(row.saleAmount) ?? 0,
+  扫码金额: amountValue(row.scanAmount) ?? 0,
+  数量: extractProductQuantity(row.productName),
+});
+
+const setRowAmount = (row: BatchOrderRow, key: BatchMoneyKey, value: number | null) => {
+  row[key] = value === null ? '' : String(value);
 };
 
 const calculatedScanRebate = (value: string) => {
@@ -590,7 +619,7 @@ const importPastedRows = () => {
     const funding = fundingTypeByText(cellValue(cells, 'fundingType'));
     const inboundTrackingNo = cellValue(cells, 'inboundTrackingNo');
     const dispatchStatusText = cellValue(cells, 'dispatchStatus');
-    return createRow({
+    const row = createRow({
       orderedAt: normalizeDate(cellValue(cells, 'orderedAt')),
       platformId: optionIdByName(platforms.value, platformName) || defaults.platformId,
       accountName: cellValue(cells, 'submitter'),
@@ -616,6 +645,21 @@ const importPastedRows = () => {
       importPlatformName: platformName,
       importCategoryName: categoryName,
     });
+    const importedFormulas: Partial<Record<BatchMoneyKey, string>> = {
+      orderAmount: cellValue(cells, 'orderAmount'),
+      paymentDiscountAmount: cellValue(cells, 'paymentDiscountAmount'),
+      submitterSettlementAmount: cellValue(cells, 'submitterSettlementAmount'),
+      scanAmount: cellValue(cells, 'platformRebateAmount'),
+      saleAmount: cellValue(cells, 'saleAmount'),
+    };
+    for (const key of moneyKeys) {
+      const value = importedFormulas[key]?.trim();
+      if (!value?.startsWith('=')) continue;
+      row.amountFormulas[key] = value;
+      const calculated = parseMoneyInput(value, rowFormulaVariables(row));
+      if (calculated !== null) row[key] = String(calculated);
+    }
+    return row;
   });
 
   const currentHasData = rows.value.some(isMeaningfulRow);
@@ -694,6 +738,7 @@ const rowPayload = (row: BatchOrderRow) => {
     platformRebateAmount,
     rebateScanned: scanAmount > 0,
     saleAmount: optionalNumber(row.saleAmount),
+    amountFormulas: row.amountFormulas,
     notes: row.notes.trim(),
   };
 };
@@ -963,29 +1008,54 @@ onMounted(loadOptions);
                   placeholder="填写具体方式"
                 />
               </div>
-              <el-input
+              <MoneyFormulaInput
                 v-else-if="column.key === 'paymentDiscountAmount'"
-                v-model="row.paymentDiscountAmount"
-                inputmode="decimal"
+                :model-value="amountValue(row.paymentDiscountAmount)"
+                v-model:formula="row.amountFormulas.paymentDiscountAmount"
+                :variables="rowFormulaVariables(row)"
+                :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                variable-key="支付优惠"
+                placeholder="数字或公式"
+                @update:model-value="setRowAmount(row, 'paymentDiscountAmount', $event)"
               />
-              <el-input
+              <MoneyFormulaInput
                 v-else-if="column.key === 'orderAmount'"
-                v-model="row.orderAmount"
-                inputmode="decimal"
+                :model-value="amountValue(row.orderAmount)"
+                v-model:formula="row.amountFormulas.orderAmount"
+                :variables="rowFormulaVariables(row)"
+                :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                variable-key="下单金额"
+                placeholder="数字或 =100*{数量}"
+                @update:model-value="setRowAmount(row, 'orderAmount', $event)"
               />
-              <el-input
+              <MoneyFormulaInput
                 v-else-if="column.key === 'submitterSettlementAmount'"
-                v-model="row.submitterSettlementAmount"
-                inputmode="decimal"
+                :model-value="amountValue(row.submitterSettlementAmount)"
+                v-model:formula="row.amountFormulas.submitterSettlementAmount"
+                :variables="rowFormulaVariables(row)"
+                :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                variable-key="结算金额"
+                placeholder="数字或 ={下单金额}+20*{数量}"
+                @update:model-value="setRowAmount(row, 'submitterSettlementAmount', $event)"
               />
               <div v-else-if="column.key === 'platformRebateAmount'" class="scan-rebate-editor">
-                <el-input v-model="row.scanAmount" inputmode="decimal" placeholder="原始扫码金额" />
+                <MoneyFormulaInput
+                  :model-value="amountValue(row.scanAmount)"
+                  v-model:formula="row.amountFormulas.scanAmount"
+                  placeholder="原始扫码金额或 =100*0.9"
+                  @update:model-value="setRowAmount(row, 'scanAmount', $event)"
+                />
                 <span>实际 ¥{{ calculatedScanRebate(row.scanAmount).toFixed(2) }}</span>
               </div>
-              <el-input
+              <MoneyFormulaInput
                 v-else-if="column.key === 'saleAmount'"
-                v-model="row.saleAmount"
-                inputmode="decimal"
+                :model-value="amountValue(row.saleAmount)"
+                v-model:formula="row.amountFormulas.saleAmount"
+                :variables="rowFormulaVariables(row)"
+                :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                variable-key="回款金额"
+                placeholder="数字或 ={下单金额}+20*{数量}"
+                @update:model-value="setRowAmount(row, 'saleAmount', $event)"
               />
               <el-input v-else-if="column.key === 'notes'" v-model="row.notes" />
             </td>

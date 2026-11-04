@@ -10,6 +10,7 @@ describe('sanitizeShareFormRichText', () => {
         <b>重点</b>
         <font color="#ff0000" size="5">红色大字</font>
         <span style="font-size:18px;color:rgb(1, 2, 3);position:fixed">说明</span>
+        <hr>
         <script>alert(1)</script>
         <img src=x onerror=alert(2)>
       </p>
@@ -20,6 +21,7 @@ describe('sanitizeShareFormRichText', () => {
     expect(result).toContain('font-size:18px');
     expect(result).toContain('color:rgb(1, 2, 3)');
     expect(result).toContain('text-align:center');
+    expect(result).toContain('<hr />');
     expect(result).not.toContain('background');
     expect(result).not.toContain('position');
     expect(result).not.toContain('script');

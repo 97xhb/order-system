@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
+import { extractProductQuantity, MONEY_FORMULA_VARIABLE_LABELS } from '../lib/money-formula';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 import OrderFieldLabel from '../components/OrderFieldLabel.vue';
 import { useSystemStore } from '../stores/system';
@@ -164,6 +165,12 @@ const form = reactive({
   amountFormulas: {} as Record<string, string>,
   notes: '',
 });
+const formulaVariables = computed(() => ({
+  下单金额: form.orderAmount ?? 0,
+  支付优惠: form.paymentDiscountAmount ?? 0,
+  结算金额: form.submitterSettlementAmount ?? 0,
+  数量: extractProductQuantity(form.productName),
+}));
 
 const fieldConfig = computed(() => data.value?.form.fieldConfig);
 const hasConfirmedPayoutMethod = computed(
@@ -857,7 +864,10 @@ onMounted(() => void load());
                   v-model="form.orderAmount"
                   v-model:formula="form.amountFormulas.orderAmount"
                   :disabled="!canEditField('orderAmount')"
-                  placeholder="数字或 =100+5"
+                  :variables="formulaVariables"
+                  :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                  variable-key="下单金额"
+                  placeholder="数字或 =100*{数量}"
                 />
               </el-form-item>
               <el-form-item
@@ -875,6 +885,9 @@ onMounted(() => void load());
                   v-model="form.paymentDiscountAmount"
                   v-model:formula="form.amountFormulas.paymentDiscountAmount"
                   :disabled="!canEditField('paymentDiscountAmount')"
+                  :variables="formulaVariables"
+                  :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                  variable-key="支付优惠"
                 />
                 <div class="field-help">未使用支付优惠可留空或填 0。</div>
               </el-form-item>
@@ -935,7 +948,10 @@ onMounted(() => void load());
                   v-model="form.submitterSettlementAmount"
                   v-model:formula="form.amountFormulas.submitterSettlementAmount"
                   :disabled="!canEditField('submitterSettlementAmount')"
-                  placeholder="数字或 =100+5"
+                  :variables="formulaVariables"
+                  :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                  variable-key="结算金额"
+                  placeholder="数字或 ={下单金额}+20*{数量}"
                 />
                 <el-radio-group
                   v-else-if="fieldConfig?.settlementAmount.mode === 'PRESET'"
@@ -1501,6 +1517,13 @@ footer {
   height: auto;
   margin: 10px 0;
   border-radius: 10px;
+}
+.scheme-summary-product-rich :deep(hr),
+.form-description :deep(hr) {
+  height: 0;
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
 }
 .scheme-summary-description-content :deep(p),
 .scheme-summary-description-content :deep(div) {
