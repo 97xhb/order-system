@@ -26,7 +26,9 @@ import {
   parseMoneyInput,
 } from '../lib/money-formula';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
+import MultilineText from '../components/MultilineText.vue';
 import OrderColorPopover from '../components/OrderColorPopover.vue';
+import TrackingText from '../components/TrackingText.vue';
 import { TEXT_COLOR_PRESETS } from '../lib/text-colors';
 import OrderBatchCreateView from './OrderBatchCreateView.vue';
 import OrderCreateView from './OrderCreateView.vue';
@@ -1954,8 +1956,6 @@ const splitTrackingInput = (value?: string | null) => {
   return { trackingNo: matched[1].trim(), phoneSuffix: matched[2] };
 };
 
-const trackingNoOnly = (value?: string | null) => splitTrackingInput(value).trackingNo;
-
 const queryActiveLogistics = async () => {
   const row = logisticsOrder.value;
   if (!row) return;
@@ -2610,10 +2610,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 {{ row.category?.name || '-' }}
               </template>
               <template v-else-if="column.key === 'product'">
-                <div class="product-lines">{{ row.productNameSnapshot }}</div>
+                <MultilineText :text="row.productNameSnapshot" />
               </template>
               <template v-else-if="column.key === 'platformOrderNo'">
-                <div class="multiline-cell">{{ row.platformOrderNo || '-' }}</div>
+                <MultilineText :text="row.platformOrderNo" />
               </template>
               <template v-else-if="column.key === 'dispatchStatus'">
                 <el-tag :type="dispatchStatusType(row.dispatchStatus)" size="small">
@@ -2622,15 +2622,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
               </template>
               <template v-else-if="column.key === 'inboundTrackingNo'">
                 <div class="tracking-cell">
-                  <span class="tracking-number">
-                    {{ trackingNoOnly(row.inboundTrackingNo) || '-' }}
-                    <small
-                      v-if="splitTrackingInput(row.inboundTrackingNo).phoneSuffix"
-                      class="tracking-phone-suffix"
-                    >
-                      尾号 {{ splitTrackingInput(row.inboundTrackingNo).phoneSuffix }}
-                    </small>
-                  </span>
+                  <TrackingText :value="row.inboundTrackingNo" />
                   <el-button
                     v-if="row.inboundTrackingNo"
                     class="tracking-query-button"
@@ -2645,23 +2637,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 </div>
               </template>
               <template v-else-if="column.key === 'purchaseAddress'">
-                <div class="multiline-cell">{{ row.purchaseAddress || '-' }}</div>
+                <MultilineText :text="row.purchaseAddress" />
               </template>
               <template v-else-if="column.key === 'receiverName'">
-                <div class="multiline-cell">{{ row.receiverName || '-' }}</div>
+                <MultilineText :text="row.receiverName" />
               </template>
               <template v-else-if="column.key === 'shipmentTrackingNo'">
                 <div class="tracking-cell">
-                  <span class="tracking-number">
-                    {{ trackingNoOnly(row.shipmentLink?.shipment.trackingNo) || '-' }}
-                    <small
-                      v-if="splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix"
-                      class="tracking-phone-suffix"
-                    >
-                      尾号
-                      {{ splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix }}
-                    </small>
-                  </span>
+                  <TrackingText :value="row.shipmentLink?.shipment.trackingNo" />
                   <el-button
                     v-if="row.shipmentLink?.shipment.trackingNo"
                     class="tracking-query-button"
@@ -2681,7 +2664,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 </el-tag>
               </template>
               <template v-else-if="column.key === 'fundingType'">
-                <div class="multiline-cell">{{ fundingTypeText(row) }}</div>
+                <MultilineText :text="fundingTypeText(row)" />
               </template>
               <template v-else-if="column.key === 'paymentDiscountAmount'">
                 {{ money(row.paymentDiscountAmount) }}
@@ -2722,7 +2705,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 <small><span>预结算</span>{{ money(row.expectedProfit) }}</small>
               </div>
               <template v-else-if="column.key === 'notes'">
-                <div class="multiline-cell">{{ row.notes || '-' }}</div>
+                <MultilineText :text="row.notes" />
               </template>
               <template v-else-if="column.key === 'editReasonHistory'">
                 <div v-if="row.editReasonHistory.length" class="edit-reason-history">
@@ -2732,15 +2715,17 @@ onBeforeUnmount(() => activeLoadController?.abort());
                     class="edit-reason-entry"
                   >
                     <time>{{ editReasonTime(entry.createdAt) }}</time>
-                    <span>{{ entry.reason }}</span>
+                    <MultilineText tag="span" :text="entry.reason" />
                   </div>
                 </div>
                 <span v-else>-</span>
               </template>
               <template v-else-if="column.customFieldId">
-                <div :class="{ 'multiline-cell': column.customFieldType === 'LONG_TEXT' }">
-                  {{ customFieldText(row, column) }}
-                </div>
+                <MultilineText
+                  v-if="column.customFieldType === 'LONG_TEXT'"
+                  :text="customFieldText(row, column)"
+                />
+                <template v-else>{{ customFieldText(row, column) }}</template>
               </template>
             </template>
           </vxe-column>
@@ -2847,7 +2832,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 <span>#{{ row.displaySerialNo }}</span>
                 <time>{{ date(row.orderedAt) }}</time>
               </div>
-              <strong class="product-lines">{{ row.productNameSnapshot }}</strong>
+              <MultilineText tag="strong" class="product-lines" :text="row.productNameSnapshot" />
               <small>
                 {{ row.platform.name }} · {{ row.submitter.name }}
                 <template v-if="row.submitterOrderCount !== undefined">
@@ -2919,20 +2904,12 @@ onBeforeUnmount(() => activeLoadController?.abort());
             <dl>
               <div>
                 <dt>平台订单号</dt>
-                <dd class="multiline-cell">{{ row.platformOrderNo || '-' }}</dd>
+                <MultilineText tag="dd" :text="row.platformOrderNo" />
               </div>
               <div>
                 <dt>平台运单号</dt>
                 <dd class="mobile-tracking-value">
-                  <span>
-                    {{ trackingNoOnly(row.inboundTrackingNo) || '-' }}
-                  </span>
-                  <small
-                    v-if="splitTrackingInput(row.inboundTrackingNo).phoneSuffix"
-                    class="tracking-phone-suffix"
-                  >
-                    尾号 {{ splitTrackingInput(row.inboundTrackingNo).phoneSuffix }}
-                  </small>
+                  <TrackingText :value="row.inboundTrackingNo" />
                   <el-button
                     v-if="row.inboundTrackingNo"
                     text
@@ -2947,15 +2924,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
               <div>
                 <dt>寄件运单号</dt>
                 <dd class="mobile-tracking-value">
-                  <span>
-                    {{ trackingNoOnly(row.shipmentLink?.shipment.trackingNo) || '-' }}
-                  </span>
-                  <small
-                    v-if="splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix"
-                    class="tracking-phone-suffix"
-                  >
-                    尾号 {{ splitTrackingInput(row.shipmentLink?.shipment.trackingNo).phoneSuffix }}
-                  </small>
+                  <TrackingText :value="row.shipmentLink?.shipment.trackingNo" />
                   <el-button
                     v-if="row.shipmentLink?.shipment.trackingNo"
                     text
@@ -2969,19 +2938,19 @@ onBeforeUnmount(() => activeLoadController?.abort());
               </div>
               <div>
                 <dt>支付方式</dt>
-                <dd class="multiline-cell">{{ fundingTypeText(row) }}</dd>
+                <MultilineText tag="dd" :text="fundingTypeText(row)" />
               </div>
               <div>
                 <dt>下单地址</dt>
-                <dd class="multiline-cell">{{ row.purchaseAddress || '-' }}</dd>
+                <MultilineText tag="dd" :text="row.purchaseAddress" />
               </div>
               <div>
                 <dt>收货佬</dt>
-                <dd class="multiline-cell">{{ row.receiverName || '-' }}</dd>
+                <MultilineText tag="dd" :text="row.receiverName" />
               </div>
               <div>
                 <dt>备注</dt>
-                <dd class="product-lines">{{ row.notes || '-' }}</dd>
+                <MultilineText tag="dd" :text="row.notes" />
               </div>
             </dl>
             <div v-if="row.editReasonHistory.length" class="mobile-edit-history">
@@ -2992,7 +2961,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 class="edit-reason-entry"
               >
                 <time>{{ editReasonTime(entry.createdAt) }}</time>
-                <span>{{ entry.reason }}</span>
+                <MultilineText tag="span" :text="entry.reason" />
               </div>
             </div>
           </details>
@@ -3462,19 +3431,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .tracking-cell,
 .mobile-tracking-value {
   display: inline-flex;
+  width: 100%;
   align-items: flex-start;
   min-width: 0;
   gap: 3px;
-}
-
-.tracking-cell > span,
-.mobile-tracking-value > span {
-  min-width: 0;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-  line-height: 1.5;
 }
 
 .submitter-volume-cell {
