@@ -650,11 +650,13 @@ export class PublicFormsService {
 
   async listMine(publicToken: string, identity: ResolvedPublicIdentity) {
     const form = await this.getForm(publicToken, false);
+    const ownershipWhere = identity.submitterId
+      ? { submitterId: identity.submitterId }
+      : { externalIdentityId: identity.id };
     const items = await this.prisma.order.findMany({
       where: {
         shareFormId: form.id,
-        externalIdentityId: identity.id,
-        submitterId: identity.submitterId ?? undefined,
+        ...ownershipWhere,
         deletedAt: null,
       },
       orderBy: { createdAt: 'desc' },
@@ -712,12 +714,14 @@ export class PublicFormsService {
     requestMetadata: { ipAddress?: string; userAgent?: string },
   ) {
     const form = await this.getForm(publicToken, false);
+    const ownershipWhere = identity.submitterId
+      ? { submitterId: identity.submitterId }
+      : { externalIdentityId: identity.id };
     const existing = await this.prisma.order.findFirst({
       where: {
         id: orderId,
         shareFormId: form.id,
-        externalIdentityId: identity.id,
-        submitterId: identity.submitterId ?? undefined,
+        ...ownershipWhere,
         deletedAt: null,
       },
     });
@@ -956,12 +960,14 @@ export class PublicFormsService {
     requestMetadata: { ipAddress?: string; userAgent?: string },
   ) {
     const form = await this.getForm(publicToken, false);
+    const ownershipWhere = identity.submitterId
+      ? { submitterId: identity.submitterId }
+      : { externalIdentityId: identity.id };
     const existing = await this.prisma.order.findFirst({
       where: {
         id: orderId,
         shareFormId: form.id,
-        externalIdentityId: identity.id,
-        submitterId: identity.submitterId ?? undefined,
+        ...ownershipWhere,
         deletedAt: null,
       },
     });

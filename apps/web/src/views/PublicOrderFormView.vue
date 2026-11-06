@@ -346,7 +346,7 @@ const linkIdentity = async () => {
     identityDialog.value = false;
     clearForNext();
     await loadMine();
-    ElMessage.success('识别码已重新关联，本设备会继续记住该下单人');
+    ElMessage.success('识别码已重新关联，当前链接的历史订单已恢复');
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '识别码关联失败，请检查后重试'));
   } finally {
@@ -1083,7 +1083,7 @@ onMounted(() => void load());
           <span class="history-title-mark is-order">单</span>
           <div>
             <strong>我的登记</strong>
-            <span>只显示当前微信设备通过本报单链接提交的记录</span>
+            <span>显示当前下单人通过本报单链接提交的记录</span>
           </div>
         </div>
       </div>
@@ -1137,7 +1137,7 @@ onMounted(() => void load());
     >
       <div class="identity-link-form">
         <el-alert
-          title="输入原识别码后，当前设备会重新关联对应的微信昵称和回款资料。"
+          title="输入原识别码后，当前设备会重新关联对应下单人，并恢复其在当前报单链接提交的历史订单。"
           type="info"
           :closable="false"
           show-icon

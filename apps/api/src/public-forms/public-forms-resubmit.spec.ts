@@ -71,6 +71,15 @@ describe('PublicFormsService rejected order resubmission', () => {
       updatedAt: new Date('2026-10-29T02:00:00+08:00'),
     }));
     const auditCreate = jest.fn(async () => ({}));
+    const orderFindMany = jest.fn(async () => [
+      rejectedOrder,
+      {
+        ...rejectedOrder,
+        id: 'order-2',
+        reviewStatus: ReviewStatus.APPROVED,
+      },
+    ]);
+    const orderFindFirst = jest.fn(async () => rejectedOrder);
     const transaction = {
       order: { update: orderUpdate },
       auditLog: { create: auditCreate },
@@ -83,15 +92,8 @@ describe('PublicFormsService rejected order resubmission', () => {
         })),
       },
       order: {
-        findMany: jest.fn(async () => [
-          rejectedOrder,
-          {
-            ...rejectedOrder,
-            id: 'order-2',
-            reviewStatus: ReviewStatus.APPROVED,
-          },
-        ]),
-        findFirst: jest.fn(async () => rejectedOrder),
+        findMany: orderFindMany,
+        findFirst: orderFindFirst,
       },
       platform: { findFirst: jest.fn(async () => ({ id: 'platform-1' })) },
       category: { findFirst: jest.fn(async () => null) },
@@ -108,8 +110,34 @@ describe('PublicFormsService rejected order resubmission', () => {
     ).resolveOrderSubmitter = jest
       .fn()
       .mockResolvedValue({ id: 'submitter-1' });
-    return { service, orderUpdate, auditCreate };
+    return {
+      service,
+      orderUpdate,
+      auditCreate,
+      orderFindMany,
+      orderFindFirst,
+    };
   };
+
+  it('lists orders by submitter after a new device identity is relinked', async () => {
+    const { service, orderFindMany } = createService();
+
+    await service.listMine('token-1', {
+      id: 'identity-new-device',
+      displayCode: 'WX-TEST',
+      submitterId: 'submitter-1',
+    });
+
+    expect(orderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          shareFormId: form.id,
+          submitterId: 'submitter-1',
+          deletedAt: null,
+        },
+      }),
+    );
+  });
 
   it('always shows edit for rejected orders but not approved orders', async () => {
     const { service } = createService(false);
@@ -129,7 +157,8 @@ describe('PublicFormsService rejected order resubmission', () => {
   });
 
   it('returns a rejected order to pending review after resubmission', async () => {
-    const { service, orderUpdate, auditCreate } = createService(false);
+    const { service, orderUpdate, auditCreate, orderFindFirst } =
+      createService(false);
 
     await service.updateMine(
       'token-1',
@@ -146,6 +175,14 @@ describe('PublicFormsService rejected order resubmission', () => {
       {},
     );
 
+    expect(orderFindFirst).toHaveBeenCalledWith({
+      where: {
+        id: rejectedOrder.id,
+        shareFormId: form.id,
+        submitterId: 'submitter-1',
+        deletedAt: null,
+      },
+    });
     expect(orderUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
