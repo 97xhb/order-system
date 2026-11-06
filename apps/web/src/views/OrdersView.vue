@@ -201,11 +201,17 @@ const tableColumnOptions = computed<TableColumnOption[]>(() => [
     key: field.key,
     label: field.label,
     width:
-      field.key === 'dispatchStatus' || field.key === 'receiverName'
-        ? ('auto' as const)
-        : field.width,
+      field.key === 'platformOrderNo'
+        ? 170
+        : field.key === 'dispatchStatus' || field.key === 'receiverName'
+          ? ('auto' as const)
+          : field.width,
     minWidth:
-      field.key === 'dispatchStatus' || field.key === 'receiverName' ? undefined : field.minWidth,
+      field.key === 'dispatchStatus' ||
+      field.key === 'receiverName' ||
+      field.key === 'platformOrderNo'
+        ? undefined
+        : field.minWidth,
     defaultVisible: field.defaultVisible,
   })),
   ...options.customFields.map((field) => ({
@@ -216,6 +222,17 @@ const tableColumnOptions = computed<TableColumnOption[]>(() => [
     customFieldType: field.type,
     defaultVisible: field.showInTable,
   })),
+]);
+const multilineColumnKeys = new Set([
+  'product',
+  'platformOrderNo',
+  'inboundTrackingNo',
+  'purchaseAddress',
+  'receiverName',
+  'shipmentTrackingNo',
+  'fundingType',
+  'notes',
+  'editReasonHistory',
 ]);
 const defaultVisibleColumnKeys = computed(() =>
   tableColumnOptions.value.filter((item) => item.defaultVisible !== false).map((item) => item.key),
@@ -2564,7 +2581,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
             :width="column.width"
             :min-width="column.minWidth"
             :show-overflow="
-              !['product', 'platformOrderNo', 'editReasonHistory'].includes(column.key)
+              !multilineColumnKeys.has(column.key) && column.customFieldType !== 'LONG_TEXT'
             "
           >
             <template #default="{ row }">
@@ -2628,10 +2645,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 </div>
               </template>
               <template v-else-if="column.key === 'purchaseAddress'">
-                {{ row.purchaseAddress || '-' }}
+                <div class="multiline-cell">{{ row.purchaseAddress || '-' }}</div>
               </template>
               <template v-else-if="column.key === 'receiverName'">
-                {{ row.receiverName || '-' }}
+                <div class="multiline-cell">{{ row.receiverName || '-' }}</div>
               </template>
               <template v-else-if="column.key === 'shipmentTrackingNo'">
                 <div class="tracking-cell">
@@ -2664,7 +2681,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 </el-tag>
               </template>
               <template v-else-if="column.key === 'fundingType'">
-                {{ fundingTypeText(row) }}
+                <div class="multiline-cell">{{ fundingTypeText(row) }}</div>
               </template>
               <template v-else-if="column.key === 'paymentDiscountAmount'">
                 {{ money(row.paymentDiscountAmount) }}
@@ -2704,7 +2721,9 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 </strong>
                 <small><span>预结算</span>{{ money(row.expectedProfit) }}</small>
               </div>
-              <template v-else-if="column.key === 'notes'">{{ row.notes || '-' }}</template>
+              <template v-else-if="column.key === 'notes'">
+                <div class="multiline-cell">{{ row.notes || '-' }}</div>
+              </template>
               <template v-else-if="column.key === 'editReasonHistory'">
                 <div v-if="row.editReasonHistory.length" class="edit-reason-history">
                   <div
@@ -2719,7 +2738,9 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 <span v-else>-</span>
               </template>
               <template v-else-if="column.customFieldId">
-                {{ customFieldText(row, column) }}
+                <div :class="{ 'multiline-cell': column.customFieldType === 'LONG_TEXT' }">
+                  {{ customFieldText(row, column) }}
+                </div>
               </template>
             </template>
           </vxe-column>
@@ -2948,15 +2969,15 @@ onBeforeUnmount(() => activeLoadController?.abort());
               </div>
               <div>
                 <dt>支付方式</dt>
-                <dd>{{ fundingTypeText(row) }}</dd>
+                <dd class="multiline-cell">{{ fundingTypeText(row) }}</dd>
               </div>
               <div>
                 <dt>下单地址</dt>
-                <dd>{{ row.purchaseAddress || '-' }}</dd>
+                <dd class="multiline-cell">{{ row.purchaseAddress || '-' }}</dd>
               </div>
               <div>
                 <dt>收货佬</dt>
-                <dd>{{ row.receiverName || '-' }}</dd>
+                <dd class="multiline-cell">{{ row.receiverName || '-' }}</dd>
               </div>
               <div>
                 <dt>备注</dt>
