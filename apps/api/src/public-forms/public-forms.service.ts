@@ -150,16 +150,13 @@ export class PublicFormsService {
             category: { select: { id: true, name: true } },
           },
         },
-        _count: {
-          select: { orders: { where: { deletedAt: null } } },
-        },
       },
     });
     if (!form) throw new NotFoundException('分享链接不存在或已经失效');
 
     if (requireActive) {
       const now = new Date();
-      if (!form.scheme.enabled || form.status !== ShareFormStatus.ACTIVE) {
+      if (form.status !== ShareFormStatus.ACTIVE) {
         throw new GoneException('该登记链接当前未开放');
       }
       if (form.startsAt && form.startsAt > now) {
@@ -167,12 +164,6 @@ export class PublicFormsService {
       }
       if (form.expiresAt && form.expiresAt <= now) {
         throw new GoneException('该登记链接已经过期');
-      }
-      if (
-        form.submissionLimit !== null &&
-        form._count.orders >= form.submissionLimit
-      ) {
-        throw new GoneException('该登记链接已达到提交上限');
       }
     }
 
@@ -430,6 +421,7 @@ export class PublicFormsService {
         fieldConfig: this.config(form.fieldConfig),
         allowEditBeforeApproval: form.allowEditBeforeApproval,
         allowDeleteBeforeApproval: form.allowDeleteBeforeApproval,
+        canSubmit: form.scheme.enabled,
         scheme: {
           name: form.scheme.name,
           productName: form.scheme.productName,
@@ -451,6 +443,9 @@ export class PublicFormsService {
     requestMetadata: { ipAddress?: string; userAgent?: string },
   ) {
     const form = await this.getForm(publicToken, true);
+    if (!form.scheme.enabled) {
+      throw new GoneException('该方案当前已停用，暂不能提交新报单');
+    }
     const config = this.config(form.fieldConfig);
     this.assertRequiredFields(config, dto);
     const defaults =

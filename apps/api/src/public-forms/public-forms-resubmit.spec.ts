@@ -64,9 +64,17 @@ describe('PublicFormsService rejected order resubmission', () => {
     },
   };
 
-  const createService = (allowEditBeforeApproval = true) => {
-    const orderUpdate = jest.fn(async ({ data }) => ({
+  const createService = (
+    allowEditBeforeApproval = true,
+    schemeEnabled = true,
+    existingReviewStatus = ReviewStatus.REJECTED,
+  ) => {
+    const existingOrder = {
       ...rejectedOrder,
+      reviewStatus: existingReviewStatus,
+    };
+    const orderUpdate = jest.fn(async ({ data }) => ({
+      ...existingOrder,
       ...data,
       updatedAt: new Date('2026-10-29T02:00:00+08:00'),
     }));
@@ -79,7 +87,7 @@ describe('PublicFormsService rejected order resubmission', () => {
         reviewStatus: ReviewStatus.APPROVED,
       },
     ]);
-    const orderFindFirst = jest.fn(async () => rejectedOrder);
+    const orderFindFirst = jest.fn(async () => existingOrder);
     const transaction = {
       order: { update: orderUpdate },
       auditLog: { create: auditCreate },
@@ -89,6 +97,7 @@ describe('PublicFormsService rejected order resubmission', () => {
         findUnique: jest.fn(async () => ({
           ...form,
           allowEditBeforeApproval,
+          scheme: { enabled: schemeEnabled },
         })),
       },
       order: {
@@ -209,6 +218,52 @@ describe('PublicFormsService rejected order resubmission', () => {
           afterData: expect.objectContaining({
             reviewStatus: ReviewStatus.PENDING,
           }),
+        }),
+      }),
+    );
+  });
+
+  it('allows a rejected order to be resubmitted when the scheme is disabled', async () => {
+    const { service, orderUpdate } = createService(true, false);
+
+    await service.updateMine(
+      'token-1',
+      rejectedOrder.id,
+      identity as never,
+      { platformOrderNo: 'NEW-ORDER-NO' },
+      {},
+    );
+
+    expect(orderUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewStatus: ReviewStatus.PENDING,
+          platformOrderNo: 'NEW-ORDER-NO',
+        }),
+      }),
+    );
+  });
+
+  it('allows a pending order to be updated when the scheme is disabled', async () => {
+    const { service, orderUpdate } = createService(
+      true,
+      false,
+      ReviewStatus.PENDING,
+    );
+
+    await service.updateMine(
+      'token-1',
+      rejectedOrder.id,
+      identity as never,
+      { platformOrderNo: 'UPDATED-ORDER-NO' },
+      {},
+    );
+
+    expect(orderUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewStatus: ReviewStatus.PENDING,
+          platformOrderNo: 'UPDATED-ORDER-NO',
         }),
       }),
     );

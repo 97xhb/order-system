@@ -75,6 +75,7 @@ interface BootstrapData {
     fieldConfig: FieldConfig;
     allowEditBeforeApproval: boolean;
     allowDeleteBeforeApproval: boolean;
+    canSubmit: boolean;
     scheme: {
       name: string;
       productName: string;
@@ -173,6 +174,7 @@ const formulaVariables = computed(() => ({
 }));
 
 const fieldConfig = computed(() => data.value?.form.fieldConfig);
+const canSubmitNew = computed(() => data.value?.form.canSubmit !== false);
 const hasConfirmedPayoutMethod = computed(
   () =>
     data.value?.identity.submitter?.payoutMethods.some((method) => method.status === 'ACTIVE') ??
@@ -355,6 +357,10 @@ const linkIdentity = async () => {
 };
 
 const submit = async () => {
+  if (!editingId.value && !canSubmitNew.value) {
+    ElMessage.warning('该方案当前已停用，暂不能提交新报单');
+    return;
+  }
   for (const key of requiredFieldOrder) {
     const rule = field(key);
     if (!rule.visible || !rule.required) continue;
@@ -570,6 +576,15 @@ onMounted(() => void load());
             </div>
           </div>
         </section>
+        <el-alert
+          v-if="data && !data.form.canSubmit"
+          class="scheme-submit-alert"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="方案已停用，暂不能提交新报单"
+          description="已有报单仍可查看和修改；管理员确认后的订单仍不可修改。"
+        />
         <section v-if="data.form.scheme.description" class="form-description-card">
           <div class="form-description-heading">
             <span class="form-description-mark">注</span>
@@ -1011,12 +1026,15 @@ onMounted(() => void load());
                   type="primary"
                   size="large"
                   :loading="submitting"
+                  :disabled="!editingId && !canSubmitNew"
                   >{{
-                    editingId
-                      ? editingReviewStatus === 'REJECTED'
-                        ? '重新提交审核'
-                        : '保存修改'
-                      : '提交登记'
+                    !editingId && !canSubmitNew
+                      ? '方案已停用，暂不能提交'
+                      : editingId
+                        ? editingReviewStatus === 'REJECTED'
+                          ? '重新提交审核'
+                          : '保存修改'
+                        : '提交登记'
                   }}</el-button
                 >
               </div>
@@ -1540,6 +1558,10 @@ footer {
   border-radius: 20px;
   background: rgba(255, 251, 235, 0.86);
   box-shadow: 0 12px 28px rgba(180, 83, 9, 0.06);
+}
+.scheme-submit-alert {
+  margin-top: 12px;
+  border-radius: 14px;
 }
 .form-description-heading {
   display: flex;
