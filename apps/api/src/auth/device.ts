@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+/* eslint-disable no-control-regex -- 有意剥离设备名里的控制字符 */
 export const normalizeDeviceName = (value?: string | null) => {
   const normalized = value
     ?.replace(/[\u0000-\u001f\u007f]/g, ' ')
@@ -8,6 +9,8 @@ export const normalizeDeviceName = (value?: string | null) => {
     .slice(0, 100);
   return normalized || null;
 };
+
+/* eslint-enable no-control-regex */
 
 export const hashDeviceIdentifier = (value?: string | null) => {
   const normalized = value?.trim();

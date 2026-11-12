@@ -50,7 +50,9 @@ export class UpdateService {
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
-      throw new BadRequestException(`读取在线版本失败（HTTP ${response.status}）`);
+      throw new BadRequestException(
+        `读取在线版本失败（HTTP ${response.status}）`,
+      );
     }
     const manifest = (await response.json()) as Partial<ReleaseManifest>;
     if (!manifest.version || typeof manifest.version !== 'string') {
@@ -86,11 +88,13 @@ export class UpdateService {
       updateAvailable: latest
         ? this.compareVersions(latest.version, currentVersion) > 0
         : false,
-      release: latest ?? (existsSync(path.join(process.cwd(), 'release.json'))
-        ? (JSON.parse(
-            readFileSync(path.join(process.cwd(), 'release.json'), 'utf8'),
-          ) as ReleaseManifest)
-        : null),
+      release:
+        latest ??
+        (existsSync(path.join(process.cwd(), 'release.json'))
+          ? (JSON.parse(
+              readFileSync(path.join(process.cwd(), 'release.json'), 'utf8'),
+            ) as ReleaseManifest)
+          : null),
       error,
     };
   }

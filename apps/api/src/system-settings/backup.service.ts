@@ -558,6 +558,7 @@ export class BackupService {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- 同步逻辑保留 async 签名以兼容控制器调用与 spec
   async inspect(input: string) {
     const { payload, bytes } = this.decode(input);
     const metadata = this.metadata(payload);

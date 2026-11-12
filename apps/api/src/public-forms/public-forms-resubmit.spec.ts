@@ -67,7 +67,7 @@ describe('PublicFormsService rejected order resubmission', () => {
   const createService = (
     allowEditBeforeApproval = true,
     schemeEnabled = true,
-    existingReviewStatus = ReviewStatus.REJECTED,
+    existingReviewStatus: ReviewStatus = ReviewStatus.REJECTED,
   ) => {
     const existingOrder = {
       ...rejectedOrder,

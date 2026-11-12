@@ -12,7 +12,7 @@ const identity = {
 
 const createService = (
   schemeEnabled: boolean,
-  shareStatus = ShareFormStatus.ACTIVE,
+  shareStatus: ShareFormStatus = ShareFormStatus.ACTIVE,
 ) => {
   const prisma = {
     shareForm: {

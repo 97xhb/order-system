@@ -1035,7 +1035,7 @@ export class SystemSettingsService {
     if (!deviceName) throw new BadRequestException('设备名称不能为空');
 
     const group = await this.getActiveSessionGroup(sessionId, admin.id);
-    const result = await this.prisma.adminSession.updateMany({
+    await this.prisma.adminSession.updateMany({
       where: { id: { in: group.map((session) => session.id) } },
       data: { deviceName },
     });
