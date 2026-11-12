@@ -548,6 +548,7 @@ onBeforeUnmount(() => {
   <div class="page-shell">
     <div class="page-heading">
       <div>
+        <span class="page-kicker">ORDER SCHEMES</span>
         <h1>在线报单</h1>
         <p>每个方案一个固定链接和二维码；提交后先进入待确认，管理员确认后才进入正式订单。</p>
       </div>

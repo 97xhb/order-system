@@ -228,7 +228,7 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <div v-loading="loading" class="affiliate-settings-stack">
+  <div v-loading="loading" class="settings-section">
     <section class="surface-card affiliate-overview-card">
       <div class="overview-copy">
         <span class="overview-icon"><Connection /></span>
@@ -507,11 +507,6 @@ onMounted(() => void load());
 </template>
 
 <style scoped>
-.affiliate-settings-stack {
-  display: grid;
-  gap: 14px;
-}
-
 .affiliate-overview-card,
 .overview-copy,
 .overview-title-row,

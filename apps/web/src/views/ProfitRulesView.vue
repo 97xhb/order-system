@@ -298,15 +298,11 @@ onMounted(loadRules);
 </script>
 
 <template>
-  <div class="page-shell">
-    <div class="page-heading">
-      <div>
-        <h1>利润规则配置</h1>
-        <p>通过字段加减配置公式。保存后生成新版本，历史订单继续使用原规则快照。</p>
-      </div>
+  <div class="settings-section">
+    <div class="section-toolbar">
+      <p>通过字段加减配置公式。保存后生成新版本，历史订单继续使用原规则快照。</p>
       <el-button type="primary" :loading="saving" @click="saveRule">保存为新版本</el-button>
     </div>
-
     <el-alert
       title="默认规则仍是：回款金额 - 结算金额 + 支付优惠 + 扫码返利；单笔利润调整始终在公式结果后追加。"
       type="info"
@@ -507,6 +503,19 @@ onMounted(loadRules);
 </template>
 
 <style scoped>
+.section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-toolbar p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+
 .rule-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;

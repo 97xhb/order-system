@@ -215,6 +215,16 @@ a {
   letter-spacing: 0.12em;
 }
 
+/* 设置中心子页根容器：父级 SettingsView 已提供 page-shell 间距，子页只负责纵向排内容卡片 */
+.settings-section {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .surface-card {
   border: 1px solid var(--app-border);
   border-radius: 18px;

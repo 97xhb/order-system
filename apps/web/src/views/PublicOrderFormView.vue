@@ -1237,7 +1237,7 @@ onMounted(() => void load());
   --el-font-size-extra-small: 15px;
   min-height: 100vh;
   padding: 18px 14px 32px;
-  color: #334155;
+  color: var(--app-text);
   font-size: 19px;
   background:
     radial-gradient(circle at 12% 0, rgba(96, 165, 250, 0.2), transparent 32%),
@@ -1284,12 +1284,12 @@ footer {
   flex-direction: column;
 }
 .public-header strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 20px;
 }
 .public-header span {
   margin-top: 2px;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 14px;
 }
 .public-header-pill {
@@ -1347,18 +1347,18 @@ footer {
   flex-direction: column;
 }
 .submission-guide-copy strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 17px;
 }
 .submission-guide-copy span,
 .submission-guide-copy small {
   margin-top: 2px;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 13px;
   line-height: 1.55;
 }
 .submission-guide-copy small {
-  color: #94a3b8;
+  color: var(--app-muted);
 }
 .submission-guide-pill {
   flex: 0 0 auto;
@@ -1418,12 +1418,12 @@ footer {
   flex-direction: column;
 }
 .identity-query-copy strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 18px;
 }
 .identity-query-copy small {
   margin-top: 3px;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
 }
 .identity-query-actions {
@@ -1442,7 +1442,7 @@ footer {
 .identity-change-button {
   padding-right: 7px;
   padding-left: 7px;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 14px;
 }
 .identity-link-form {
@@ -1662,12 +1662,12 @@ footer {
   flex-direction: column;
 }
 .form-section-heading strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 17px;
 }
 .form-section-heading small {
   margin-top: 2px;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
 }
 .form-section-grid {
@@ -1679,7 +1679,7 @@ footer {
   margin-bottom: 16px;
 }
 .public-form :deep(.el-form-item__label) {
-  color: #475569;
+  color: var(--app-text);
   font-size: 15px;
   font-weight: 650;
 }
@@ -1765,13 +1765,13 @@ footer {
   flex-direction: column;
 }
 .funding-option strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 16px;
 }
 .funding-option small {
   margin-top: 3px;
   overflow: hidden;
-  color: #98a2b3;
+  color: var(--app-muted);
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1796,7 +1796,7 @@ footer {
 }
 .field-help {
   margin-top: 5px;
-  color: #98a2b3;
+  color: var(--app-muted);
   font-size: 14px;
 }
 .submit-area {
@@ -1868,7 +1868,7 @@ footer {
   background: #eaf2ff;
 }
 .history-title strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 18px;
 }
 .history-title :deep(.el-button) {
@@ -1894,7 +1894,7 @@ footer {
 }
 .payout-row span {
   width: 100%;
-  color: #667085;
+  color: var(--app-muted);
   font-size: 15px;
 }
 .payout-form {
@@ -1907,7 +1907,7 @@ footer {
   width: 100%;
 }
 .history-title span {
-  color: #98a2b3;
+  color: var(--app-muted);
   font-size: 14px;
 }
 .order-item {
@@ -1940,7 +1940,7 @@ footer {
 }
 .order-main span,
 .order-info {
-  color: #667085;
+  color: var(--app-muted);
   font-size: 15px;
 }
 .order-info {
@@ -1968,7 +1968,7 @@ footer {
 }
 footer {
   padding-top: 18px;
-  color: #98a2b3;
+  color: var(--app-muted);
   font-size: 14px;
   text-align: center;
 }
@@ -1985,7 +1985,7 @@ footer {
   border-bottom: 1px solid #eef2f7;
 }
 :global(.public-dialog .el-dialog__title) {
-  color: #0f172a;
+  color: var(--app-heading);
   font-weight: 700;
 }
 :global(.public-dialog .el-dialog__body) {

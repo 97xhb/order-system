@@ -164,23 +164,18 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="page-shell">
-    <div class="page-heading">
-      <div>
-        <h1>平台与品类配置</h1>
-        <p>维护下单平台和下单品类，停用后不影响历史订单。</p>
-      </div>
-      <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
-    </div>
-
+  <div class="settings-section">
     <section class="surface-card catalog-card">
       <el-tabs v-model="activeTab">
         <el-tab-pane label="下单平台" name="platform">
           <div class="tab-toolbar">
-            <span>预置京东、淘宝、抖音，可继续增加其他平台。</span>
-            <el-button type="primary" :icon="Plus" @click="openCreate('platform')"
-              >新增平台</el-button
-            >
+            <span>维护下单平台和下单品类，停用后不影响历史订单。</span>
+            <div class="tab-toolbar-actions">
+              <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+              <el-button type="primary" :icon="Plus" @click="openCreate('platform')"
+                >新增平台</el-button
+              >
+            </div>
           </div>
           <el-table v-loading="loading" :data="platforms" border stripe>
             <el-table-column prop="sortOrder" label="排序" width="86" />
@@ -233,9 +228,12 @@ onMounted(loadData);
         <el-tab-pane label="下单品类" name="category">
           <div class="tab-toolbar">
             <span>预置数码、美妆、转寄、电玩、刷单。</span>
-            <el-button type="primary" :icon="Plus" @click="openCreate('category')"
-              >新增品类</el-button
-            >
+            <div class="tab-toolbar-actions">
+              <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+              <el-button type="primary" :icon="Plus" @click="openCreate('category')"
+                >新增品类</el-button
+              >
+            </div>
           </div>
           <el-table v-loading="loading" :data="categories" border stripe>
             <el-table-column prop="sortOrder" label="排序" width="86" />
@@ -355,6 +353,13 @@ onMounted(loadData);
 .tab-toolbar span {
   color: #667085;
   font-size: 14px;
+}
+
+.tab-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .catalog-actions {

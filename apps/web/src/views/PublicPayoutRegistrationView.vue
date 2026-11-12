@@ -355,7 +355,7 @@ onMounted(() => void load());
   --el-result-title-font-size: 23px;
   min-height: 100vh;
   padding: 18px 14px 28px;
-  color: #334155;
+  color: var(--app-text);
   background:
     radial-gradient(circle at 12% 0, rgba(96, 165, 250, 0.2), transparent 32%),
     linear-gradient(180deg, #eef6ff 0, #f6f8fb 280px);
@@ -400,13 +400,13 @@ footer {
 }
 
 .public-payout-header strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 20px;
 }
 
 .public-payout-header span {
   margin-top: 2px;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 14px;
 }
 
@@ -440,7 +440,7 @@ footer {
 
 .intro-block span,
 .intro-block p {
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 13px;
 }
 
@@ -508,13 +508,13 @@ footer {
 }
 
 .section-heading strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 17px;
 }
 
 .section-heading small {
   margin-top: 2px;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
 }
 
@@ -532,7 +532,7 @@ footer {
   padding: 10px;
   border: 1px solid #dde5ef;
   border-radius: 14px;
-  color: #334155;
+  color: var(--app-text);
   background: #fff;
   cursor: pointer;
   text-align: left;
@@ -578,14 +578,14 @@ footer {
 }
 
 .method-option b {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 15px;
 }
 
 .method-option small {
   margin-top: 2px;
   overflow: hidden;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -621,7 +621,7 @@ footer {
 }
 
 .method-fields-title strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 15px;
 }
 
@@ -636,7 +636,7 @@ footer {
 }
 
 .registration-form :deep(.el-form-item__label) {
-  color: #475569;
+  color: var(--app-text);
   font-size: 15px;
   font-weight: 600;
 }
@@ -654,7 +654,7 @@ footer {
 .submit-area p {
   max-width: 390px;
   margin: 0;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -676,12 +676,12 @@ footer {
 }
 
 .success-summary span {
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 14px;
 }
 
 .success-summary strong {
-  color: #334155;
+  color: var(--app-text);
   font-size: 15px;
   text-align: right;
 }
@@ -694,7 +694,7 @@ footer {
 
 footer {
   padding-top: 18px;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
   text-align: center;
 }

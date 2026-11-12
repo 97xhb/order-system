@@ -171,7 +171,7 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <div class="query-settings-stack">
+  <div class="settings-section">
     <section v-loading="loading" class="surface-card query-access-card">
       <div class="query-card-heading">
         <div class="query-card-icon">查</div>
@@ -313,11 +313,6 @@ onMounted(() => void load());
 </template>
 
 <style scoped>
-.query-settings-stack {
-  display: grid;
-  gap: 14px;
-}
-
 .query-access-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

@@ -623,7 +623,7 @@ onMounted(() => void load());
   --el-result-title-font-size: 23px;
   min-height: 100vh;
   padding: 18px 14px 30px;
-  color: #334155;
+  color: var(--app-text);
   background:
     radial-gradient(circle at 12% 0, rgba(96, 165, 250, 0.2), transparent 32%),
     linear-gradient(180deg, #eef6ff 0, #f6f8fb 320px);
@@ -671,13 +671,13 @@ footer {
 }
 
 .brand-copy strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 20px;
 }
 
 .brand-copy span {
   margin-top: 2px;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 14px;
 }
 
@@ -752,14 +752,14 @@ footer {
 
 .query-heading strong,
 .section-title strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 18px;
 }
 
 .query-heading small,
 .section-title div span {
   margin-top: 3px;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
 }
 
@@ -799,7 +799,7 @@ footer {
 .change-code-button {
   padding-right: 7px;
   padding-left: 7px;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 14px;
 }
 
@@ -830,7 +830,7 @@ footer {
 }
 
 .query-tip {
-  color: #94a3b8;
+  color: var(--app-muted);
 }
 
 .lookup-error {
@@ -850,13 +850,13 @@ footer {
 }
 
 .profile-summary small {
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
 }
 
 .profile-summary strong {
   margin-top: 3px;
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 17px;
 }
 
@@ -887,7 +887,7 @@ footer {
 }
 
 .section-title > span {
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 14px;
 }
 
@@ -924,14 +924,14 @@ footer {
 }
 
 .method-copy strong {
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 15px;
 }
 
 .method-copy p {
   margin: 4px 0 0;
   overflow: hidden;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 13px;
   line-height: 1.5;
   text-overflow: ellipsis;
@@ -954,7 +954,7 @@ footer {
 .order-header {
   min-height: 42px;
   padding: 0 14px;
-  color: #64748b;
+  color: var(--app-muted);
   background: #f5f8fc;
   font-size: 13px;
 }
@@ -962,7 +962,7 @@ footer {
 .order-row {
   min-height: 58px;
   padding: 9px 14px;
-  color: #334155;
+  color: var(--app-text);
   background: #fff;
   font-size: 14px;
 }
@@ -982,16 +982,16 @@ footer {
 }
 
 .scheme-cell {
-  color: #0f172a;
+  color: var(--app-heading);
   font-weight: 600;
 }
 
 .tracking-cell {
-  color: #475569;
+  color: var(--app-text);
 }
 
 .money-cell {
-  color: #475569;
+  color: var(--app-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1023,21 +1023,21 @@ footer {
 
 .empty-guide strong {
   margin-top: 12px;
-  color: #0f172a;
+  color: var(--app-heading);
   font-size: 17px;
 }
 
 .empty-guide p {
   max-width: 480px;
   margin: 6px 0 0;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
   line-height: 1.7;
 }
 
 footer {
   padding-top: 18px;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 13px;
   text-align: center;
 }
@@ -1083,7 +1083,7 @@ footer {
   }
 
   .order-row > span::before {
-    color: #94a3b8;
+    color: var(--app-muted);
     content: attr(data-label);
     font-size: 12px;
     font-weight: 400;
