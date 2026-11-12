@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AffiliateModule } from './affiliate/affiliate.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { OrderGroupsModule } from './order-groups/order-groups.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProfitRulesModule } from './profit-rules/profit-rules.module';
@@ -39,6 +40,7 @@ import { LogisticsModule } from './logistics/logistics.module';
     AffiliateModule,
     AuthModule,
     CatalogModule,
+    OrderGroupsModule,
     OrdersModule,
     ProfitRulesModule,
     PublicFormsModule,

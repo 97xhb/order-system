@@ -32,6 +32,7 @@ import { ReviewOrderDto } from './dto/review-order.dto';
 import { UpdateAdminOrderDto } from './dto/update-admin-order.dto';
 import { UpdateOrderProgressDto } from './dto/update-order-progress.dto';
 import { normalizeOrderSettlementStatus } from './order-statuses';
+import { ORDER_LIST_SELECT } from './order-select';
 import {
   calculateScanRebateAmount,
   inferScanAmountFromRebate,
@@ -1032,6 +1033,13 @@ export class OrdersService {
     const schemeIds = this.ids(query.schemeIds);
     const andFilters: Prisma.OrderWhereInput[] = [{ deletedAt: null }];
 
+    if (query.ungroupedOnly) {
+      andFilters.push({ archiveGroupId: null });
+    }
+    if (query.archiveGroupId) {
+      andFilters.push({ archiveGroupId: query.archiveGroupId });
+    }
+
     if (keyword) {
       andFilters.push({
         OR: [
@@ -1170,51 +1178,6 @@ export class OrdersService {
         )
       : Promise.resolve(null);
 
-    const orderSelect = {
-      id: true,
-      serialNo: true,
-      reviewStatus: true,
-      orderedAt: true,
-      productNameSnapshot: true,
-      platformOrderNo: true,
-      inboundTrackingNo: true,
-      purchaseAddress: true,
-      receiverName: true,
-      dispatchStatus: true,
-      textColor: true,
-      fundingType: true,
-      customData: true,
-      shipmentStatus: true,
-      orderAmount: true,
-      paymentDiscountAmount: true,
-      saleAmount: true,
-      customerReceivedAmount: true,
-      receivableStatus: true,
-      submitterSettlementAmount: true,
-      submitterPaidAmount: true,
-      submitterSettlementStatus: true,
-      scanAmount: true,
-      platformRebateAmount: true,
-      expectedProfit: true,
-      settledProfit: true,
-      rebateScanned: true,
-      notes: true,
-      platform: { select: { id: true, name: true } },
-      submitter: { select: { id: true, code: true, name: true } },
-      category: { select: { id: true, name: true } },
-      shipmentLink: {
-        select: {
-          shipment: {
-            select: {
-              trackingNo: true,
-            },
-          },
-        },
-      },
-      customValues: {
-        select: { definitionId: true, value: true },
-      },
-    } satisfies Prisma.OrderSelect;
     const serialItemsRequest = submitterOrderCountSort
       ? Promise.resolve(null)
       : this.prisma.order.findMany({
@@ -1222,7 +1185,7 @@ export class OrdersService {
           orderBy: [{ serialNo: serialSort }, { createdAt: serialSort }],
           skip: (page - 1) * pageSize,
           take: pageSize,
-          select: orderSelect,
+          select: ORDER_LIST_SELECT,
         });
     const submitterGroupsRequest = submitterOrderCountSort
       ? this.prisma.order.groupBy({
@@ -1247,7 +1210,7 @@ export class OrdersService {
       submitterGroupsRequest,
     ]);
     type OrderListRow = Prisma.OrderGetPayload<{
-      select: typeof orderSelect;
+      select: typeof ORDER_LIST_SELECT;
     }> & { submitterOrderCount?: number };
     let items = (serialItems ?? []) as OrderListRow[];
     if (submitterGroups) {
@@ -1294,7 +1257,7 @@ export class OrdersService {
             orderBy: [{ serialNo: serialSort }, { createdAt: serialSort }],
             skip: group.skip,
             take: group.take,
-            select: orderSelect,
+            select: ORDER_LIST_SELECT,
           });
           return groupItems.map((order) => ({
             ...order,

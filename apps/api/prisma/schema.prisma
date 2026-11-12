@@ -437,6 +437,7 @@ model Order {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  archiveGroupId String? @map("archive_group_id") @db.Uuid
 
   shareForm        ShareForm?              @relation(fields: [shareFormId], references: [id], onDelete: SetNull)
   externalIdentity ExternalIdentity?       @relation(fields: [externalIdentityId], references: [id], onDelete: SetNull)
@@ -453,6 +454,7 @@ model Order {
   payoutLinks      PayoutAllocation[]
   customValues     OrderCustomFieldValue[]
   affiliateOrders  AffiliateOrder[]
+  archiveGroup     OrderArchiveGroup?      @relation(fields: [archiveGroupId], references: [id], onDelete: SetNull)
 
   @@index([orderedAt])
   @@index([reviewStatus, deletedAt])
@@ -465,7 +467,24 @@ model Order {
   @@index([profitRuleId])
   @@index([rebateScanned, deletedAt])
   @@index([deletedAt, serialNo])
+  @@index([archiveGroupId, orderedAt])
   @@map("orders")
+}
+
+model OrderArchiveGroup {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(120)
+  description String?  @db.Text
+  color       String?  @db.VarChar(7)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  orders Order[]
+
+  @@index([sortOrder, createdAt])
+  @@map("order_archive_groups")
 }
 
 model Shipment {

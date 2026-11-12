@@ -14,6 +14,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Matches,
@@ -125,6 +126,23 @@ export class ListOrdersQueryDto {
   })
   @IsBoolean()
   exceptionOnly?: boolean;
+
+  @ApiPropertyOptional({
+    description: '仅显示未归档到任何分组中的订单',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  ungroupedOnly?: boolean;
+
+  @ApiPropertyOptional({ description: '仅显示指定归档分组中的订单' })
+  @IsOptional()
+  @IsUUID('4')
+  archiveGroupId?: string;
 
   @ApiPropertyOptional({
     default: true,

@@ -27,6 +27,7 @@ import {
 } from '../lib/money-formula';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 import MultilineText from '../components/MultilineText.vue';
+import OrderArchivePanel from '../components/OrderArchivePanel.vue';
 import OrderColorPopover from '../components/OrderColorPopover.vue';
 import TrackingText from '../components/TrackingText.vue';
 import { TEXT_COLOR_PRESETS } from '../lib/text-colors';
@@ -263,6 +264,16 @@ const logisticsKind = ref<'inbound' | 'shipment'>('shipment');
 const logisticsResult = ref<LogisticsQueryResult | null>(null);
 const logisticsPhoneSuffix = ref('');
 const activeQuickView = ref('all');
+const activeView = ref<'detail' | 'archive'>('detail');
+const archivePanelKey = ref(0);
+const activeArchiveGroupId = ref('');
+const activeArchiveGroupName = ref('');
+const archiveAssignVisible = ref(false);
+const archiveAssignSaving = ref(false);
+const archiveAssignMode = ref<'existing' | 'new'>('existing');
+const archiveAssignGroupId = ref('');
+const archiveAssignNewName = ref('');
+const archiveGroupOptions = ref<Array<{ id: string; name: string }>>([]);
 const batchEditVisible = ref(false);
 const batchEditSaving = ref(false);
 const filterColorPickerVisible = ref(false);
@@ -716,6 +727,8 @@ const orderQueryParams = (page: number, pageSize: number) => ({
   submitterSettlementStatus: filters.submitterSettlementStatus || undefined,
   rebateScanned: filters.rebateScanned || undefined,
   exceptionOnly: filters.exceptionOnly || undefined,
+  ungroupedOnly: activeArchiveGroupId.value ? undefined : true,
+  archiveGroupId: activeArchiveGroupId.value || undefined,
 });
 
 const load = async () => {
@@ -1873,6 +1886,86 @@ const quickView = (type: string) => {
   activeQuickView.value = type;
 };
 
+const switchOrdersView = (view: 'detail' | 'archive') => {
+  if (view === 'detail') {
+    activeArchiveGroupId.value = '';
+    activeArchiveGroupName.value = '';
+  }
+  activeView.value = view;
+  if (view === 'archive') archivePanelKey.value += 1;
+  if (view === 'detail') {
+    pagination.page = 1;
+    void load();
+  }
+};
+
+const openArchiveGroup = (group: { id: string; name: string }) => {
+  resetFilters();
+  activeQuickView.value = 'all';
+  activeArchiveGroupId.value = group.id;
+  activeArchiveGroupName.value = group.name;
+  activeView.value = 'detail';
+  pagination.page = 1;
+  void load();
+};
+
+const exitArchiveGroup = () => {
+  activeArchiveGroupId.value = '';
+  activeArchiveGroupName.value = '';
+  activeView.value = 'archive';
+  archivePanelKey.value += 1;
+  pagination.page = 1;
+};
+
+const openArchiveAssign = async () => {
+  if (!selectedRows.value.length) return;
+  archiveAssignMode.value = 'existing';
+  archiveAssignGroupId.value = '';
+  archiveAssignNewName.value = '';
+  archiveAssignVisible.value = true;
+  try {
+    const response =
+      await http.get<Array<{ id: string; name: string }>>('/admin/order-groups');
+    archiveGroupOptions.value = response.data;
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '归档分组加载失败'));
+  }
+};
+
+const submitArchiveAssign = async () => {
+  const orderIds = selectedRows.value.map((row) => row.id);
+  if (!orderIds.length) return;
+  if (archiveAssignMode.value === 'existing' && !archiveAssignGroupId.value) {
+    ElMessage.warning('请选择归档分组');
+    return;
+  }
+  const newName = archiveAssignNewName.value.trim();
+  if (archiveAssignMode.value === 'new' && !newName) {
+    ElMessage.warning('请填写归档名称');
+    return;
+  }
+  archiveAssignSaving.value = true;
+  try {
+    let groupId = archiveAssignGroupId.value;
+    if (archiveAssignMode.value === 'new') {
+      const created = await http.post<{ id: string }>('/admin/order-groups', {
+        name: newName,
+      });
+      groupId = created.data.id;
+    }
+    await http.post(`/admin/order-groups/${groupId}/orders`, { orderIds });
+    ElMessage.success(`已把 ${orderIds.length} 笔订单加入归档`);
+    archiveAssignVisible.value = false;
+    selectedRows.value = [];
+    archivePanelKey.value += 1;
+    await load();
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加入归档失败'));
+  } finally {
+    archiveAssignSaving.value = false;
+  }
+};
+
 const review = async (row: OrderRow, status: 'APPROVED' | 'REJECTED') => {
   try {
     let reason = '';
@@ -2028,7 +2121,39 @@ onBeforeUnmount(() => activeLoadController?.abort());
       </div>
     </div>
 
-    <section class="surface-card order-workbar">
+    <div class="orders-view-switch" role="tablist" aria-label="订单视图">
+      <button
+        type="button"
+        role="tab"
+        class="orders-view-switch-button"
+        :class="{ 'is-active': activeView === 'detail' }"
+        :aria-selected="activeView === 'detail'"
+        @click="switchOrdersView('detail')"
+      >
+        订单明细
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="orders-view-switch-button"
+        :class="{ 'is-active': activeView === 'archive' }"
+        :aria-selected="activeView === 'archive'"
+        @click="switchOrdersView('archive')"
+      >
+        归档分组
+      </button>
+    </div>
+
+    <section v-if="activeArchiveGroupId" class="surface-card archive-breadcrumb">
+      <div>
+        <span>正在查看归档</span>
+        <strong>{{ activeArchiveGroupName }}</strong>
+        <em>下方表格与订单列表完全一致</em>
+      </div>
+      <el-button round size="small" @click="exitArchiveGroup">返回归档分组</el-button>
+    </section>
+
+    <section v-show="activeView === 'detail'" class="surface-card order-workbar">
       <div class="view-tabs">
         <button
           type="button"
@@ -2289,7 +2414,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
       </div>
     </section>
 
-    <section class="surface-card table-card">
+    <section v-show="activeView === 'detail'" class="surface-card table-card">
       <div class="table-toolbar">
         <div class="table-title">
           <span class="table-title-icon" aria-hidden="true">
@@ -2431,6 +2556,17 @@ onBeforeUnmount(() => activeLoadController?.abort());
               @click="openBatchEdit"
             >
               批量修改
+              <span v-if="selectedRows.length">{{ selectedRows.length }} 笔</span>
+            </el-button>
+            <el-button
+              v-if="!activeArchiveGroupId"
+              class="batch-payment-button"
+              round
+              :icon="Tickets"
+              :disabled="!selectedRows.length"
+              @click="openArchiveAssign"
+            >
+              加入归档
               <span v-if="selectedRows.length">{{ selectedRows.length }} 笔</span>
             </el-button>
             <el-popover
@@ -3051,6 +3187,55 @@ onBeforeUnmount(() => activeLoadController?.abort());
         @change="load"
       />
     </section>
+
+    <OrderArchivePanel
+      v-show="activeView === 'archive'"
+      :key="archivePanelKey"
+      @changed="load"
+      @open-group="openArchiveGroup"
+    />
+
+    <el-dialog v-model="archiveAssignVisible" title="加入归档分组" width="440px">
+      <el-form label-position="top">
+        <el-form-item label="归档方式">
+          <el-radio-group v-model="archiveAssignMode">
+            <el-radio-button value="existing">选择已有分组</el-radio-button>
+            <el-radio-button value="new">新建分组</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="archiveAssignMode === 'existing'" label="归档分组">
+          <el-select
+            v-model="archiveAssignGroupId"
+            clearable
+            placeholder="选择归档分组"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="group in archiveGroupOptions"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
+          </el-select>
+          <p v-if="!archiveGroupOptions.length" class="archive-assign-empty">
+            还没有归档分组，请切换到「新建分组」。
+          </p>
+        </el-form-item>
+        <el-form-item v-else label="新归档名称">
+          <el-input
+            v-model="archiveAssignNewName"
+            maxlength="120"
+            placeholder="例如：美的空调N8KS"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="archiveAssignVisible = false">取消</el-button>
+        <el-button type="primary" :loading="archiveAssignSaving" @click="submitArchiveAssign">
+          确认加入（{{ selectedRows.length }} 笔）
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="batchEditVisible" title="批量修改所选订单" width="min(760px, 96vw)">
       <div class="batch-edit-form">
@@ -3781,6 +3966,67 @@ onBeforeUnmount(() => activeLoadController?.abort());
   box-shadow:
     var(--app-shadow-sm),
     inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 66%, transparent);
+}
+.orders-view-switch {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--app-control) 72%, transparent);
+  gap: 4px;
+}
+.orders-view-switch-button {
+  appearance: none;
+  min-height: 32px;
+  padding: 6px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--app-muted);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.orders-view-switch-button:hover {
+  color: var(--app-heading);
+  background: color-mix(in srgb, var(--app-hover) 70%, transparent);
+}
+.orders-view-switch-button.is-active {
+  border-color: color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary-soft) 68%, var(--app-card-solid));
+}
+.archive-assign-empty {
+  margin: 6px 0 0;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+.archive-breadcrumb {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  gap: 16px;
+}
+.archive-breadcrumb > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.archive-breadcrumb span {
+  color: var(--app-muted);
+  font-size: 12px;
+}
+.archive-breadcrumb strong {
+  color: var(--app-heading);
+  font-size: 15px;
+}
+.archive-breadcrumb em {
+  color: var(--app-muted);
+  font-size: 12px;
+  font-style: normal;
 }
 .view-tabs {
   display: flex;
