@@ -1000,6 +1000,10 @@ const handleMarqueeMove = (event: MouseEvent) => {
     marquee.active = true;
     marqueeBaseIds = selectedRows.value.map((row) => row.id);
     document.body.classList.add('is-marquee-dragging');
+    // 只有真的开始拖动框选时，才终止浏览器原生文本选择。
+    // 这样双击单元格选词、Ctrl+C 复制仍然可用。
+    event.preventDefault();
+    window.getSelection()?.removeAllRanges();
   }
   marquee.currentX = event.clientX;
   marquee.currentY = event.clientY;
@@ -1020,8 +1024,6 @@ const handleMarqueeDown = (event: MouseEvent) => {
   if (isInteractiveTarget(event)) return;
   const rowId = rowIdFromEvent(event);
   if (!rowId) return;
-  // 屏蔽浏览器原生文本选择，避免和框选冲突
-  event.preventDefault();
   marquee.pending = true;
   marquee.active = false;
   marquee.additive = event.ctrlKey || event.metaKey;
