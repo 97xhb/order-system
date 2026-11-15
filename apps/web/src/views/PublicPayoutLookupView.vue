@@ -119,6 +119,7 @@ interface RegistrationData {
   nickname: string;
   visibleFields: PayoutQueryFieldKey[];
   fieldOptions: PayoutQueryFieldOption[];
+  fundingMethods?: Array<{ code: string; name: string }>;
 }
 
 interface PayoutMethod {
@@ -128,6 +129,7 @@ interface PayoutMethod {
   accountName: string | null;
   accountMasked: string | null;
   bankName: string | null;
+  qrCodeDataUrl: string | null;
   isDefault: boolean;
   status: PayoutStatus;
   updatedAt: string;
@@ -144,6 +146,7 @@ interface LookupResult {
   nickname: string;
   visibleFields: PayoutQueryFieldKey[];
   fieldOptions: PayoutQueryFieldOption[];
+  fundingMethods?: Array<{ code: string; name: string }>;
   payoutMethods: PayoutMethod[];
   orders: {
     items: HistoryOrder[];
@@ -201,10 +204,21 @@ const shipmentStatusLabels: Record<string, string> = {
   EXCEPTION: '异常',
 };
 
-const fundingTypeLabels: Record<string, string> = {
+const fallbackFundingTypeLabels: Record<string, string> = {
   SELF_PAID: '自己付',
   SUBMITTER_ADVANCED: '代付',
   OTHER: '其他',
+};
+const fundingTypeLabels = ref<Record<string, string>>({
+  ...fallbackFundingTypeLabels,
+});
+
+const applyFundingMethodLabels = (methods?: Array<{ code: string; name: string }>) => {
+  if (!methods?.length) return;
+  fundingTypeLabels.value = {
+    ...fallbackFundingTypeLabels,
+    ...Object.fromEntries(methods.map((item) => [item.code, item.name])),
+  };
 };
 
 const isMoneyField = (key: string) => moneyFieldKeys.has(key);
@@ -215,7 +229,7 @@ const fieldText = (order: HistoryOrder, field: PayoutQueryFieldOption) => {
   if (field.key === 'orderedAt') return formatBusinessDate(String(value));
   if (field.key === 'shipmentStatus') return shipmentStatusLabels[String(value)] ?? String(value);
   if (field.key === 'dispatchStatus') return dispatchStatusLabels[String(value)] ?? String(value);
-  if (field.key === 'fundingType') return fundingTypeLabels[String(value)] ?? String(value);
+  if (field.key === 'fundingType') return fundingTypeLabels.value[String(value)] ?? String(value);
   if (field.key === 'settlementStatus')
     return settlementLabels[String(value) as SettlementStatus] ?? String(value);
   if (field.key === 'editReasonHistory' && Array.isArray(value)) {
@@ -294,7 +308,11 @@ const money = (value: string | number | undefined) => Number(value || 0).toFixed
 
 const payoutDescription = (method: PayoutMethod) => {
   if (method.type === 'WECHAT') return `按微信昵称“${result.value?.nickname ?? ''}”转账`;
-  if (method.type === 'ALIPAY') return `支付宝账号：${method.accountMasked || '未填写'}`;
+  if (method.type === 'ALIPAY') {
+    return [`支付宝账号：${method.accountMasked || '未填写'}`, method.accountName]
+      .filter(Boolean)
+      .join(' · ');
+  }
   return [method.accountName, method.bankName, method.accountMasked].filter(Boolean).join(' · ');
 };
 
@@ -317,6 +335,7 @@ const queryHistory = async (page = 1, options: { silent?: boolean; automatic?: b
     });
     result.value = response.data;
     lookupCode.value = response.data.identityCode;
+    applyFundingMethodLabels(response.data.fundingMethods);
     registration.value = {
       enabled: registration.value?.enabled ?? true,
       linked: true,
@@ -360,6 +379,7 @@ const load = async () => {
   try {
     const response = await http.get<RegistrationData>(`/public/payout-query/${token.value}`);
     registration.value = response.data;
+    applyFundingMethodLabels(response.data.fundingMethods);
     registration.value.fieldOptions = response.data.fieldOptions?.length
       ? response.data.fieldOptions
       : fallbackQueryFieldOptions;
@@ -528,6 +548,15 @@ onMounted(() => void load());
                   </div>
                   <p>{{ payoutDescription(method) }}</p>
                 </div>
+                <div v-if="method.qrCodeDataUrl" class="method-qr">
+                  <el-image
+                    :src="method.qrCodeDataUrl"
+                    :preview-src-list="[method.qrCodeDataUrl]"
+                    preview-teleported
+                    fit="contain"
+                  />
+                  <span>扫码付款</span>
+                </div>
                 <el-tag :type="payoutStatusTypes[method.status]" size="small" effect="light">
                   {{ payoutStatusLabels[method.status] }}
                 </el-tag>
@@ -620,13 +649,17 @@ onMounted(() => void load());
   --el-font-size-base: 17px;
   --el-font-size-small: 16px;
   --el-font-size-extra-small: 15px;
-  --el-result-title-font-size: 23px;
+  --el-result-title-font-size: var(--app-text-xl);
   min-height: 100vh;
   padding: 18px 14px 30px;
   color: var(--app-text);
   background:
-    radial-gradient(circle at 12% 0, rgba(96, 165, 250, 0.2), transparent 32%),
-    linear-gradient(180deg, #eef6ff 0, #f6f8fb 320px);
+    radial-gradient(
+      circle at 12% 0,
+      color-mix(in srgb, var(--app-primary) 20%, transparent),
+      transparent 32%
+    ),
+    linear-gradient(180deg, var(--app-info-soft) 0, var(--app-surface-sunken) 320px);
 }
 
 .lookup-header,
@@ -650,16 +683,16 @@ footer {
   height: 50px;
   flex: 0 0 50px;
   place-items: center;
-  border-radius: 14px;
-  color: #fff;
-  background: linear-gradient(145deg, #60a5fa, #2563eb);
-  box-shadow: 0 9px 22px rgba(37, 99, 235, 0.22);
-  font-size: 16px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-md);
+  font-size: var(--app-text-md);
   font-weight: 800;
 }
 
 .brand-mark.is-long {
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   letter-spacing: 0;
 }
 
@@ -672,13 +705,13 @@ footer {
 
 .brand-copy strong {
   color: var(--app-heading);
-  font-size: 20px;
+  font-size: var(--app-text-xl);
 }
 
 .brand-copy span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .lookup-shell {
@@ -689,10 +722,10 @@ footer {
 .profile-summary,
 .content-card,
 .empty-guide {
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 24%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 90%, transparent);
+  box-shadow: var(--app-shadow-pop);
   backdrop-filter: blur(16px);
 }
 
@@ -701,8 +734,8 @@ footer {
 }
 
 .recognized-panel {
-  border-color: rgba(34, 197, 94, 0.22);
-  background: rgba(248, 255, 251, 0.92);
+  border-color: color-mix(in srgb, var(--app-success) 22%, transparent);
+  background: color-mix(in srgb, var(--app-surface-sunken) 92%, transparent);
 }
 
 .query-heading,
@@ -731,8 +764,8 @@ footer {
 .shield-icon {
   display: grid;
   place-items: center;
-  color: #2563eb;
-  background: #eaf2ff;
+  color: var(--app-primary);
+  background: var(--app-info-soft);
   font-weight: 800;
 }
 
@@ -740,8 +773,8 @@ footer {
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
-  border-radius: 11px;
-  font-size: 14px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-base);
 }
 
 .query-heading > div > div {
@@ -753,23 +786,23 @@ footer {
 .query-heading strong,
 .section-title strong {
   color: var(--app-heading);
-  font-size: 18px;
+  font-size: var(--app-text-lg);
 }
 
 .query-heading small,
 .section-title div span {
   margin-top: 3px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .privacy-pill,
 .readonly-badge {
   flex: 0 0 auto;
-  border-radius: 999px;
-  color: #2563eb;
-  background: #eef5ff;
-  font-size: 13px;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+  font-size: var(--app-text-sm);
 }
 
 .privacy-pill {
@@ -777,8 +810,8 @@ footer {
 }
 
 .recognized-mark {
-  color: #15803d;
-  background: #dcfce7;
+  color: var(--app-success);
+  background: var(--app-success-soft);
 }
 
 .recognized-actions {
@@ -790,17 +823,17 @@ footer {
 
 .recognized-pill {
   padding: 6px 10px;
-  border-radius: 999px;
-  color: #15803d;
-  background: #dcfce7;
-  font-size: 13px;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-success);
+  background: var(--app-success-soft);
+  font-size: var(--app-text-sm);
 }
 
 .change-code-button {
   padding-right: 7px;
   padding-left: 7px;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .query-row {
@@ -809,11 +842,11 @@ footer {
 }
 
 .query-row :deep(.el-input__wrapper) {
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
 }
 
 .query-row :deep(.el-input__inner) {
-  color: #1e40af;
+  color: var(--app-info);
   font-weight: 700;
   letter-spacing: 0.05em;
 }
@@ -825,7 +858,7 @@ footer {
 .query-tip,
 .lookup-error {
   margin: 10px 2px 0;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.6;
 }
 
@@ -834,7 +867,7 @@ footer {
 }
 
 .lookup-error {
-  color: #dc2626;
+  color: var(--app-danger);
 }
 
 .profile-summary {
@@ -851,17 +884,17 @@ footer {
 
 .profile-summary small {
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .profile-summary strong {
   margin-top: 3px;
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .profile-summary .identity-code {
-  color: #2563eb;
+  color: var(--app-primary);
   letter-spacing: 0.04em;
 }
 
@@ -888,7 +921,7 @@ footer {
 
 .section-title > span {
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .payout-list {
@@ -900,9 +933,9 @@ footer {
 .payout-item {
   min-width: 0;
   padding: 13px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  background: #fbfdff;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: var(--app-surface-sunken);
   gap: 10px;
 }
 
@@ -910,8 +943,8 @@ footer {
   width: 34px;
   height: 34px;
   flex: 0 0 34px;
-  border-radius: 11px;
-  font-size: 14px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-base);
 }
 
 .method-copy {
@@ -925,23 +958,45 @@ footer {
 
 .method-copy strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .method-copy p {
   margin: 4px 0 0;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.method-qr {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.method-qr .el-image {
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-control);
+  background: var(--app-surface-card);
+}
+
+.method-qr span {
+  color: var(--app-muted);
+  font-size: var(--app-text-xs);
+}
+
 .orders-table {
   overflow: hidden;
-  border: 1px solid #e5eaf1;
-  border-radius: 16px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
 }
 
 .order-grid {
@@ -955,24 +1010,24 @@ footer {
   min-height: 42px;
   padding: 0 14px;
   color: var(--app-muted);
-  background: #f5f8fc;
-  font-size: 13px;
+  background: var(--app-surface-subtle);
+  font-size: var(--app-text-sm);
 }
 
 .order-row {
   min-height: 58px;
   padding: 9px 14px;
   color: var(--app-text);
-  background: #fff;
-  font-size: 14px;
+  background: var(--app-surface-card);
+  font-size: var(--app-text-base);
 }
 
 .order-row:nth-child(odd) {
-  background: #fbfdff;
+  background: var(--app-surface-sunken);
 }
 
 .order-row + .order-row {
-  border-top: 1px solid #edf1f6;
+  border-top: 1px solid var(--app-border-soft);
 }
 
 .scheme-cell,
@@ -996,7 +1051,7 @@ footer {
 }
 
 .settlement-money {
-  color: #dc2626;
+  color: var(--app-danger);
   font-weight: 700;
 }
 
@@ -1017,28 +1072,28 @@ footer {
 .shield-icon {
   width: 48px;
   height: 48px;
-  border-radius: 16px;
-  font-size: 17px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-md);
 }
 
 .empty-guide strong {
   margin-top: 12px;
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .empty-guide p {
   max-width: 480px;
   margin: 6px 0 0;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.7;
 }
 
 footer {
   padding-top: 18px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   text-align: center;
 }
 
@@ -1064,15 +1119,15 @@ footer {
   .order-row:nth-child(odd) {
     min-height: 0;
     padding: 14px;
-    border: 1px solid #e5eaf1;
-    border-radius: 16px;
-    background: #fff;
+    border: 1px solid var(--app-border-soft);
+    border-radius: var(--app-radius-card);
+    background: var(--app-surface-card);
     gap: 12px 18px;
   }
 
   .order-row + .order-row {
     margin-top: 10px;
-    border-top: 1px solid #e5eaf1;
+    border-top: 1px solid var(--app-border-soft);
   }
 
   .order-row > span {
@@ -1085,7 +1140,7 @@ footer {
   .order-row > span::before {
     color: var(--app-muted);
     content: attr(data-label);
-    font-size: 12px;
+    font-size: var(--app-text-xs);
     font-weight: 400;
   }
 
@@ -1102,7 +1157,7 @@ footer {
     --el-font-size-base: 18px;
     --el-font-size-small: 17px;
     --el-font-size-extra-small: 16px;
-    --el-result-title-font-size: 24px;
+    --el-result-title-font-size: var(--app-text-2xl);
     padding: 13px 10px 24px;
   }
 
@@ -1115,7 +1170,7 @@ footer {
   .profile-summary,
   .content-card,
   .empty-guide {
-    border-radius: 18px;
+    border-radius: var(--app-radius-card);
   }
 
   .query-panel,
@@ -1131,7 +1186,7 @@ footer {
     flex-direction: column;
   }
   .order-row > span::before {
-    font-size: 13px;
+    font-size: var(--app-text-sm);
   }
 
   .recognized-actions {

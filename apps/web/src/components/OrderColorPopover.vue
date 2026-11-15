@@ -91,11 +91,11 @@ const confirm = async () => {
 }
 .text-color-picker-heading strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .text-color-picker-heading span {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-variant-numeric: tabular-nums;
 }
 .text-color-picker-actions {
@@ -123,7 +123,14 @@ const confirm = async () => {
   cursor: pointer;
 }
 .order-color-dot:not(.has-color) {
-  background: conic-gradient(#f97316, #eab308, #22c55e, #3b82f6, #a855f7, #f97316);
+  background: conic-gradient(
+    var(--app-warning),
+    var(--app-warning-border),
+    var(--app-success),
+    var(--app-primary),
+    var(--app-purple),
+    var(--app-warning)
+  );
 }
 .order-color-dot:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--app-primary) 62%, transparent);

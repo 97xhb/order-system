@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  Brush,
   Connection,
   Cpu,
   Download,
@@ -27,7 +28,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { APP_BUILD_TIME, APP_VERSION } from '../lib/app-version';
 import { http } from '../lib/http';
-import { useSystemStore } from '../stores/system';
+import { applyThemeVariables, RADIUS_PRESETS, useSystemStore } from '../stores/system';
 
 interface AdminSessionItem {
   id: string;
@@ -51,6 +52,12 @@ interface SystemSettingsResponse {
   settings: {
     systemName: string;
     brandMarkText: string;
+    themePrimary: string;
+    themeRadiusChip: number;
+    themeRadiusControl: number;
+    themeRadiusCard: number;
+    themeRadiusDialog: number;
+    themeSurface: 'SOLID' | 'GLASS';
     externalAccessEnabled: boolean;
     allowedHosts: string[];
     adminEntryPath: string | null;
@@ -314,6 +321,12 @@ const changeSystemSection = (value: string | number) => {
 const form = reactive({
   systemName: system.systemName,
   brandMarkText: system.brandMarkText || '浪姐',
+  themePrimary: system.themePrimary,
+  themeRadiusChip: system.themeRadiusChip,
+  themeRadiusControl: system.themeRadiusControl,
+  themeRadiusCard: system.themeRadiusCard,
+  themeRadiusDialog: system.themeRadiusDialog,
+  themeSurface: system.themeSurface as 'SOLID' | 'GLASS',
   externalAccessEnabled: system.externalAccessEnabled,
   allowedHosts: [] as string[],
   adminEntryPath: '',
@@ -324,6 +337,68 @@ const form = reactive({
 const sameHosts = (left: string[], right: string[]) =>
   left.length === right.length && left.every((host, index) => host === right[index]);
 
+const themeColorPresets = [
+  '#4f7ef0',
+  '#2f6feb',
+  '#6366f1',
+  '#0ea5e9',
+  '#12855c',
+  '#b26a09',
+  '#c23b3b',
+  '#6d4fd0',
+  '#101828',
+];
+
+// 四个圆角层级各自可调，预设只是一键填充
+const radiusFields = [
+  {
+    key: 'themeRadiusControl' as const,
+    label: '按钮与输入框',
+    hint: '按钮、下拉框、输入框、日期框',
+  },
+  { key: 'themeRadiusCard' as const, label: '卡片与面板', hint: '卡片容器、面板、表格外框' },
+  { key: 'themeRadiusChip' as const, label: '标签与徽标', hint: '状态标签、计数徽标、小色块' },
+  { key: 'themeRadiusDialog' as const, label: '弹窗与浮层', hint: '对话框、下拉面板、提示层' },
+];
+
+const themeRadiusPresets = [
+  { label: '紧凑', value: 'COMPACT' },
+  { label: '标准', value: 'MEDIUM' },
+  { label: '柔和', value: 'SOFT' },
+];
+
+const themeSurfaceOptions = [
+  { label: '玻璃', value: 'GLASS' },
+  { label: '纯白', value: 'SOLID' },
+];
+
+// 调整主题时立即预览，保存后才会写入全局配置
+const previewTheme = () => {
+  const raw = (form.themePrimary ?? '').trim();
+  const primary = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.toLowerCase() : system.themePrimary;
+  applyThemeVariables(
+    primary,
+    {
+      chip: form.themeRadiusChip,
+      control: form.themeRadiusControl,
+      card: form.themeRadiusCard,
+      dialog: form.themeRadiusDialog,
+    },
+    form.themeSurface,
+  );
+};
+
+// 预设只做快捷填充，之后仍可单独微调某一层
+const applyRadiusPreset = (preset: string) => {
+  const scale = RADIUS_PRESETS[preset];
+  if (!scale) return;
+  form.themeRadiusChip = scale.chip;
+  form.themeRadiusControl = scale.control;
+  form.themeRadiusCard = scale.card;
+  form.themeRadiusDialog = scale.dialog;
+  previewTheme();
+};
+
 const changed = computed(() => {
   const current = data.value?.settings;
   if (!current) return false;
@@ -331,6 +406,12 @@ const changed = computed(() => {
   return (
     form.systemName.trim() !== current.systemName ||
     (form.brandMarkText || '').trim() !== currentBrandMarkText ||
+    form.themePrimary !== current.themePrimary ||
+    form.themeRadiusChip !== current.themeRadiusChip ||
+    form.themeRadiusControl !== current.themeRadiusControl ||
+    form.themeRadiusCard !== current.themeRadiusCard ||
+    form.themeRadiusDialog !== current.themeRadiusDialog ||
+    form.themeSurface !== current.themeSurface ||
     form.externalAccessEnabled !== current.externalAccessEnabled ||
     !sameHosts(form.allowedHosts, current.allowedHosts) ||
     form.adminEntryPath.trim().replace(/^\/+|\/+$/g, '') !== (current.adminEntryPath || '') ||
@@ -551,6 +632,13 @@ const load = async () => {
     data.value.settings.brandMarkText = brandMarkText;
     form.systemName = response.data.settings.systemName;
     form.brandMarkText = brandMarkText;
+    form.themePrimary = response.data.settings.themePrimary || system.themePrimary;
+    form.themeRadiusChip = response.data.settings.themeRadiusChip ?? system.themeRadiusChip;
+    form.themeRadiusControl =
+      response.data.settings.themeRadiusControl ?? system.themeRadiusControl;
+    form.themeRadiusCard = response.data.settings.themeRadiusCard ?? system.themeRadiusCard;
+    form.themeRadiusDialog = response.data.settings.themeRadiusDialog ?? system.themeRadiusDialog;
+    form.themeSurface = response.data.settings.themeSurface || system.themeSurface;
     form.externalAccessEnabled = response.data.settings.externalAccessEnabled;
     form.allowedHosts = [...response.data.settings.allowedHosts];
     form.adminEntryPath = response.data.settings.adminEntryPath || '';
@@ -559,6 +647,12 @@ const load = async () => {
     system.applySettings({
       systemName: response.data.settings.systemName,
       brandMarkText,
+      themePrimary: response.data.settings.themePrimary || system.themePrimary,
+      themeRadiusChip: response.data.settings.themeRadiusChip ?? system.themeRadiusChip,
+      themeRadiusControl: response.data.settings.themeRadiusControl ?? system.themeRadiusControl,
+      themeRadiusCard: response.data.settings.themeRadiusCard ?? system.themeRadiusCard,
+      themeRadiusDialog: response.data.settings.themeRadiusDialog ?? system.themeRadiusDialog,
+      themeSurface: response.data.settings.themeSurface || system.themeSurface,
       externalAccessEnabled: response.data.settings.externalAccessEnabled,
       rootAccessMode: response.data.settings.rootAccessMode,
       rootRedirectUrl: response.data.settings.rootRedirectUrl,
@@ -926,6 +1020,12 @@ const save = async () => {
     const response = await http.patch<{
       systemName: string;
       brandMarkText: string;
+      themePrimary: string;
+      themeRadiusChip: number;
+      themeRadiusControl: number;
+      themeRadiusCard: number;
+      themeRadiusDialog: number;
+      themeSurface: 'SOLID' | 'GLASS';
       externalAccessEnabled: boolean;
       allowedHosts: string[];
       adminEntryPath: string | null;
@@ -935,6 +1035,12 @@ const save = async () => {
     }>('/admin/system/settings', {
       systemName,
       brandMarkText,
+      themePrimary: form.themePrimary,
+      themeRadiusChip: form.themeRadiusChip,
+      themeRadiusControl: form.themeRadiusControl,
+      themeRadiusCard: form.themeRadiusCard,
+      themeRadiusDialog: form.themeRadiusDialog,
+      themeSurface: form.themeSurface,
       externalAccessEnabled: form.externalAccessEnabled,
       allowedHosts: form.allowedHosts,
       adminEntryPath,
@@ -944,6 +1050,12 @@ const save = async () => {
     system.applySettings({
       systemName: response.data.systemName,
       brandMarkText: response.data.brandMarkText,
+      themePrimary: response.data.themePrimary || form.themePrimary,
+      themeRadiusChip: response.data.themeRadiusChip ?? form.themeRadiusChip,
+      themeRadiusControl: response.data.themeRadiusControl ?? form.themeRadiusControl,
+      themeRadiusCard: response.data.themeRadiusCard ?? form.themeRadiusCard,
+      themeRadiusDialog: response.data.themeRadiusDialog ?? form.themeRadiusDialog,
+      themeSurface: response.data.themeSurface || form.themeSurface,
       externalAccessEnabled: response.data.externalAccessEnabled,
       rootAccessMode: response.data.rootAccessMode,
       rootRedirectUrl: response.data.rootRedirectUrl,
@@ -1233,7 +1345,6 @@ onMounted(async () => {
   if (activeSystemSection.value === 'logs') await loadAuditLogs();
   void resumePendingWebRestart();
 });
-
 </script>
 
 <template>
@@ -1321,6 +1432,95 @@ onMounted(async () => {
                   placeholder="例如：浪姐"
                 />
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-setting-group">
+          <div class="panel-setting-group-heading">
+            <span class="panel-setting-group-icon is-primary"
+              ><el-icon><Brush /></el-icon
+            ></span>
+            <div>
+              <strong>界面主题</strong>
+              <small>统一调整全站的主色、圆角与卡片质感，保存后所有页面同步生效。</small>
+            </div>
+          </div>
+
+          <div class="panel-setting-row">
+            <div class="panel-setting-copy">
+              <strong>主色调</strong>
+              <small>决定按钮、选中态与强调色的整体色相。</small>
+            </div>
+            <div class="panel-setting-control is-medium">
+              <div class="theme-color-editor">
+                <el-color-picker
+                  v-model="form.themePrimary"
+                  :predefine="themeColorPresets"
+                  color-format="hex"
+                  @change="previewTheme"
+                />
+                <el-input
+                  v-model="form.themePrimary"
+                  maxlength="7"
+                  placeholder="#4f7ef0"
+                  @change="previewTheme"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-setting-row">
+            <div class="panel-setting-copy">
+              <strong>圆角预设</strong>
+              <small>一键填充四个层级的圆角，之后仍可单独微调。</small>
+            </div>
+            <div class="panel-setting-control is-medium">
+              <div class="radius-preset-row">
+                <button
+                  v-for="preset in themeRadiusPresets"
+                  :key="preset.value"
+                  type="button"
+                  class="radius-preset-button"
+                  @click="applyRadiusPreset(preset.value)"
+                >
+                  {{ preset.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-for="field in radiusFields" :key="field.key" class="panel-setting-row">
+            <div class="panel-setting-copy">
+              <strong>{{ field.label }}</strong>
+              <small>{{ field.hint }}</small>
+            </div>
+            <div class="panel-setting-control is-medium">
+              <div class="radius-slider-row">
+                <el-slider
+                  v-model="form[field.key]"
+                  :min="0"
+                  :max="24"
+                  :step="1"
+                  :show-tooltip="false"
+                  @change="previewTheme"
+                />
+                <span class="radius-slider-value">{{ form[field.key] }}px</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-setting-row">
+            <div class="panel-setting-copy">
+              <strong>卡片质感</strong>
+              <small>玻璃模式带轻微透明与高光，纯白模式对比更强烈。</small>
+            </div>
+            <div class="panel-setting-control is-medium">
+              <el-segmented
+                v-model="form.themeSurface"
+                :options="themeSurfaceOptions"
+                @change="previewTheme"
+              />
             </div>
           </div>
         </section>
@@ -1590,10 +1790,7 @@ onMounted(async () => {
         </article>
       </div>
 
-      <section
-        class="online-update-card"
-        :class="{ 'has-update': updateInfo?.updateAvailable }"
-      >
+      <section class="online-update-card" :class="{ 'has-update': updateInfo?.updateAvailable }">
         <div class="online-update-heading">
           <span class="runtime-system-info-icon"
             ><el-icon><Refresh /></el-icon
@@ -1608,13 +1805,7 @@ onMounted(async () => {
             </small>
           </div>
           <span class="online-update-state">
-            {{
-              updateInfo?.updateAvailable
-                ? '有新版本'
-                : updateInfo
-                  ? '已是最新'
-                  : '尚未检查'
-            }}
+            {{ updateInfo?.updateAvailable ? '有新版本' : updateInfo ? '已是最新' : '尚未检查' }}
           </span>
         </div>
         <p v-if="updateInfo?.error" class="online-update-error">{{ updateInfo.error }}</p>
@@ -1633,7 +1824,13 @@ onMounted(async () => {
           </ul>
         </div>
         <div class="online-update-actions">
-          <el-button type="primary" round :icon="Refresh" :loading="updateLoading" @click="loadUpdate()">
+          <el-button
+            type="primary"
+            round
+            :icon="Refresh"
+            :loading="updateLoading"
+            @click="loadUpdate()"
+          >
             检查更新
           </el-button>
         </div>
@@ -2369,13 +2566,13 @@ onMounted(async () => {
 
 .extension-card-heading h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .extension-card-heading p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .backup-selection-block {
@@ -2393,12 +2590,12 @@ onMounted(async () => {
 }
 
 .backup-selection-heading strong {
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .backup-selection-heading span {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .backup-option-grid {
@@ -2423,14 +2620,14 @@ onMounted(async () => {
 
 .backup-option-card strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .backup-option-card small {
   display: -webkit-box;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -2439,7 +2636,7 @@ onMounted(async () => {
 .backup-option-card em {
   flex: 0 0 auto;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   font-style: normal;
   white-space: nowrap;
 }
@@ -2451,10 +2648,10 @@ onMounted(async () => {
 .backup-dependency-note {
   margin: 0;
   padding: 6px 9px;
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
   background: color-mix(in srgb, var(--app-primary-soft) 54%, transparent);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.45;
 }
 
@@ -2471,7 +2668,7 @@ onMounted(async () => {
 
 .extension-form-grid :deep(.el-form-item__label) {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .extension-form-grid .is-wide {
@@ -2489,10 +2686,10 @@ onMounted(async () => {
 .logistics-quota-copy span {
   padding: 5px 9px;
   border: 1px solid var(--app-border);
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
   background: color-mix(in srgb, var(--app-control) 78%, transparent);
   color: var(--app-text);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .backup-inspect-result,
@@ -2502,16 +2699,16 @@ onMounted(async () => {
   margin-top: 14px;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--app-success) 30%, var(--app-border));
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-success) 8%, var(--app-card-solid));
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .backup-inspect-result strong,
 .logistics-test-result strong {
   color: var(--app-text);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .logistics-test-result ul {
@@ -2580,10 +2777,10 @@ onMounted(async () => {
   height: 42px;
   padding: 0 14px !important;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--app-muted);
   line-height: 40px;
-  font-size: 15px;
+  font-size: var(--app-text-base);
   font-weight: 600;
   transition:
     color 160ms ease,
@@ -2650,7 +2847,7 @@ onMounted(async () => {
   height: 38px;
   flex: 0 0 38px;
   place-items: center;
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
 }
@@ -2661,8 +2858,8 @@ onMounted(async () => {
 }
 
 .section-title-icon.is-purple {
-  color: #8b5cf6;
-  background: color-mix(in srgb, #8b5cf6 12%, transparent);
+  color: var(--app-purple);
+  background: color-mix(in srgb, var(--app-purple) 12%, transparent);
 }
 
 .section-title-icon.is-warning {
@@ -2673,13 +2870,13 @@ onMounted(async () => {
 .section-title h2 {
   margin: 0;
   color: var(--app-heading);
-  font-size: 18px;
+  font-size: var(--app-text-lg);
 }
 
 .section-title p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .panel-settings-list {
@@ -2693,7 +2890,7 @@ onMounted(async () => {
   min-width: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
-  border-radius: 17px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 28%, transparent);
 }
 
@@ -2716,12 +2913,12 @@ onMounted(async () => {
 
 .panel-setting-group-heading strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .panel-setting-group-heading small {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.45;
 }
 
@@ -2731,7 +2928,7 @@ onMounted(async () => {
   height: 32px;
   flex: 0 0 32px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
 }
@@ -2773,19 +2970,19 @@ onMounted(async () => {
 
 .panel-setting-copy strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .panel-setting-copy small,
 .panel-setting-control > small {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.55;
 }
 
 .panel-setting-copy code {
   padding: 1px 5px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-control);
   color: var(--app-primary);
   background: var(--app-primary-soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2822,7 +3019,7 @@ onMounted(async () => {
 
 .panel-setting-control :deep(.el-input__wrapper) {
   min-height: 42px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 64%, transparent);
   box-shadow: 0 0 0 1px var(--app-border) inset;
 }
@@ -2830,10 +3027,10 @@ onMounted(async () => {
 .setting-state {
   padding: 5px 9px;
   border: 1px solid var(--app-border);
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-muted);
   background: color-mix(in srgb, var(--app-control) 68%, transparent);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -2856,19 +3053,101 @@ onMounted(async () => {
   width: 44px;
   height: 44px;
   place-items: center;
-  border-radius: 14px;
-  color: #fff;
-  background: linear-gradient(145deg, #60a5fa, #2563eb);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-primary) 22%, transparent);
-  font-size: 14px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-md);
+  font-size: var(--app-text-base);
   font-weight: 800;
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
 .brand-mark-preview.is-long {
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   letter-spacing: 0;
+}
+
+.theme-color-editor {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+.theme-color-editor :deep(.el-color-picker__trigger) {
+  width: 40px;
+  height: 34px;
+  border-radius: var(--app-radius-control);
+  border-color: var(--app-border);
+}
+
+.panel-setting-control :deep(.el-segmented) {
+  width: 100%;
+  border-radius: var(--app-radius-control);
+  background: var(--app-surface-muted);
+}
+
+.panel-setting-control :deep(.el-segmented__item) {
+  border-radius: var(--app-radius-chip);
+  font-size: var(--app-text-sm);
+}
+
+.radius-preset-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.radius-preset-button {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-control);
+  color: var(--app-text-body);
+  background: var(--app-surface-card);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.radius-preset-button:hover {
+  border-color: color-mix(in srgb, var(--app-primary) 46%, var(--app-border));
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+}
+
+.radius-slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 12px;
+}
+
+.radius-slider-row :deep(.el-slider) {
+  --el-slider-height: 4px;
+  --el-slider-button-size: 14px;
+}
+
+.radius-slider-row :deep(.el-slider__runway) {
+  background: var(--app-surface-muted);
+}
+
+.radius-slider-row :deep(.el-slider__button) {
+  border-width: 2px;
+  border-color: var(--app-primary);
+}
+
+.radius-slider-value {
+  color: var(--app-text-body);
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  text-align: right;
 }
 
 .admin-entry-input-row {
@@ -2895,7 +3174,7 @@ onMounted(async () => {
   align-items: center;
   padding: 9px 11px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 54%, transparent);
   gap: 10px;
 }
@@ -2908,7 +3187,7 @@ onMounted(async () => {
   overflow: hidden;
   color: var(--app-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2938,12 +3217,12 @@ onMounted(async () => {
 
 .root-mode-card strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .root-mode-card small {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.45;
 }
 
@@ -2953,7 +3232,7 @@ onMounted(async () => {
   height: 34px;
   flex: 0 0 34px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
 }
 
 .root-mode-icon.is-warning {
@@ -2981,12 +3260,12 @@ onMounted(async () => {
 .empty-domain-note {
   margin: 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .last-refresh {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .status-grid {
@@ -3004,7 +3283,7 @@ onMounted(async () => {
   align-items: center;
   padding: 13px;
   border: 1px solid color-mix(in srgb, var(--status-color) 18%, var(--app-border));
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--status-color) 6%, var(--app-card-solid));
   gap: 10px;
 }
@@ -3027,7 +3306,7 @@ onMounted(async () => {
   height: 37px;
   flex: 0 0 37px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--status-color);
   background: color-mix(in srgb, var(--status-color) 12%, transparent);
 }
@@ -3045,13 +3324,13 @@ onMounted(async () => {
 .security-policy-grid small,
 .session-expiry small {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .status-item strong {
   overflow: hidden;
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3071,7 +3350,7 @@ onMounted(async () => {
   margin-top: 11px;
   padding: 15px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-card);
   flex-direction: column;
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
   gap: 12px;
@@ -3098,20 +3377,20 @@ onMounted(async () => {
 
 .online-update-heading strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .online-update-heading small {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .online-update-state {
   padding: 5px 9px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-muted);
   background: var(--app-card-solid);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -3136,7 +3415,7 @@ onMounted(async () => {
   display: flex;
   padding: 12px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   flex-direction: column;
   background: var(--app-card-solid);
   gap: 8px;
@@ -3151,7 +3430,7 @@ onMounted(async () => {
 
 .online-update-release strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .online-update-release span,
@@ -3159,7 +3438,7 @@ onMounted(async () => {
 .online-update-message,
 .online-update-hint {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .online-update-release ul {
@@ -3174,7 +3453,7 @@ onMounted(async () => {
   position: relative;
   padding-left: 14px;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.55;
 }
 
@@ -3219,7 +3498,7 @@ onMounted(async () => {
   align-items: center;
   padding: 11px 13px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-control) 68%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 56%, transparent);
@@ -3235,13 +3514,13 @@ onMounted(async () => {
 
 .runtime-system-info-item small {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .runtime-system-info-item strong {
   overflow: hidden;
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3257,7 +3536,7 @@ onMounted(async () => {
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
 }
@@ -3307,7 +3586,7 @@ onMounted(async () => {
   justify-content: center;
   padding: 11px 13px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 62%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 54%, transparent);
   gap: 5px;
@@ -3317,7 +3596,7 @@ onMounted(async () => {
 .security-policy-grid strong {
   overflow-wrap: anywhere;
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.45;
 }
 
@@ -3326,10 +3605,10 @@ onMounted(async () => {
   align-items: center;
   margin: 11px 0 0;
   padding: 9px 11px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 8%, transparent);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   gap: 7px;
 }
 
@@ -3347,7 +3626,7 @@ onMounted(async () => {
   align-items: center;
   padding: 15px;
   border: 1px solid var(--app-border);
-  border-radius: 17px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 62%, transparent);
   gap: 12px;
 }
@@ -3362,8 +3641,8 @@ onMounted(async () => {
   width: 42px;
   height: 42px;
   place-items: center;
-  border-radius: 14px;
-  font-size: 19px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-lg);
 }
 
 .service-control-icon.is-api {
@@ -3397,7 +3676,7 @@ onMounted(async () => {
 
 .service-control-copy strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .service-control-copy p,
@@ -3405,14 +3684,14 @@ onMounted(async () => {
 .control-hint {
   margin: 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.55;
 }
 
 .control-hint {
   margin-top: 10px;
   padding: 9px 11px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-warning);
   background: color-mix(in srgb, var(--app-warning) 8%, transparent);
 }
@@ -3431,7 +3710,7 @@ onMounted(async () => {
   flex-direction: column;
   padding: 13px;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 66%, transparent);
   gap: 7px;
 }
@@ -3443,13 +3722,13 @@ onMounted(async () => {
 
 .security-summary-grid strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .security-summary-grid span {
   overflow-wrap: anywhere;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.45;
 }
 
@@ -3460,13 +3739,13 @@ onMounted(async () => {
 .session-heading h3 {
   margin: 0;
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .session-heading p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .session-list {
@@ -3481,7 +3760,7 @@ onMounted(async () => {
   align-items: center;
   padding: 11px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 48%, transparent);
   gap: 11px;
 }
@@ -3502,7 +3781,7 @@ onMounted(async () => {
   width: 36px;
   height: 36px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
 }
@@ -3525,7 +3804,7 @@ onMounted(async () => {
 .session-expiry strong {
   overflow: hidden;
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3533,7 +3812,7 @@ onMounted(async () => {
 .session-main small {
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3553,7 +3832,7 @@ onMounted(async () => {
   margin-top: 15px;
   padding: 11px;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 62%, transparent);
   gap: 9px;
 }
@@ -3561,7 +3840,7 @@ onMounted(async () => {
 .audit-filter-bar :deep(.el-input__wrapper),
 .audit-filter-bar :deep(.el-select__wrapper) {
   min-height: 40px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 68%, transparent);
   box-shadow: 0 0 0 1px var(--app-border) inset;
 }
@@ -3582,7 +3861,7 @@ onMounted(async () => {
   grid-template-columns: auto minmax(0, 1fr);
   padding: 12px 13px;
   border: 1px solid color-mix(in srgb, var(--audit-color) 16%, var(--app-border));
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--audit-color) 4%, var(--app-card-solid));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 56%, transparent);
   gap: 11px;
@@ -3605,7 +3884,7 @@ onMounted(async () => {
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--audit-color);
   background: color-mix(in srgb, var(--audit-color) 12%, transparent);
 }
@@ -3631,7 +3910,7 @@ onMounted(async () => {
 
 .audit-log-title strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .audit-log-meta {
@@ -3651,14 +3930,14 @@ onMounted(async () => {
 .audit-log-meta small,
 .audit-log-change span {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .audit-log-meta b,
 .audit-log-meta code {
   overflow: hidden;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 500;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -3677,7 +3956,7 @@ onMounted(async () => {
   padding-top: 8px;
   border-top: 1px dashed color-mix(in srgb, var(--app-border) 80%, transparent);
   color: var(--app-text);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   gap: 8px;
 }
 
@@ -3706,10 +3985,10 @@ onMounted(async () => {
 }
 
 .future-card--green {
-  --future-accent: #10b981;
+  --future-accent: var(--app-success);
 }
 .future-card--orange {
-  --future-accent: #f59e0b;
+  --future-accent: var(--app-warning);
 }
 .future-card--teal {
   --future-accent: #0d9488;
@@ -3720,7 +3999,7 @@ onMounted(async () => {
   width: 39px;
   height: 39px;
   place-items: center;
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   color: var(--future-accent);
   background: color-mix(in srgb, var(--future-accent) 12%, transparent);
 }
@@ -3728,13 +4007,13 @@ onMounted(async () => {
 .future-card h2 {
   margin: 0;
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .future-card p {
   margin: 5px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.5;
 }
 
@@ -3816,7 +4095,7 @@ onMounted(async () => {
     min-width: 126px;
     flex: 0 0 auto;
     padding-inline: 9px;
-    font-size: 14px;
+    font-size: var(--app-text-base);
   }
 
   .panel-setting-row,

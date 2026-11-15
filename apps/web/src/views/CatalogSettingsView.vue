@@ -22,7 +22,21 @@ interface CategoryItem {
   _count: { schemes: number; orders: number; profitRules: number };
 }
 
-type EditorType = 'platform' | 'category';
+interface FundingMethodItem {
+  id: string;
+  code: string;
+  name: string;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+type EditorType = 'platform' | 'category' | 'funding';
+
+const basePaths: Record<EditorType, string> = {
+  platform: '/admin/platforms',
+  category: '/admin/categories',
+  funding: '/admin/funding-methods',
+};
 
 const activeTab = ref<EditorType>('platform');
 const loading = ref(false);
@@ -31,6 +45,7 @@ const dialogVisible = ref(false);
 const editorType = ref<EditorType>('platform');
 const platforms = ref<PlatformItem[]>([]);
 const categories = ref<CategoryItem[]>([]);
+const fundingMethods = ref<FundingMethodItem[]>([]);
 
 const editor = reactive({
   id: '',
@@ -43,16 +58,20 @@ const editor = reactive({
 const loadData = async () => {
   loading.value = true;
   try {
-    const [platformResponse, categoryResponse] = await Promise.all([
+    const [platformResponse, categoryResponse, fundingResponse] = await Promise.all([
       http.get<{ items: PlatformItem[] }>('/admin/platforms', {
         params: { includeDisabled: true },
       }),
       http.get<{ items: CategoryItem[] }>('/admin/categories', {
         params: { includeDisabled: true },
       }),
+      http.get<{ items: FundingMethodItem[] }>('/admin/funding-methods', {
+        params: { includeDisabled: true },
+      }),
     ]);
     platforms.value = platformResponse.data.items;
     categories.value = categoryResponse.data.items;
+    fundingMethods.value = fundingResponse.data.items;
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '基础数据加载失败'));
   } finally {
@@ -68,7 +87,11 @@ const openCreate = (type: EditorType) => {
     name: '',
     enabled: true,
     sortOrder:
-      type === 'platform' ? platforms.value.length * 10 + 10 : categories.value.length * 10 + 10,
+      type === 'platform'
+        ? platforms.value.length * 10 + 10
+        : type === 'category'
+          ? categories.value.length * 10 + 10
+          : fundingMethods.value.length * 10 + 10,
   });
   dialogVisible.value = true;
 };
@@ -85,6 +108,12 @@ const openEditCategory = (item: CategoryItem) => {
   dialogVisible.value = true;
 };
 
+const openEditFunding = (item: FundingMethodItem) => {
+  editorType.value = 'funding';
+  Object.assign(editor, { ...item });
+  dialogVisible.value = true;
+};
+
 const saveEditor = async () => {
   if (!editor.name.trim()) {
     ElMessage.warning('请填写名称');
@@ -94,12 +123,20 @@ const saveEditor = async () => {
     ElMessage.warning('请填写平台编码');
     return;
   }
+  if (editorType.value === 'funding' && !editor.code.trim()) {
+    ElMessage.warning('请填写支付方式编码');
+    return;
+  }
 
   saving.value = true;
   try {
-    const basePath = editorType.value === 'platform' ? '/admin/platforms' : '/admin/categories';
+    const basePath = basePaths[editorType.value];
     const payload = {
-      ...(editorType.value === 'platform' ? { code: editor.code.trim().toLowerCase() } : {}),
+      ...(editorType.value === 'platform'
+        ? { code: editor.code.trim().toLowerCase() }
+        : editorType.value === 'funding'
+          ? { code: editor.code.trim().toUpperCase() }
+          : {}),
       name: editor.name.trim(),
       enabled: editor.enabled,
       sortOrder: editor.sortOrder,
@@ -143,6 +180,17 @@ const toggleCategory = async (item: CategoryItem) => {
   }
 };
 
+const toggleFunding = async (item: FundingMethodItem) => {
+  const nextValue = !item.enabled;
+  try {
+    await http.patch(`/admin/funding-methods/${item.id}`, { enabled: nextValue });
+    item.enabled = nextValue;
+    ElMessage.success(nextValue ? '支付方式已启用' : '支付方式已停用');
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error));
+  }
+};
+
 const deleteItem = async (type: EditorType, id: string, name: string) => {
   try {
     await ElMessageBox.confirm(
@@ -150,7 +198,7 @@ const deleteItem = async (type: EditorType, id: string, name: string) => {
       '删除确认',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
     );
-    const basePath = type === 'platform' ? '/admin/platforms' : '/admin/categories';
+    const basePath = basePaths[type];
     await http.delete(`${basePath}/${id}`);
     ElMessage.success('删除成功');
     await loadData();
@@ -195,7 +243,7 @@ onMounted(loadData);
               <template #default="{ row }">
                 <div class="catalog-actions">
                   <el-button
-                    class="catalog-action catalog-action--edit"
+                    class="app-action-button app-action-button--primary"
                     size="small"
                     :icon="Edit"
                     @click="openEditPlatform(row)"
@@ -203,7 +251,7 @@ onMounted(loadData);
                     编辑
                   </el-button>
                   <el-button
-                    class="catalog-action catalog-action--toggle"
+                    class="app-action-button app-action-button--warning"
                     :class="{ 'is-enable-action': !row.enabled }"
                     size="small"
                     :icon="SwitchButton"
@@ -212,7 +260,7 @@ onMounted(loadData);
                     {{ row.enabled ? '停用' : '启用' }}
                   </el-button>
                   <el-button
-                    class="catalog-action catalog-action--delete"
+                    class="app-action-button app-action-button--danger"
                     size="small"
                     :icon="Delete"
                     @click="deleteItem('platform', row.id, row.name)"
@@ -255,7 +303,7 @@ onMounted(loadData);
               <template #default="{ row }">
                 <div class="catalog-actions">
                   <el-button
-                    class="catalog-action catalog-action--edit"
+                    class="app-action-button app-action-button--primary"
                     size="small"
                     :icon="Edit"
                     @click="openEditCategory(row)"
@@ -263,7 +311,7 @@ onMounted(loadData);
                     编辑
                   </el-button>
                   <el-button
-                    class="catalog-action catalog-action--toggle"
+                    class="app-action-button app-action-button--warning"
                     :class="{ 'is-enable-action': !row.enabled }"
                     size="small"
                     :icon="SwitchButton"
@@ -272,10 +320,65 @@ onMounted(loadData);
                     {{ row.enabled ? '停用' : '启用' }}
                   </el-button>
                   <el-button
-                    class="catalog-action catalog-action--delete"
+                    class="app-action-button app-action-button--danger"
                     size="small"
                     :icon="Delete"
                     @click="deleteItem('category', row.id, row.name)"
+                  >
+                    删除
+                  </el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+
+        <el-tab-pane label="支付方式" name="funding">
+          <div class="tab-toolbar">
+            <span> 维护订单可选的支付方式（自己付 / 代付 / 其他…），利润规则也按这里配置。 </span>
+            <div class="tab-toolbar-actions">
+              <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+              <el-button type="primary" :icon="Plus" @click="openCreate('funding')"
+                >新增支付方式</el-button
+              >
+            </div>
+          </div>
+          <el-table v-loading="loading" :data="fundingMethods" border stripe>
+            <el-table-column prop="sortOrder" label="排序" width="86" />
+            <el-table-column prop="name" label="支付方式" min-width="160" />
+            <el-table-column prop="code" label="编码" min-width="150" />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.enabled ? 'success' : 'info'">{{
+                  row.enabled ? '启用' : '停用'
+                }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="270" fixed="right" align="center">
+              <template #default="{ row }">
+                <div class="catalog-actions">
+                  <el-button
+                    class="app-action-button app-action-button--primary"
+                    size="small"
+                    :icon="Edit"
+                    @click="openEditFunding(row)"
+                  >
+                    编辑
+                  </el-button>
+                  <el-button
+                    class="app-action-button app-action-button--warning"
+                    :class="{ 'is-enable-action': !row.enabled }"
+                    size="small"
+                    :icon="SwitchButton"
+                    @click="toggleFunding(row)"
+                  >
+                    {{ row.enabled ? '停用' : '启用' }}
+                  </el-button>
+                  <el-button
+                    class="app-action-button app-action-button--danger"
+                    size="small"
+                    :icon="Delete"
+                    @click="deleteItem('funding', row.id, row.name)"
                   >
                     删除
                   </el-button>
@@ -289,14 +392,28 @@ onMounted(loadData);
 
     <el-dialog
       v-model="dialogVisible"
-      :title="`${editor.id ? '编辑' : '新增'}${editorType === 'platform' ? '平台' : '品类'}`"
+      :title="`${editor.id ? '编辑' : '新增'}${
+        editorType === 'platform' ? '平台' : editorType === 'category' ? '品类' : '支付方式'
+      }`"
       width="min(480px, 92vw)"
     >
       <el-form :model="editor" label-position="top">
         <el-form-item v-if="editorType === 'platform'" label="平台编码" required>
           <el-input v-model="editor.code" placeholder="例如 jd，只使用小写字母、数字、_、-" />
         </el-form-item>
-        <el-form-item :label="editorType === 'platform' ? '平台名称' : '品类名称'" required>
+        <el-form-item v-if="editorType === 'funding'" label="支付方式编码" required>
+          <el-input v-model="editor.code" placeholder="例如 FRIEND_PAID，只使用字母、数字、_、-" />
+        </el-form-item>
+        <el-form-item
+          :label="
+            editorType === 'platform'
+              ? '平台名称'
+              : editorType === 'category'
+                ? '品类名称'
+                : '支付方式名称'
+          "
+          required
+        >
           <el-input v-model="editor.name" />
         </el-form-item>
         <el-form-item label="排序值">
@@ -351,8 +468,8 @@ onMounted(loadData);
 }
 
 .tab-toolbar span {
-  color: #667085;
-  font-size: 14px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-base);
 }
 
 .tab-toolbar-actions {
@@ -372,77 +489,6 @@ onMounted(loadData);
 
 .catalog-actions :deep(.el-button + .el-button) {
   margin-left: 0;
-}
-
-.catalog-action {
-  height: 32px;
-  padding: 0 11px;
-  border-color: transparent;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: none;
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease,
-    background-color 0.18s ease;
-}
-
-.catalog-action:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 5px 12px rgba(15, 23, 42, 0.08);
-}
-
-.catalog-action:active {
-  transform: translateY(0);
-}
-
-.catalog-action--edit {
-  color: var(--app-primary);
-  background: var(--app-primary-soft);
-}
-
-.catalog-action--edit:hover,
-.catalog-action--edit:focus {
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.17);
-}
-
-.catalog-action--toggle {
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.12);
-}
-
-.catalog-action--toggle:hover,
-.catalog-action--toggle:focus {
-  color: #92400e;
-  background: rgba(245, 158, 11, 0.2);
-}
-
-.catalog-action--toggle.is-enable-action {
-  color: #047857;
-  background: rgba(16, 185, 129, 0.12);
-}
-
-.catalog-action--toggle.is-enable-action:hover,
-.catalog-action--toggle.is-enable-action:focus {
-  color: #065f46;
-  background: rgba(16, 185, 129, 0.2);
-}
-
-.catalog-action--delete {
-  color: #dc2626;
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.catalog-action--delete:hover,
-.catalog-action--delete:focus {
-  color: #b91c1c;
-  background: rgba(239, 68, 68, 0.18);
-}
-
-:global(html.dark) .catalog-action:hover {
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
 }
 
 @media (max-width: 650px) {

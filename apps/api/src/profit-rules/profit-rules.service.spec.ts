@@ -70,4 +70,62 @@ describe('ProfitRulesService fixed settlement gate', () => {
       service.activate('legacy-rule-id', admin),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('deletes a misconfigured version and records an audit entry', async () => {
+    const remove = jest.fn(async () => ({}));
+    const transaction = {
+      profitRule: { delete: remove },
+      auditLog: { create: jest.fn(async (_args: unknown) => ({})) },
+    };
+    const prisma = {
+      profitRule: {
+        findUnique: jest.fn(async () => ({
+          id: 'rule-id',
+          name: '支付方式 · 代付',
+          scope: ProfitRuleScope.FUNDING_TYPE,
+          scopeKey: 'FUNDING_TYPE:SUBMITTER_ADVANCED',
+          version: 1,
+          status: ProfitRuleStatus.ACTIVE,
+          definition: DEFAULT_PROFIT_RULE_DEFINITION,
+          requiresFullCustomerPayment: true,
+        })),
+      },
+      $transaction: jest.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const service = new ProfitRulesService(prisma);
+
+    const result = await service.deleteVersion('rule-id', admin);
+
+    expect(remove).toHaveBeenCalledWith({ where: { id: 'rule-id' } });
+    expect(result).toEqual({
+      deleted: true,
+      wasActive: true,
+      scopeKey: 'FUNDING_TYPE:SUBMITTER_ADVANCED',
+    });
+  });
+
+  it('refuses to delete the active global fallback rule', async () => {
+    const prisma = {
+      profitRule: {
+        findUnique: jest.fn(async () => ({
+          id: 'global-rule-id',
+          name: '默认利润规则',
+          scope: ProfitRuleScope.GLOBAL,
+          scopeKey: 'GLOBAL',
+          version: 1,
+          status: ProfitRuleStatus.ACTIVE,
+          definition: DEFAULT_PROFIT_RULE_DEFINITION,
+          requiresFullCustomerPayment: true,
+        })),
+      },
+    } as unknown as PrismaService;
+    const service = new ProfitRulesService(prisma);
+
+    await expect(
+      service.deleteVersion('global-rule-id', admin),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

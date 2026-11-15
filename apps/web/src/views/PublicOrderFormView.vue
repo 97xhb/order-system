@@ -87,6 +87,7 @@ interface BootstrapData {
   options: {
     platforms: Array<{ id: string; name: string }>;
     categories: Array<{ id: string; name: string }>;
+    fundingMethods: Array<{ code: string; name: string }>;
   };
 }
 
@@ -105,7 +106,7 @@ interface MyOrder {
   inboundTrackingNo: string | null;
   purchaseAddress: string | null;
   receiverName: string | null;
-  fundingType: 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
+  fundingType: string;
   orderAmount: string | number;
   paymentDiscountAmount: string | number;
   rebateScanned: boolean | null;
@@ -158,7 +159,7 @@ const form = reactive({
   inboundTrackingNo: '',
   purchaseAddress: '',
   receiverName: '',
-  fundingType: 'SELF_PAID' as 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER',
+  fundingType: 'SELF_PAID' as string,
   orderAmount: undefined as number | undefined,
   paymentDiscountAmount: 0 as number | undefined,
   rebateScanned: undefined as boolean | undefined,
@@ -183,11 +184,21 @@ const hasConfirmedPayoutMethod = computed(
 const field = (key: FieldKey) =>
   fieldConfig.value?.fields[key] ?? { visible: false, editable: false, required: false };
 const canEditField = (key: FieldKey) => field(key).editable;
-const fundingTypeOptions = [
-  { value: 'SELF_PAID' as const, label: '自己付', hint: '我直接支付' },
-  { value: 'SUBMITTER_ADVANCED' as const, label: '代付', hint: '后续统一结算' },
-  { value: 'OTHER' as const, label: '其他', hint: '由管理员补充说明' },
-];
+const fundingTypeOptions = computed(() => {
+  const methods = data.value?.options?.fundingMethods ?? [];
+  if (!methods.length) {
+    return [
+      { value: 'SELF_PAID', label: '自己付', hint: '我直接支付' },
+      { value: 'SUBMITTER_ADVANCED', label: '代付', hint: '后续统一结算' },
+      { value: 'OTHER', label: '其他', hint: '由管理员补充说明' },
+    ];
+  }
+  return methods.map((method) => ({
+    value: method.code,
+    label: method.name,
+    hint: method.code === 'OTHER' ? '由管理员补充说明' : '',
+  }));
+});
 const requiredFieldLabels: Partial<Record<FieldKey, string>> = {
   wechatNickname: '下单人微信昵称',
   platformId: '下单平台',
@@ -231,7 +242,7 @@ const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
   { value: 'DELIVERED', label: '已签收' },
   { value: 'CANCELLED', label: '已取消' },
 ];
-const selectFundingType = (value: (typeof fundingTypeOptions)[number]['value']) => {
+const selectFundingType = (value: string) => {
   if (!canEditField('fundingType')) return;
   form.fundingType = value;
 };
@@ -277,7 +288,7 @@ const applyDefaults = () => {
   form.platformId = String(defaults.platformId ?? data.value?.options.platforms[0]?.id ?? '');
   form.categoryId = '';
   form.productName = data.value?.form.scheme.name || data.value?.form.scheme.productName || '';
-  form.fundingType = 'SELF_PAID';
+  form.fundingType = fundingTypeOptions.value[0]?.value ?? 'SELF_PAID';
   form.orderAmount = defaults.orderAmount === undefined ? undefined : Number(defaults.orderAmount);
   form.paymentDiscountAmount = Number(defaults.paymentDiscountAmount ?? 0);
   form.wechatNickname = data.value?.identity.submitter?.nickname ?? '';
@@ -1238,11 +1249,19 @@ onMounted(() => void load());
   min-height: 100vh;
   padding: 18px 14px 32px;
   color: var(--app-text);
-  font-size: 19px;
+  font-size: var(--app-text-lg);
   background:
-    radial-gradient(circle at 12% 0, rgba(96, 165, 250, 0.2), transparent 32%),
-    radial-gradient(circle at 88% 24%, rgba(167, 139, 250, 0.1), transparent 28%),
-    linear-gradient(180deg, #eef6ff 0, #f6f8fb 360px);
+    radial-gradient(
+      circle at 12% 0,
+      color-mix(in srgb, var(--app-primary) 20%, transparent),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 88% 24%,
+      color-mix(in srgb, var(--app-purple) 10%, transparent),
+      transparent 28%
+    ),
+    linear-gradient(180deg, var(--app-info-soft) 0, var(--app-surface-sunken) 360px);
 }
 .public-header,
 .form-card,
@@ -1264,17 +1283,17 @@ footer {
   height: 50px;
   flex: 0 0 50px;
   place-items: center;
-  border-radius: 14px;
-  font-size: 16px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-md);
   letter-spacing: 0.04em;
-  color: #fff;
+  color: var(--app-surface-card);
   font-weight: 800;
-  background: linear-gradient(145deg, #60a5fa, #2563eb);
-  box-shadow: 0 9px 22px rgba(37, 99, 235, 0.22);
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-md);
 }
 
 .public-brand.is-long {
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   letter-spacing: 0;
 }
 .public-header-copy {
@@ -1285,42 +1304,42 @@ footer {
 }
 .public-header strong {
   color: var(--app-heading);
-  font-size: 20px;
+  font-size: var(--app-text-xl);
 }
 .public-header span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .public-header-pill {
   flex: 0 0 auto;
   margin-top: 0 !important;
   padding: 6px 11px;
-  border: 1px solid rgba(59, 130, 246, 0.18);
-  border-radius: 999px;
-  color: #2563eb !important;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+  border: 1px solid color-mix(in srgb, var(--app-primary) 18%, transparent);
+  border-radius: var(--app-radius-chip);
+  color: var(--app-primary) !important;
+  background: color-mix(in srgb, var(--app-surface-card) 72%, transparent);
+  box-shadow: var(--app-shadow-md);
   backdrop-filter: blur(12px);
-  font-size: 13px !important;
+  font-size: var(--app-text-sm) !important;
   font-weight: 700;
 }
 .form-card,
 .history-card {
   padding: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.09);
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 24%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 76%, transparent);
+  box-shadow: var(--app-shadow-pop);
   backdrop-filter: blur(20px);
 }
 .submission-guide {
   display: flex;
   align-items: center;
   padding: 15px 16px;
-  border: 1px solid rgba(59, 130, 246, 0.18);
-  border-radius: 18px;
-  background: rgba(239, 246, 255, 0.84);
+  border: 1px solid color-mix(in srgb, var(--app-primary) 18%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-hover) 84%, transparent);
   gap: 12px;
 }
 .submission-guide-mark,
@@ -1335,10 +1354,10 @@ footer {
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
-  border-radius: 11px;
-  color: #2563eb;
-  background: #dbeafe;
-  font-size: 14px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+  font-size: var(--app-text-base);
 }
 .submission-guide-copy {
   display: flex;
@@ -1348,13 +1367,13 @@ footer {
 }
 .submission-guide-copy strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 .submission-guide-copy span,
 .submission-guide-copy small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.55;
 }
 .submission-guide-copy small {
@@ -1363,24 +1382,24 @@ footer {
 .submission-guide-pill {
   flex: 0 0 auto;
   padding: 6px 10px;
-  border-radius: 999px;
-  color: #2563eb;
-  background: #fff;
-  font-size: 13px;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-primary);
+  background: var(--app-surface-card);
+  font-size: var(--app-text-sm);
   font-weight: 700;
 }
 .identity-query-panel {
   margin-top: 12px;
   padding: 18px 20px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 24%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 90%, transparent);
+  box-shadow: var(--app-shadow-pop);
   backdrop-filter: blur(16px);
 }
 .identity-query-panel.is-recognized {
-  border-color: rgba(34, 197, 94, 0.22);
-  background: rgba(248, 255, 251, 0.92);
+  border-color: color-mix(in srgb, var(--app-success) 22%, transparent);
+  background: color-mix(in srgb, var(--app-surface-sunken) 92%, transparent);
 }
 .identity-query-heading,
 .identity-query-copy,
@@ -1402,15 +1421,15 @@ footer {
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 11px;
-  color: #2563eb;
-  background: #eaf2ff;
-  font-size: 14px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+  font-size: var(--app-text-base);
   font-weight: 800;
 }
 .identity-step-mark.is-recognized {
-  color: #15803d;
-  background: #dcfce7;
+  color: var(--app-success);
+  background: var(--app-success-soft);
 }
 .identity-query-copy > div {
   display: flex;
@@ -1419,12 +1438,12 @@ footer {
 }
 .identity-query-copy strong {
   color: var(--app-heading);
-  font-size: 18px;
+  font-size: var(--app-text-lg);
 }
 .identity-query-copy small {
   margin-top: 3px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .identity-query-actions {
   flex: 0 0 auto;
@@ -1432,10 +1451,10 @@ footer {
 }
 .identity-code-pill {
   padding: 6px 10px;
-  border-radius: 999px;
-  color: #2563eb;
-  background: #eef5ff;
-  font-size: 13px;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+  font-size: var(--app-text-sm);
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -1443,7 +1462,7 @@ footer {
   padding-right: 7px;
   padding-left: 7px;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .identity-link-form {
   display: grid;
@@ -1453,7 +1472,7 @@ footer {
   margin-top: 12px;
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--app-primary) 18%, var(--app-border));
-  border-radius: 20px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-primary-soft) 24%, var(--app-card));
   box-shadow: var(--app-shadow-sm);
 }
@@ -1469,12 +1488,12 @@ footer {
 }
 .scheme-summary-heading strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 .scheme-summary-heading small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .scheme-summary-mark {
   display: grid;
@@ -1482,10 +1501,10 @@ footer {
   height: 30px;
   flex: 0 0 30px;
   place-items: center;
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 800;
 }
 .scheme-summary-product,
@@ -1493,21 +1512,21 @@ footer {
   margin-top: 12px;
   padding: 10px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 62%, transparent);
 }
 .scheme-summary-product > span,
 .scheme-summary-description > span {
   display: block;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 700;
 }
 .scheme-summary-product > div,
 .scheme-summary-description-content {
   margin-top: 5px;
   color: var(--app-text);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -1534,7 +1553,7 @@ footer {
   max-width: 100%;
   height: auto;
   margin: 10px 0;
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
 }
 .scheme-summary-product-rich :deep(hr),
 .form-description :deep(hr) {
@@ -1554,14 +1573,14 @@ footer {
 .form-description-card {
   margin-top: 12px;
   padding: 14px;
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  border-radius: 20px;
-  background: rgba(255, 251, 235, 0.86);
-  box-shadow: 0 12px 28px rgba(180, 83, 9, 0.06);
+  border: 1px solid color-mix(in srgb, var(--app-warning) 20%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-warning-soft) 86%, transparent);
+  box-shadow: var(--app-shadow-lg);
 }
 .scheme-submit-alert {
   margin-top: 12px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
 }
 .form-description-heading {
   display: flex;
@@ -1574,34 +1593,34 @@ footer {
   flex-direction: column;
 }
 .form-description-heading strong {
-  color: #92400e;
-  font-size: 16px;
+  color: var(--app-warning);
+  font-size: var(--app-text-md);
 }
 .form-description-heading small {
   margin-top: 2px;
-  color: #b7791f;
-  font-size: 13px;
+  color: var(--app-warning);
+  font-size: var(--app-text-sm);
 }
 .form-description-mark {
   width: 30px;
   height: 30px;
   flex: 0 0 30px;
-  border-radius: 10px;
-  color: #b45309;
-  background: #fef3c7;
-  font-size: 13px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-warning);
+  background: var(--app-warning-soft);
+  font-size: var(--app-text-sm);
 }
 .form-description-content {
   margin-top: 11px;
   padding: 12px 14px;
-  border: 1px solid rgba(245, 158, 11, 0.16);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid color-mix(in srgb, var(--app-warning) 16%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 70%, transparent);
 }
 .form-description {
   min-width: 0;
-  color: #78590d;
-  font-size: 16px;
+  color: var(--app-warning);
+  font-size: var(--app-text-md);
   line-height: 1.7;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -1628,10 +1647,10 @@ footer {
 }
 .form-section {
   padding: 18px 18px 2px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 22%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 84%, transparent);
+  box-shadow: var(--app-shadow-lg);
 }
 .form-section-heading {
   display: flex;
@@ -1643,18 +1662,18 @@ footer {
   width: 34px;
   height: 34px;
   flex: 0 0 34px;
-  border-radius: 11px;
-  color: #2563eb;
-  background: #eaf2ff;
-  font-size: 12px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+  font-size: var(--app-text-xs);
 }
 .form-section-step.is-money {
-  color: #7c3aed;
-  background: #ede9fe;
+  color: var(--app-purple);
+  background: var(--app-purple-soft);
 }
 .form-section-step.is-submit {
-  color: #15803d;
-  background: #dcfce7;
+  color: var(--app-success);
+  background: var(--app-success-soft);
 }
 .form-section-heading > div {
   display: flex;
@@ -1663,12 +1682,12 @@ footer {
 }
 .form-section-heading strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 .form-section-heading small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .form-section-grid {
   display: grid;
@@ -1680,15 +1699,15 @@ footer {
 }
 .public-form :deep(.el-form-item__label) {
   color: var(--app-text);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   font-weight: 650;
 }
 .public-form :deep(.el-input__wrapper),
 .public-form :deep(.el-select__wrapper),
 .public-form :deep(.el-textarea__inner) {
-  border-radius: 13px;
-  background: rgba(248, 250, 252, 0.92);
-  box-shadow: 0 0 0 1px #dbe3ee inset;
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-sunken) 92%, transparent);
+  box-shadow: 0 0 0 1px var(--app-border-soft) inset;
   transition: 0.18s ease;
 }
 .public-form :deep(.el-input__wrapper),
@@ -1702,19 +1721,19 @@ footer {
 .public-form :deep(.el-input__wrapper:hover),
 .public-form :deep(.el-select__wrapper:hover),
 .public-form :deep(.el-textarea__inner:hover) {
-  box-shadow: 0 0 0 1px #9fc3fa inset;
+  box-shadow: 0 0 0 1px var(--app-info-border) inset;
 }
 .public-form :deep(.el-input__wrapper.is-focus),
 .public-form :deep(.el-select__wrapper.is-focused),
 .public-form :deep(.el-textarea__inner:focus) {
   box-shadow:
-    0 0 0 1px #60a5fa inset,
-    0 0 0 3px rgba(59, 130, 246, 0.1);
+    0 0 0 1px var(--app-info-border) inset,
+    0 0 0 3px color-mix(in srgb, var(--app-primary) 10%, transparent);
 }
 .public-form :deep(.is-disabled .el-input__wrapper),
 .public-form :deep(.is-disabled.el-select__wrapper),
 .public-form :deep(.el-textarea.is-disabled .el-textarea__inner) {
-  background: #f1f5f9;
+  background: var(--app-surface-sunken);
 }
 .public-form :deep(.el-select),
 .public-form :deep(.el-date-editor),
@@ -1726,9 +1745,9 @@ footer {
   width: 100%;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 5px;
-  border: 1px solid #dbe3ee;
-  border-radius: 16px;
-  background: rgba(241, 245, 249, 0.86);
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-subtle) 86%, transparent);
   gap: 5px;
 }
 .scan-choice-options {
@@ -1744,20 +1763,20 @@ footer {
   align-items: center;
   padding: 8px 10px;
   border-color: transparent;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: transparent;
   transition: 0.18s ease;
 }
 .funding-option:hover:not(:disabled) {
-  border-color: #9fc3fa;
-  background: rgba(255, 255, 255, 0.88);
+  border-color: var(--app-info-border);
+  background: color-mix(in srgb, var(--app-surface-card) 88%, transparent);
   transform: translateY(-1px);
 }
 .funding-option.is-selected {
-  border-color: #7db0f7;
-  color: #2563eb;
-  background: #fff;
-  box-shadow: 0 7px 18px rgba(59, 130, 246, 0.12);
+  border-color: var(--app-info-border);
+  color: var(--app-primary);
+  background: var(--app-surface-card);
+  box-shadow: var(--app-shadow-md);
 }
 .funding-option > span {
   display: flex;
@@ -1766,13 +1785,13 @@ footer {
 }
 .funding-option strong {
   color: var(--app-heading);
-  font-size: 16px;
+  font-size: var(--app-text-md);
 }
 .funding-option small {
   margin-top: 3px;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1785,19 +1804,19 @@ footer {
   gap: 7px;
 }
 .amount-options :deep(.el-radio-button__inner) {
-  border: 1px solid #dbe3ee !important;
-  border-radius: 11px !important;
+  border: 1px solid var(--app-border-soft) !important;
+  border-radius: var(--app-radius-card) !important;
   box-shadow: none !important;
 }
 .amount-options :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  border-color: #7db0f7 !important;
-  color: #2563eb;
-  background: #eef5ff;
+  border-color: var(--app-info-border) !important;
+  color: var(--app-primary);
+  background: var(--app-info-soft);
 }
 .field-help {
   margin-top: 5px;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .submit-area {
   display: flex;
@@ -1808,15 +1827,15 @@ footer {
 }
 .submit-area :deep(.el-button) {
   min-height: 44px;
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   padding-right: 22px;
   padding-left: 22px;
 }
 .submit-area :deep(.el-button:last-child) {
   min-width: 160px;
   border: 0;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+  background: linear-gradient(135deg, var(--app-primary), var(--app-primary));
+  box-shadow: var(--app-shadow-md);
 }
 .history-card {
   margin-top: 16px;
@@ -1831,7 +1850,7 @@ footer {
   margin-top: 8px;
 }
 .payout-card {
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.07);
+  box-shadow: var(--app-shadow-pop);
 }
 .history-title {
   display: flex;
@@ -1856,23 +1875,23 @@ footer {
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
-  border-radius: 11px;
-  font-size: 14px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-base);
 }
 .history-title-mark.is-payout {
-  color: #7c3aed;
-  background: #ede9fe;
+  color: var(--app-purple);
+  background: var(--app-purple-soft);
 }
 .history-title-mark.is-order {
-  color: #2563eb;
-  background: #eaf2ff;
+  color: var(--app-primary);
+  background: var(--app-info-soft);
 }
 .history-title strong {
   color: var(--app-heading);
-  font-size: 18px;
+  font-size: var(--app-text-lg);
 }
 .history-title :deep(.el-button) {
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
 }
 .payout-row {
   display: flex;
@@ -1881,9 +1900,9 @@ footer {
   min-height: 62px;
   margin-top: 9px;
   padding: 12px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 15px;
-  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-sunken) 82%, transparent);
   gap: 10px;
 }
 .payout-row > div {
@@ -1895,7 +1914,7 @@ footer {
 .payout-row span {
   width: 100%;
   color: var(--app-muted);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .payout-form {
   display: grid;
@@ -1908,20 +1927,20 @@ footer {
 }
 .history-title span {
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .order-item {
   margin-top: 10px;
   padding: 15px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.84);
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-sunken) 84%, transparent);
   transition: 0.18s ease;
 }
 .order-item:hover {
-  border-color: #bfdbfe;
-  background: #fff;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+  border-color: var(--app-info-border);
+  background: var(--app-surface-card);
+  box-shadow: var(--app-shadow-lg);
 }
 .order-main,
 .order-info,
@@ -1941,7 +1960,7 @@ footer {
 .order-main span,
 .order-info {
   color: var(--app-muted);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .order-info {
   flex-wrap: wrap;
@@ -1954,35 +1973,35 @@ footer {
   gap: 7px;
 }
 .order-actions :deep(.el-button) {
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
 }
 .settlement-paid {
-  color: #16a34a;
+  color: var(--app-success);
   font-weight: 600;
 }
 .settlement-partial,
 .settlement-unpaid,
 .settlement-exception {
-  color: #dc2626;
+  color: var(--app-danger);
   font-weight: 600;
 }
 footer {
   padding-top: 18px;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
   text-align: center;
 }
 :global(.public-dialog.el-dialog) {
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.18);
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 24%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 96%, transparent);
+  box-shadow: var(--app-shadow-pop);
   backdrop-filter: blur(18px);
 }
 :global(.public-dialog .el-dialog__header) {
   padding: 18px 20px 14px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--app-surface-muted);
 }
 :global(.public-dialog .el-dialog__title) {
   color: var(--app-heading);
@@ -1993,10 +2012,10 @@ footer {
 }
 :global(.public-dialog .el-dialog__footer) {
   padding: 13px 20px 18px;
-  border-top: 1px solid #eef2f7;
+  border-top: 1px solid var(--app-surface-muted);
 }
 :global(.public-dialog .el-button) {
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
 }
 @media (max-width: 560px) {
   .public-page {
@@ -2007,7 +2026,7 @@ footer {
     --el-font-size-small: 17px;
     --el-font-size-extra-small: 16px;
     padding: 13px 10px 26px;
-    font-size: 20px;
+    font-size: var(--app-text-xl);
   }
   .public-header {
     align-items: flex-start;
@@ -2024,7 +2043,7 @@ footer {
   .form-card,
   .history-card {
     padding: 13px;
-    border-radius: 20px;
+    border-radius: var(--app-radius-card);
   }
   .submission-guide {
     align-items: flex-start;
@@ -2035,7 +2054,7 @@ footer {
   }
   .identity-query-panel {
     padding: 15px;
-    border-radius: 18px;
+    border-radius: var(--app-radius-card);
   }
   .identity-query-heading {
     align-items: flex-start;
@@ -2048,15 +2067,15 @@ footer {
   }
   .form-description-card {
     padding: 12px;
-    border-radius: 18px;
+    border-radius: var(--app-radius-card);
   }
   .form-description-content {
     padding: 11px 12px;
-    border-radius: 13px;
+    border-radius: var(--app-radius-card);
   }
   .form-section {
     padding: 14px 14px 1px;
-    border-radius: 18px;
+    border-radius: var(--app-radius-card);
   }
   .form-section-heading {
     align-items: flex-start;
@@ -2076,10 +2095,10 @@ footer {
     padding: 7px 4px;
   }
   .funding-option strong {
-    font-size: 16px;
+    font-size: var(--app-text-md);
   }
   .funding-option small {
-    font-size: 13px;
+    font-size: var(--app-text-sm);
     line-height: 1.25;
     white-space: normal;
   }

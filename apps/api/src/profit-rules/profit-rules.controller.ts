@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -43,5 +45,15 @@ export class ProfitRulesController {
     @CurrentAdmin() admin: AuthenticatedAdmin,
   ) {
     return this.profitRulesService.activate(id, admin);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @ApiOperation({ summary: '删除设置错误的利润规则版本' })
+  deleteVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.profitRulesService.deleteVersion(id, admin);
   }
 }

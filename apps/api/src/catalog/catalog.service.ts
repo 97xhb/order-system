@@ -7,9 +7,12 @@ import { Prisma } from '@prisma/client';
 import type { AuthenticatedAdmin } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { CreateFundingMethodDto } from './dto/create-funding-method.dto';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { UpdateFundingMethodDto } from './dto/update-funding-method.dto';
 import { UpdatePlatformDto } from './dto/update-platform.dto';
+import { normalizeFundingMethodCode } from './funding-methods';
 
 @Injectable()
 export class CatalogService {
@@ -27,7 +30,7 @@ export class CatalogService {
     transaction: Prisma.TransactionClient,
     admin: AuthenticatedAdmin,
     action: string,
-    entityType: 'Platform' | 'Category',
+    entityType: 'Platform' | 'Category' | 'FundingMethod',
     entityId: string,
     beforeData?: Prisma.InputJsonValue,
     afterData?: Prisma.InputJsonValue,
@@ -288,6 +291,164 @@ export class CatalogService {
         enabled: category.enabled,
         sortOrder: category.sortOrder,
       });
+    });
+  }
+
+  listFundingMethods(includeDisabled = false) {
+    return this.prisma.fundingMethod.findMany({
+      where: includeDisabled ? undefined : { enabled: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        enabled: true,
+        sortOrder: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async createFundingMethod(
+    dto: CreateFundingMethodDto,
+    admin: AuthenticatedAdmin,
+  ) {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const method = await transaction.fundingMethod.create({
+          data: {
+            code: normalizeFundingMethodCode(dto.code),
+            name: this.normalizeName(dto.name),
+            enabled: dto.enabled ?? true,
+            sortOrder: dto.sortOrder ?? 0,
+          },
+        });
+        await this.createAudit(
+          transaction,
+          admin,
+          'CREATE',
+          'FundingMethod',
+          method.id,
+          undefined,
+          {
+            code: method.code,
+            name: method.name,
+            enabled: method.enabled,
+            sortOrder: method.sortOrder,
+          },
+        );
+        return method;
+      });
+    } catch (error) {
+      this.throwCatalogConflict(error);
+    }
+  }
+
+  async updateFundingMethod(
+    id: string,
+    dto: UpdateFundingMethodDto,
+    admin: AuthenticatedAdmin,
+  ) {
+    const existing = await this.prisma.fundingMethod.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('支付方式不存在');
+
+    // 停用或改编码会让历史订单/利润规则找不到对应目录项，直接拦截并说明原因。
+    const changesIdentity =
+      (dto.enabled === false && existing.enabled) ||
+      (dto.code !== undefined &&
+        normalizeFundingMethodCode(dto.code) !== existing.code);
+    if (changesIdentity) {
+      const [orderCount, ruleCount] = await Promise.all([
+        this.prisma.order.count({ where: { fundingType: existing.code } }),
+        this.prisma.profitRule.count({
+          where: { fundingType: existing.code },
+        }),
+      ]);
+      if (orderCount > 0 || ruleCount > 0) {
+        throw new ConflictException(
+          '该支付方式已被订单或利润规则使用，请先调整相关数据后再停用或改编码',
+        );
+      }
+    }
+
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const method = await transaction.fundingMethod.update({
+          where: { id },
+          data: {
+            code:
+              dto.code === undefined
+                ? undefined
+                : normalizeFundingMethodCode(dto.code),
+            name:
+              dto.name === undefined ? undefined : this.normalizeName(dto.name),
+            enabled: dto.enabled,
+            sortOrder: dto.sortOrder,
+          },
+        });
+        await this.createAudit(
+          transaction,
+          admin,
+          'UPDATE',
+          'FundingMethod',
+          method.id,
+          {
+            code: existing.code,
+            name: existing.name,
+            enabled: existing.enabled,
+            sortOrder: existing.sortOrder,
+          },
+          {
+            code: method.code,
+            name: method.name,
+            enabled: method.enabled,
+            sortOrder: method.sortOrder,
+          },
+        );
+        return method;
+      });
+    } catch (error) {
+      this.throwCatalogConflict(error);
+    }
+  }
+
+  async deleteFundingMethod(id: string, admin: AuthenticatedAdmin) {
+    const existing = await this.prisma.fundingMethod.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('支付方式不存在');
+
+    const [orderCount, ruleCount] = await Promise.all([
+      this.prisma.order.count({ where: { fundingType: existing.code } }),
+      this.prisma.profitRule.count({
+        where: { fundingType: existing.code },
+      }),
+    ]);
+
+    if (orderCount > 0 || ruleCount > 0) {
+      throw new ConflictException(
+        '支付方式已经被订单或利润规则使用，请改为停用',
+      );
+    }
+
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.fundingMethod.delete({ where: { id } });
+      await this.createAudit(
+        transaction,
+        admin,
+        'DELETE',
+        'FundingMethod',
+        id,
+        {
+          code: existing.code,
+          name: existing.name,
+          enabled: existing.enabled,
+          sortOrder: existing.sortOrder,
+        },
+      );
     });
   }
 }

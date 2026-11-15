@@ -199,12 +199,12 @@ const focus = () => {
 
 .money-formula-result {
   color: var(--el-color-primary);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.35;
 }
 .money-formula-error {
   color: var(--el-color-danger);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.35;
 }
 .money-formula-variables {
@@ -213,7 +213,7 @@ const focus = () => {
   flex-wrap: wrap;
   gap: 4px;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -221,12 +221,12 @@ const focus = () => {
   height: 22px;
   padding: 0 7px;
   border: 1px solid color-mix(in srgb, var(--app-primary) 24%, var(--app-border));
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary) 7%, var(--app-card-solid));
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 .money-variable-chip:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--app-primary) 46%, var(--app-border));

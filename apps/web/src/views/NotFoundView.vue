@@ -15,41 +15,50 @@
   padding: 22px;
   place-items: center;
   background:
-    radial-gradient(circle at 18% 12%, rgba(59, 130, 246, 0.16), transparent 34%),
-    linear-gradient(145deg, #0f172a, #172554 48%, #111827);
+    radial-gradient(
+      circle at 18% 12%,
+      color-mix(in srgb, var(--app-primary) 14%, transparent),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 82% 86%,
+      color-mix(in srgb, var(--app-purple) 10%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(180deg, var(--app-surface-sunken) 0, var(--app-background) 420px);
 }
 
 .not-found-card {
   display: grid;
   width: min(440px, 100%);
   padding: 34px 28px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 24px;
-  color: #e5e7eb;
-  background: rgba(15, 23, 42, 0.86);
-  box-shadow: 0 28px 75px rgba(2, 6, 23, 0.48);
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  color: var(--app-text-body);
+  background: var(--app-card);
+  box-shadow: var(--app-shadow-pop);
   text-align: center;
-  backdrop-filter: blur(22px);
+  backdrop-filter: blur(18px);
 }
 
 .error-code {
-  color: #60a5fa;
-  font-size: clamp(58px, 15vw, 92px);
+  color: var(--app-primary);
+  font-size: var(--app-text-display);
   font-weight: 800;
-  letter-spacing: -0.07em;
+  letter-spacing: 0;
   line-height: 0.95;
 }
 
 h1 {
   margin: 20px 0 8px;
-  color: #f8fafc;
-  font-size: 22px;
+  color: var(--app-text-strong);
+  font-size: var(--app-text-xl);
 }
 
 p {
   margin: 0;
-  color: #94a3b8;
-  font-size: 14px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-base);
   line-height: 1.75;
 }
 </style>

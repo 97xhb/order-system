@@ -17,8 +17,10 @@ import { CurrentAdmin } from '../auth/current-admin.decorator';
 import type { AuthenticatedAdmin } from '../auth/auth.types';
 import { CatalogService } from './catalog.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { CreateFundingMethodDto } from './dto/create-funding-method.dto';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { UpdateFundingMethodDto } from './dto/update-funding-method.dto';
 import { UpdatePlatformDto } from './dto/update-platform.dto';
 
 @ApiTags('admin catalog')
@@ -108,5 +110,44 @@ export class CatalogController {
     @CurrentAdmin() admin: AuthenticatedAdmin,
   ) {
     return this.catalogService.deleteCategory(id, admin);
+  }
+
+  @Get('funding-methods')
+  @ApiOperation({ summary: '查询支付方式' })
+  async listFundingMethods(@Query('includeDisabled') includeDisabled?: string) {
+    return {
+      items: await this.catalogService.listFundingMethods(
+        this.includeDisabled(includeDisabled),
+      ),
+    };
+  }
+
+  @Post('funding-methods')
+  @ApiOperation({ summary: '新增支付方式' })
+  createFundingMethod(
+    @Body() dto: CreateFundingMethodDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.catalogService.createFundingMethod(dto, admin);
+  }
+
+  @Patch('funding-methods/:id')
+  @ApiOperation({ summary: '修改或停用支付方式' })
+  updateFundingMethod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateFundingMethodDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.catalogService.updateFundingMethod(id, dto, admin);
+  }
+
+  @Delete('funding-methods/:id')
+  @HttpCode(204)
+  @ApiOperation({ summary: '删除未被使用的支付方式' })
+  deleteFundingMethod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.catalogService.deleteFundingMethod(id, admin);
   }
 }

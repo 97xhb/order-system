@@ -258,11 +258,9 @@ onMounted(load);
   --metric-accent: var(--app-primary);
   position: relative;
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--metric-accent) 17%, var(--app-border));
-  background: color-mix(in srgb, var(--metric-accent) 6%, var(--app-card));
-  box-shadow:
-    var(--app-shadow-sm),
-    inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 62%, transparent);
+  border-color: var(--app-border);
+  background: var(--app-card-solid);
+  box-shadow: var(--app-shadow-sm);
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease,
@@ -270,35 +268,35 @@ onMounted(load);
 }
 
 .metric-card:hover {
-  border-color: color-mix(in srgb, var(--metric-accent) 30%, var(--app-border));
+  border-color: color-mix(in srgb, var(--metric-accent) 32%, var(--app-border));
   box-shadow: var(--app-shadow);
   transform: translateY(-1px);
 }
 
 .metric-card--blue {
-  --metric-accent: #3b82f6;
+  --metric-accent: var(--app-primary);
 }
 
 .metric-card--orange {
-  --metric-accent: #f59e0b;
+  --metric-accent: var(--app-warning);
 }
 
 .metric-card--purple {
-  --metric-accent: #8b5cf6;
+  --metric-accent: var(--app-purple);
 }
 
 .metric-card--green {
-  --metric-accent: #10b981;
+  --metric-accent: var(--app-success);
 }
 
 .queue-card {
-  border-color: color-mix(in srgb, var(--app-warning) 10%, var(--app-border));
-  background: color-mix(in srgb, var(--app-primary-soft) 16%, var(--app-card));
+  border-color: var(--app-border);
+  background: var(--app-card-solid);
 }
 
 .recent-card {
-  border-color: color-mix(in srgb, var(--app-primary) 8%, var(--app-border));
-  background: color-mix(in srgb, var(--app-card-solid) 18%, var(--app-card));
+  border-color: var(--app-border);
+  background: var(--app-card-solid);
 }
 .metric-head,
 .section-title {
@@ -308,31 +306,31 @@ onMounted(load);
 }
 .metric-head {
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .metric-icon {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-control);
   color: var(--metric-accent);
   background: color-mix(in srgb, var(--metric-accent) 11%, transparent);
 }
 
 .metric-icon::after {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: currentColor;
-  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
   content: '';
 }
 .metric-card strong {
   display: block;
   margin-top: 13px;
   color: var(--app-heading);
-  font-size: 28px;
+  font-size: var(--app-text-2xl);
 }
 .metric-card small {
   display: block;
@@ -361,7 +359,7 @@ onMounted(load);
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--app-radius-control);
   color: var(--app-primary);
   background: var(--app-primary-soft);
 }
@@ -383,12 +381,12 @@ onMounted(load);
 .section-title h2 {
   margin: 0;
   color: var(--app-heading);
-  font-size: 18px;
+  font-size: var(--app-text-lg);
 }
 .section-title p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .queue-grid {
   display: grid;
@@ -399,17 +397,16 @@ onMounted(load);
   --queue-accent: var(--app-primary);
   display: flex;
   min-width: 0;
-  min-height: 104px;
+  min-height: 96px;
   flex-direction: column;
   justify-content: space-between;
-  padding: 14px 15px 13px;
-  border: 1px solid color-mix(in srgb, var(--queue-accent) 20%, var(--app-border));
-  border-radius: 16px;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--app-border);
+  border-left: 3px solid var(--queue-accent);
+  border-radius: var(--app-radius-control);
   color: var(--app-text);
-  background: color-mix(in srgb, var(--queue-accent) 6%, var(--app-card-solid));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 62%, transparent),
-    0 8px 18px color-mix(in srgb, var(--queue-accent) 6%, transparent);
+  background: var(--app-card-solid);
+  box-shadow: none;
   text-align: left;
   cursor: pointer;
   gap: 12px;
@@ -419,20 +416,21 @@ onMounted(load);
     box-shadow 0.18s ease;
 }
 .queue-item--slate {
-  --queue-accent: #64748b;
+  --queue-accent: var(--app-text-subtle);
 }
 .queue-item--amber {
-  --queue-accent: #f59e0b;
+  --queue-accent: var(--app-warning);
 }
 .queue-item--orange {
-  --queue-accent: #f97316;
+  --queue-accent: var(--app-warning);
 }
 .queue-item--red {
-  --queue-accent: #ef4444;
+  --queue-accent: var(--app-danger);
 }
 .queue-item:hover {
-  border-color: color-mix(in srgb, var(--queue-accent) 48%, var(--app-border));
-  box-shadow: 0 12px 25px color-mix(in srgb, var(--queue-accent) 13%, transparent);
+  border-color: color-mix(in srgb, var(--queue-accent) 40%, var(--app-border));
+  border-left-color: var(--queue-accent);
+  box-shadow: var(--app-shadow-sm);
   transform: translateY(-2px);
 }
 .queue-item:focus-visible {
@@ -443,7 +441,7 @@ onMounted(load);
   display: flex;
   align-items: center;
   color: var(--app-text);
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 600;
   line-height: 1.45;
 }
@@ -464,7 +462,7 @@ onMounted(load);
 }
 .queue-count {
   color: var(--app-heading);
-  font-size: 26px;
+  font-size: var(--app-text-2xl);
   font-weight: 750;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -472,7 +470,7 @@ onMounted(load);
 .queue-summary small {
   margin-bottom: 1px;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .queue-arrow {
   display: grid;
@@ -480,7 +478,7 @@ onMounted(load);
   height: 28px;
   margin-left: auto;
   place-items: center;
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
   color: var(--queue-accent);
   background: color-mix(in srgb, var(--queue-accent) 12%, transparent);
 }
@@ -495,10 +493,10 @@ onMounted(load);
   align-items: center;
   padding: 11px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-control) 66%, transparent);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   text-align: left;
   cursor: pointer;
   gap: 12px;
@@ -522,19 +520,19 @@ onMounted(load);
 .recent-main b {
   overflow: hidden;
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .recent-main small,
 .recent-status {
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   line-height: 1.6;
 }
 .recent-list strong {
   color: var(--app-success);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   text-align: right;
 }
 @media (max-width: 1360px) {

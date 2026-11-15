@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { CircleCheck, Delete, Plus, View } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { CircleCheck, Delete, EditPen, Plus } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
 
-type RuleScope = 'GLOBAL' | 'SCHEME';
+type RuleScope = 'GLOBAL' | 'SCHEME' | 'CATEGORY' | 'FUNDING_TYPE';
 type RuleOperation = 'ADD' | 'SUBTRACT';
 type SourceType = 'FIELD' | 'FIXED';
 type RuleField =
@@ -55,6 +55,8 @@ interface ProfitRuleListResponse {
   items: ProfitRuleVersion[];
   options: {
     schemes: Array<{ id: string; name: string }>;
+    categories: Array<{ id: string; name: string }>;
+    fundingMethods: Array<{ code: string; name: string; enabled: boolean }>;
     amountFields: Array<{ value: RuleField; label: string }>;
   };
 }
@@ -71,15 +73,72 @@ const sampleFieldOptions = computed(() => fieldOptions.value);
 
 const rule = reactive({
   name: '默认利润规则',
-  scope: 'GLOBAL' as RuleScope,
+  scope: 'FUNDING_TYPE' as RuleScope,
   schemeId: '',
+  categoryId: '',
+  fundingType: '',
   roundingScale: 2,
 });
 const loading = ref(false);
 const saving = ref(false);
 const currentVersion = ref(1);
+const editorCardRef = ref<HTMLElement | null>(null);
 const history = ref<ProfitRuleVersion[]>([]);
 const schemeOptions = ref<Array<{ id: string; name: string }>>([]);
+const categoryOptions = ref<Array<{ id: string; name: string }>>([]);
+const fundingMethodOptions = ref<Array<{ code: string; name: string; enabled: boolean }>>([]);
+
+const scopeOptions: Array<{ label: string; value: RuleScope; hint: string }> = [
+  {
+    label: '按支付方式',
+    value: 'FUNDING_TYPE',
+    hint: '自己付、代付、其他…各自一套计算项',
+  },
+  {
+    label: '按品类',
+    value: 'CATEGORY',
+    hint: '按下单品类覆盖计算项',
+  },
+  {
+    label: '按下单方案',
+    value: 'SCHEME',
+    hint: '按具体商品方案覆盖计算项',
+  },
+  {
+    label: '全局默认',
+    value: 'GLOBAL',
+    hint: '所有订单的兜底计算规则',
+  },
+];
+
+const currentScopeHint = computed(
+  () => scopeOptions.find((option) => option.value === rule.scope)?.hint ?? '',
+);
+
+const fundingMethodName = (code?: string | null) =>
+  fundingMethodOptions.value.find((item) => item.code === code)?.name ?? (code ? code : '-');
+
+const firstEnabledFundingMethod = () =>
+  fundingMethodOptions.value.find((item) => item.enabled)?.code ?? '';
+
+/** 规则名跟着适用范围走，用户不用自己想名字。 */
+const suggestRuleName = () => {
+  if (rule.scope === 'FUNDING_TYPE') {
+    rule.name = `支付方式 · ${fundingMethodName(rule.fundingType)}`;
+    return;
+  }
+  if (rule.scope === 'CATEGORY') {
+    const category = categoryOptions.value.find((item) => item.id === rule.categoryId);
+    rule.name = `品类 · ${category?.name ?? '-'}`;
+    return;
+  }
+  if (rule.scope === 'SCHEME') {
+    const scheme = schemeOptions.value.find((item) => item.id === rule.schemeId);
+    rule.name = `方案 · ${scheme?.name ?? '-'}`;
+    return;
+  }
+  rule.name = '全局默认';
+};
 
 let nextTermId = 5;
 const terms = ref<RuleTerm[]>([
@@ -187,15 +246,14 @@ const removeTerm = (id: number) => {
   terms.value = terms.value.filter((term) => term.id !== id);
 };
 
-const loadRuleIntoEditor = (item: ProfitRuleVersion) => {
-  if (item.scope !== 'GLOBAL' && item.scope !== 'SCHEME') {
-    ElMessage.warning('当前页面先支持编辑全局和方案规则');
-    return;
+const loadRuleIntoEditor = (item: ProfitRuleVersion, keepScope = false) => {
+  if (!keepScope) {
+    rule.name = item.name;
+    rule.scope = item.scope;
+    rule.schemeId = item.scheme?.id ?? '';
+    rule.categoryId = item.category?.id ?? '';
+    rule.fundingType = item.fundingType ?? '';
   }
-
-  rule.name = item.name;
-  rule.scope = item.scope;
-  rule.schemeId = item.scheme?.id ?? '';
   rule.roundingScale = item.definition.roundingScale ?? 2;
   currentVersion.value = item.version;
   terms.value = item.definition.terms.map((term) => ({
@@ -214,6 +272,8 @@ const loadRules = async (preferredId?: string) => {
     const response = await http.get<ProfitRuleListResponse>('/admin/profit-rules');
     history.value = response.data.items;
     schemeOptions.value = response.data.options.schemes;
+    categoryOptions.value = response.data.options.categories ?? [];
+    fundingMethodOptions.value = response.data.options.fundingMethods ?? [];
     fieldOptions.value = response.data.options.amountFields?.length
       ? response.data.options.amountFields
       : [...fallbackFieldOptions];
@@ -224,12 +284,23 @@ const loadRules = async (preferredId?: string) => {
           (item) =>
             item.status === 'ACTIVE' &&
             item.scope === rule.scope &&
-            (item.scope !== 'SCHEME' || item.scheme?.id === rule.schemeId),
+            (item.scope !== 'SCHEME' || item.scheme?.id === rule.schemeId) &&
+            (item.scope !== 'CATEGORY' || item.category?.id === rule.categoryId) &&
+            (item.scope !== 'FUNDING_TYPE' || item.fundingType === rule.fundingType),
         );
     const activeGlobal = history.value.find(
       (item) => item.scope === 'GLOBAL' && item.status === 'ACTIVE',
     );
-    if (preferred ?? activeGlobal) loadRuleIntoEditor(preferred ?? activeGlobal!);
+    if (rule.scope === 'FUNDING_TYPE' && !rule.fundingType) {
+      rule.fundingType = firstEnabledFundingMethod();
+    }
+    if (preferred) {
+      loadRuleIntoEditor(preferred);
+    } else if (activeGlobal) {
+      // 没有对应范围的规则时，用全局规则当模板，但保留用户当前选择的范围
+      loadRuleIntoEditor(activeGlobal, true);
+      suggestRuleName();
+    }
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '利润规则加载失败'));
   } finally {
@@ -246,6 +317,14 @@ const saveRule = async () => {
     ElMessage.warning('请选择下单方案');
     return;
   }
+  if (rule.scope === 'CATEGORY' && !rule.categoryId) {
+    ElMessage.warning('请选择下单品类');
+    return;
+  }
+  if (rule.scope === 'FUNDING_TYPE' && !rule.fundingType) {
+    ElMessage.warning('请选择支付方式');
+    return;
+  }
 
   saving.value = true;
   try {
@@ -253,6 +332,8 @@ const saveRule = async () => {
       name: rule.name.trim(),
       scope: rule.scope,
       ...(rule.scope === 'SCHEME' ? { schemeId: rule.schemeId } : {}),
+      ...(rule.scope === 'CATEGORY' ? { categoryId: rule.categoryId } : {}),
+      ...(rule.scope === 'FUNDING_TYPE' ? { fundingType: rule.fundingType } : {}),
       definition: {
         schemaVersion: 1,
         roundingScale: rule.roundingScale,
@@ -287,11 +368,56 @@ const activateVersion = async (item: ProfitRuleVersion) => {
   }
 };
 
+/** 编辑：把该版本载入编辑器，改完保存为新版本即可生效。 */
+const editVersion = async (item: ProfitRuleVersion) => {
+  loadRuleIntoEditor(item);
+  await nextTick();
+  editorCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  ElMessage.success(`已载入 v${item.version}，修改后点“保存为新版本”生效`);
+};
+
+const deleteVersion = async (item: ProfitRuleVersion) => {
+  try {
+    await ElMessageBox.confirm(
+      item.status === 'ACTIVE'
+        ? `确定删除正在使用的「${item.name}」v${item.version} 吗？删除后该范围会回落到全局默认规则。`
+        : `确定删除「${item.name}」v${item.version} 吗？此操作不可撤销。`,
+      '删除利润规则版本',
+      { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '再想想' },
+    );
+  } catch {
+    return;
+  }
+  try {
+    const response = await http.delete<{ wasActive: boolean }>(`/admin/profit-rules/${item.id}`);
+    ElMessage.success(
+      response.data?.wasActive ? '已删除，该范围已回落到全局默认规则' : '已删除该规则版本',
+    );
+    await loadRules();
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '规则版本删除失败'));
+  }
+};
+
 const scopeLabel = (item: ProfitRuleVersion) => {
   if (item.scope === 'GLOBAL') return '全局默认';
   if (item.scope === 'SCHEME') return `方案：${item.scheme?.name ?? '-'}`;
   if (item.scope === 'CATEGORY') return `品类：${item.category?.name ?? '-'}`;
-  return `资金方式：${item.fundingType ?? '-'}`;
+  return `支付方式：${fundingMethodName(item.fundingType)}`;
+};
+
+const onScopeChange = () => {
+  if (rule.scope === 'FUNDING_TYPE' && !rule.fundingType) {
+    rule.fundingType = firstEnabledFundingMethod();
+  }
+  if (rule.scope === 'CATEGORY' && !rule.categoryId) {
+    rule.categoryId = categoryOptions.value[0]?.id ?? '';
+  }
+  if (rule.scope === 'SCHEME' && !rule.schemeId) {
+    rule.schemeId = schemeOptions.value[0]?.id ?? '';
+  }
+  suggestRuleName();
+  void loadRules();
 };
 
 onMounted(loadRules);
@@ -312,7 +438,7 @@ onMounted(loadRules);
 
     <div class="rule-layout">
       <div class="rule-main-column">
-        <section class="surface-card editor-card">
+        <section ref="editorCardRef" class="surface-card editor-card">
           <div class="section-title">
             <div>
               <strong>规则设置</strong>
@@ -326,9 +452,48 @@ onMounted(loadRules);
               <el-input v-model="rule.name" />
             </el-form-item>
             <el-form-item label="适用范围">
-              <el-select v-model="rule.scope">
-                <el-option label="全局默认" value="GLOBAL" />
-                <el-option label="指定下单方案" value="SCHEME" />
+              <el-segmented
+                v-model="rule.scope"
+                class="scope-segmented"
+                :options="
+                  scopeOptions.map((option) => ({ label: option.label, value: option.value }))
+                "
+                @change="onScopeChange"
+              />
+              <small class="scope-hint">{{ currentScopeHint }}</small>
+            </el-form-item>
+            <el-form-item v-if="rule.scope === 'FUNDING_TYPE'" label="支付方式">
+              <el-select
+                v-model="rule.fundingType"
+                filterable
+                placeholder="选择需要单独配置计算项的支付方式"
+                @change="suggestRuleName"
+              >
+                <el-option
+                  v-for="method in fundingMethodOptions"
+                  :key="method.code"
+                  :label="method.enabled ? method.name : `${method.name}（已停用）`"
+                  :value="method.code"
+                  :disabled="!method.enabled"
+                />
+              </el-select>
+              <small class="scope-hint">
+                支付方式在「基础设置 · 支付方式」里维护，新增后立即可在这里单独配置。
+              </small>
+            </el-form-item>
+            <el-form-item v-if="rule.scope === 'CATEGORY'" label="下单品类">
+              <el-select
+                v-model="rule.categoryId"
+                filterable
+                placeholder="选择需要覆盖默认规则的品类"
+                @change="suggestRuleName"
+              >
+                <el-option
+                  v-for="category in categoryOptions"
+                  :key="category.id"
+                  :label="category.name"
+                  :value="category.id"
+                />
               </el-select>
             </el-form-item>
             <el-form-item v-if="rule.scope === 'SCHEME'" label="下单方案">
@@ -336,6 +501,7 @@ onMounted(loadRules);
                 v-model="rule.schemeId"
                 filterable
                 placeholder="选择需要覆盖默认规则的方案"
+                @change="suggestRuleName"
               >
                 <el-option
                   v-for="scheme in schemeOptions"
@@ -447,21 +613,35 @@ onMounted(loadRules);
               <template #default="{ row }">
                 <div class="rule-history-actions">
                   <el-button
-                    class="rule-history-action rule-history-action--view"
+                    class="app-action-button app-action-button--primary"
                     size="small"
-                    :icon="View"
-                    @click="loadRuleIntoEditor(row)"
+                    :icon="EditPen"
+                    @click="editVersion(row)"
                   >
-                    载入查看
+                    编辑
                   </el-button>
                   <el-button
                     v-if="row.status !== 'ACTIVE'"
-                    class="rule-history-action rule-history-action--activate"
+                    class="app-action-button app-action-button--success"
                     size="small"
                     :icon="CircleCheck"
                     @click="activateVersion(row)"
                   >
                     启用
+                  </el-button>
+                  <el-button
+                    class="app-action-button app-action-button--danger"
+                    size="small"
+                    :icon="Delete"
+                    :disabled="row.scope === 'GLOBAL' && row.status === 'ACTIVE'"
+                    :title="
+                      row.scope === 'GLOBAL' && row.status === 'ACTIVE'
+                        ? '全局默认规则是兜底计算方式，不能删除'
+                        : '删除这个版本'
+                    "
+                    @click="deleteVersion(row)"
+                  >
+                    删除
                   </el-button>
                 </div>
               </template>
@@ -503,6 +683,18 @@ onMounted(loadRules);
 </template>
 
 <style scoped>
+.scope-segmented {
+  width: 100%;
+}
+
+.scope-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-xs);
+  line-height: 1.5;
+}
+
 .section-toolbar {
   display: flex;
   align-items: center;
@@ -513,7 +705,7 @@ onMounted(loadRules);
 .section-toolbar p {
   margin: 0;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .rule-layout {
@@ -544,61 +736,10 @@ onMounted(loadRules);
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--app-control) 72%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 62%, transparent),
-    0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .rule-history-actions :deep(.el-button + .el-button) {
   margin-left: 0;
-}
-
-.rule-history-action {
-  height: 28px;
-  margin: 0;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--app-muted);
-  background: transparent;
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: none;
-  transition:
-    color 0.16s ease,
-    background 0.16s ease,
-    box-shadow 0.16s ease;
-}
-
-.rule-history-action :deep(.el-icon) {
-  margin-right: 4px;
-  font-size: 13px;
-}
-
-.rule-history-action--view {
-  color: color-mix(in srgb, var(--app-primary) 82%, var(--app-text));
-}
-
-.rule-history-action--view:hover,
-.rule-history-action--view:focus {
-  color: var(--app-primary);
-  background: color-mix(in srgb, var(--app-primary-soft) 58%, var(--app-card-solid));
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--app-primary) 12%, transparent);
-}
-
-.rule-history-action--activate {
-  color: color-mix(in srgb, var(--app-success) 82%, var(--app-text));
-}
-
-.rule-history-action--activate:hover,
-.rule-history-action--activate:focus {
-  color: var(--app-success);
-  background: color-mix(in srgb, var(--app-success) 10%, var(--app-card-solid));
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--app-success) 12%, transparent);
 }
 
 .preview-card {
@@ -634,7 +775,7 @@ onMounted(loadRules);
 .term-heading span {
   margin-top: 3px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .rule-meta {
@@ -673,10 +814,10 @@ onMounted(loadRules);
   width: 26px;
   height: 26px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: var(--app-text);
   background: var(--app-control);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .sample-grid {
@@ -694,7 +835,7 @@ onMounted(loadRules);
 
 .sample-grid label > span {
   color: var(--app-text);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .formula-preview,
@@ -702,20 +843,20 @@ onMounted(loadRules);
   margin-top: 16px;
   padding: 14px;
   border: 1px solid var(--app-border);
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: var(--app-control);
 }
 
 .formula-preview > span,
 .profit-preview > span {
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .formula-preview p {
   margin: 7px 0 0;
   color: var(--app-text);
-  font-size: 14px;
+  font-size: var(--app-text-base);
   line-height: 1.7;
 }
 
@@ -730,7 +871,7 @@ onMounted(loadRules);
 .profit-preview strong {
   margin: 4px 0;
   color: var(--app-success);
-  font-size: 29px;
+  font-size: var(--app-text-2xl);
   font-variant-numeric: tabular-nums;
 }
 

@@ -31,7 +31,7 @@ defineProps<{
 
 .order-field-label :deep(.field-hint) {
   margin-top: 3px;
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 500;
   line-height: 1.45;
 }

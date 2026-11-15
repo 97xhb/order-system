@@ -572,6 +572,7 @@ describe('OrdersService deletion and ordering', () => {
       category: { findMany: jest.fn(async () => []) },
       orderScheme: { findMany: jest.fn(async () => []) },
       submitter: { findMany: jest.fn(async () => []) },
+      fundingMethod: { findMany: jest.fn(async () => []) },
       customFieldDefinition: { findMany: jest.fn(async () => []) },
     } as unknown as PrismaService;
     const service = new OrdersService(prisma);
@@ -699,6 +700,7 @@ describe('OrdersService deletion and ordering', () => {
       category: { findMany: jest.fn(async () => []) },
       orderScheme: { findMany: jest.fn(async () => []) },
       submitter: { findMany: jest.fn(async () => []) },
+      fundingMethod: { findMany: jest.fn(async () => []) },
       customFieldDefinition: { findMany: jest.fn(async () => []) },
     } as unknown as PrismaService;
     const service = new OrdersService(prisma);
@@ -748,6 +750,7 @@ describe('OrdersService deletion and ordering', () => {
       category: { findMany: jest.fn(async () => []) },
       orderScheme: { findMany: jest.fn(async () => []) },
       submitter: { findMany: jest.fn(async () => []) },
+      fundingMethod: { findMany: jest.fn(async () => []) },
       customFieldDefinition: { findMany: jest.fn(async () => []) },
     } as unknown as PrismaService;
     const service = new OrdersService(prisma);
@@ -775,7 +778,7 @@ describe('OrdersService deletion and ordering', () => {
   it('skips unchanged filter options and summary aggregation for lightweight list reloads', async () => {
     const count = jest.fn(
       async ({ where }: { where: Record<string, unknown> }) =>
-        'reviewStatus' in where ? 4 : 3,
+        JSON.stringify(where).includes('"reviewStatus":"PENDING"') ? 4 : 3,
     );
     const aggregate = jest.fn();
     const platformFindMany = jest.fn(async () => []);
@@ -855,6 +858,7 @@ describe('OrdersService deletion and ordering', () => {
       category: { findMany: jest.fn(async () => []) },
       orderScheme: { findMany: jest.fn(async () => []) },
       submitter: { findMany: jest.fn(async () => []) },
+      fundingMethod: { findMany: jest.fn(async () => []) },
       customFieldDefinition: {
         findMany: jest.fn(async () => [customField]),
       },

@@ -4,18 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  FundingType,
-  Prisma,
-  ProfitRuleScope,
-  ProfitRuleStatus,
-} from '@prisma/client';
+import { Prisma, ProfitRuleScope, ProfitRuleStatus } from '@prisma/client';
 import type { AuthenticatedAdmin } from '../auth/auth.types';
 import {
   assertProfitRuleDefinition,
   PROFIT_RULE_FIELD_OPTIONS,
 } from '../orders/profit-calculator';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeFundingMethodCode } from '../catalog/funding-methods';
 import { CreateProfitRuleVersionDto } from './dto/create-profit-rule-version.dto';
 
 @Injectable()
@@ -23,7 +19,7 @@ export class ProfitRulesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list() {
-    const [items, schemes, categories] = await Promise.all([
+    const [items, schemes, categories, fundingMethods] = await Promise.all([
       this.prisma.profitRule.findMany({
         orderBy: [{ createdAt: 'desc' }],
         include: {
@@ -42,6 +38,10 @@ export class ProfitRulesService {
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
         select: { id: true, name: true },
       }),
+      this.prisma.fundingMethod.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { code: true, name: true, enabled: true },
+      }),
     ]);
 
     return {
@@ -49,7 +49,7 @@ export class ProfitRulesService {
       options: {
         schemes,
         categories,
-        fundingTypes: Object.values(FundingType),
+        fundingMethods,
         amountFields: PROFIT_RULE_FIELD_OPTIONS,
       },
     };
@@ -102,10 +102,23 @@ export class ProfitRulesService {
             '资金承担方式规则必须且只能选择一个资金承担方式',
           );
         }
-        return {
-          scopeKey: `FUNDING_TYPE:${dto.fundingType}`,
-          fundingType: dto.fundingType,
-        };
+        {
+          const fundingType = normalizeFundingMethodCode(dto.fundingType);
+          const method = await this.prisma.fundingMethod.findUnique({
+            where: { code: fundingType },
+            select: { code: true, name: true, enabled: true },
+          });
+          if (!method) {
+            throw new BadRequestException('选择的支付方式不存在');
+          }
+          if (!method.enabled) {
+            throw new BadRequestException('该支付方式已停用，无法配置利润规则');
+          }
+          return {
+            scopeKey: `FUNDING_TYPE:${fundingType}`,
+            fundingType,
+          };
+        }
     }
   }
 
@@ -258,5 +271,65 @@ export class ProfitRulesService {
 
       return activated;
     });
+  }
+
+  /**
+   * 删除设置错误的规则版本。
+   * 订单侧保存的是规则快照，删除版本不会影响历史订单的利润计算；
+   * 删除“使用中”的版本后，该范围会回落到全局默认规则。
+   */
+  async deleteVersion(id: string, admin: AuthenticatedAdmin) {
+    const existing = await this.prisma.profitRule.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        scope: true,
+        scopeKey: true,
+        version: true,
+        status: true,
+        definition: true,
+        requiresFullCustomerPayment: true,
+      },
+    });
+    if (!existing) throw new NotFoundException('利润规则版本不存在');
+
+    // 全局默认规则是所有订单的兜底计算方式，不能整条删掉。
+    if (
+      existing.scope === ProfitRuleScope.GLOBAL &&
+      existing.status === ProfitRuleStatus.ACTIVE
+    ) {
+      throw new BadRequestException(
+        '全局默认规则正在使用中，请先启用其他版本再删除',
+      );
+    }
+
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.profitRule.delete({ where: { id } });
+      await transaction.auditLog.create({
+        data: {
+          actorAdminId: admin.id,
+          source: 'ADMIN_WEB',
+          action: 'PROFIT_RULE_VERSION_DELETED',
+          entityType: 'ProfitRule',
+          entityId: id,
+          beforeData: {
+            name: existing.name,
+            scope: existing.scope,
+            scopeKey: existing.scopeKey,
+            version: existing.version,
+            definition: existing.definition as Prisma.InputJsonValue,
+            requiresFullCustomerPayment: existing.requiresFullCustomerPayment,
+            status: existing.status,
+          },
+        },
+      });
+    });
+
+    return {
+      deleted: true,
+      wasActive: existing.status === ProfitRuleStatus.ACTIVE,
+      scopeKey: existing.scopeKey,
+    };
   }
 }

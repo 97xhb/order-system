@@ -8,7 +8,6 @@ import {
 import {
   CustomFieldScope,
   DispatchStatus,
-  FundingType,
   Prisma,
   ProfitRuleScope,
   ProfitRuleStatus,
@@ -39,6 +38,10 @@ import {
 } from './scan-rebate';
 import { orderTableFieldOptions } from '../submitters/payout-query-fields';
 import { normalizeAmountFormulas } from './amount-formulas';
+import {
+  FALLBACK_FUNDING_METHOD_CODE,
+  normalizeFundingMethodCode,
+} from '../catalog/funding-methods';
 
 @Injectable()
 export class OrdersService {
@@ -110,7 +113,7 @@ export class OrdersService {
     order: {
       schemeId: string | null;
       categoryId: string | null;
-      fundingType: FundingType;
+      fundingType: string;
     },
   ) {
     const rules = await transaction.profitRule.findMany({
@@ -148,12 +151,28 @@ export class OrdersService {
     )[0];
   }
 
+  /** 支付方式必须来自基础设置里的目录，避免订单里出现无法归类的自由文本。 */
+  private async assertFundingMethod(code: string) {
+    const method = await this.prisma.fundingMethod.findUnique({
+      where: { code },
+      select: { code: true, name: true, enabled: true },
+    });
+    if (!method) {
+      throw new BadRequestException(
+        '选择的支付方式不存在，请先在基础设置中新增',
+      );
+    }
+    if (!method.enabled) {
+      throw new BadRequestException(`支付方式「${method.name}」已停用`);
+    }
+  }
+
   private async profitData(
     transaction: Prisma.TransactionClient,
     order: {
       schemeId: string | null;
       categoryId: string | null;
-      fundingType: FundingType;
+      fundingType: string;
       receivableStatus: SettlementStatus;
       saleAmount: Prisma.Decimal;
       customerReceivedAmount: Prisma.Decimal;
@@ -400,13 +419,12 @@ export class OrdersService {
     }
     const productName = dto.productName.trim() || scheme?.productName;
     if (!productName) throw new BadRequestException('商品名称不能为空');
+    const fundingType = normalizeFundingMethodCode(dto.fundingType);
+    await this.assertFundingMethod(fundingType);
     const fundingTypeOther =
-      dto.fundingType === FundingType.OTHER
+      fundingType === FALLBACK_FUNDING_METHOD_CODE
         ? this.clean(dto.fundingTypeOther)
         : null;
-    if (dto.fundingType === FundingType.OTHER && !fundingTypeOther) {
-      throw new BadRequestException('选择其他支付方式时必须填写具体说明');
-    }
     const inboundTrackingNo = this.clean(dto.inboundTrackingNo);
     const dispatchStatus =
       dto.dispatchStatus ??
@@ -453,7 +471,7 @@ export class OrdersService {
         const amountData = {
           schemeId: scheme?.id ?? null,
           categoryId: dto.categoryId ?? scheme?.categoryId ?? null,
-          fundingType: dto.fundingType,
+          fundingType,
           receivableStatus: SettlementStatus.UNPAID,
           saleAmount: new Prisma.Decimal(dto.saleAmount ?? 0),
           customerReceivedAmount: new Prisma.Decimal(0),
@@ -494,7 +512,7 @@ export class OrdersService {
             purchaseAddress: this.clean(dto.purchaseAddress),
             receiverName: this.clean(dto.receiverName),
             textColor: dto.textColor?.toUpperCase() ?? null,
-            fundingType: dto.fundingType,
+            fundingType,
             orderAmount: amountData.orderAmount,
             paymentDiscountAmount: amountData.paymentDiscountAmount,
             submitterSettlementAmount: amountData.submitterSettlementAmount,
@@ -663,7 +681,10 @@ export class OrdersService {
       dto.productName ?? existing.productNameSnapshot
     ).trim();
     if (!productName) throw new BadRequestException('商品名称不能为空');
-    const fundingType = dto.fundingType ?? existing.fundingType;
+    const fundingType = dto.fundingType
+      ? normalizeFundingMethodCode(dto.fundingType)
+      : existing.fundingType;
+    await this.assertFundingMethod(fundingType);
     const requestedShipmentStatus =
       dto.shipmentStatus ?? existing.shipmentStatus;
     const inboundTrackingNo =
@@ -680,7 +701,7 @@ export class OrdersService {
         ? undefined
         : this.clean(dto.shipmentTrackingNo);
     const fundingTypeOther =
-      fundingType === FundingType.OTHER
+      fundingType === FALLBACK_FUNDING_METHOD_CODE
         ? (this.clean(dto.fundingTypeOther) ??
           this.clean(
             existing.customData &&
@@ -693,9 +714,6 @@ export class OrdersService {
               : undefined,
           ))
         : null;
-    if (fundingType === FundingType.OTHER && !fundingTypeOther) {
-      throw new BadRequestException('选择其他支付方式时必须填写具体说明');
-    }
 
     try {
       return await this.prisma.$transaction(async (transaction) => {
@@ -1031,17 +1049,20 @@ export class OrdersService {
     const submitterIds = this.ids(query.submitterIds);
     const categoryIds = this.ids(query.categoryIds);
     const schemeIds = this.ids(query.schemeIds);
-    const andFilters: Prisma.OrderWhereInput[] = [{ deletedAt: null }];
+    // 基础筛选（不包含状态类条件）：用于计算各状态快捷视图的数量徽标
+    const baseFilters: Prisma.OrderWhereInput[] = [{ deletedAt: null }];
+    // 状态类筛选：只影响当前列表结果，不参与状态计数
+    const statusFilters: Prisma.OrderWhereInput[] = [];
 
     if (query.ungroupedOnly) {
-      andFilters.push({ archiveGroupId: null });
+      baseFilters.push({ archiveGroupId: null });
     }
     if (query.archiveGroupId) {
-      andFilters.push({ archiveGroupId: query.archiveGroupId });
+      baseFilters.push({ archiveGroupId: query.archiveGroupId });
     }
 
     if (keyword) {
-      andFilters.push({
+      baseFilters.push({
         OR: [
           { productNameSnapshot: { contains: keyword, mode: 'insensitive' } },
           { schemeNameSnapshot: { contains: keyword, mode: 'insensitive' } },
@@ -1063,7 +1084,7 @@ export class OrdersService {
     }
 
     if (query.exceptionOnly) {
-      andFilters.push({
+      statusFilters.push({
         OR: [
           { reviewStatus: ReviewStatus.REJECTED },
           { shipmentStatus: ShipmentStatus.EXCEPTION },
@@ -1074,34 +1095,34 @@ export class OrdersService {
     }
 
     if (query.reviewStatus)
-      andFilters.push({ reviewStatus: query.reviewStatus });
+      statusFilters.push({ reviewStatus: query.reviewStatus });
     if (query.shipmentStatus)
-      andFilters.push({ shipmentStatus: query.shipmentStatus });
+      statusFilters.push({ shipmentStatus: query.shipmentStatus });
     if (query.dispatchStatus)
-      andFilters.push({ dispatchStatus: query.dispatchStatus });
+      statusFilters.push({ dispatchStatus: query.dispatchStatus });
     if (query.textColor) {
       const textColor = query.textColor.toUpperCase();
-      andFilters.push({ textColor: textColor === 'NONE' ? null : textColor });
+      baseFilters.push({ textColor: textColor === 'NONE' ? null : textColor });
     }
     if (query.receivableStatus) {
-      andFilters.push({ receivableStatus: query.receivableStatus });
+      statusFilters.push({ receivableStatus: query.receivableStatus });
     }
     if (query.submitterSettlementStatus) {
-      andFilters.push({
+      statusFilters.push({
         submitterSettlementStatus: query.submitterSettlementStatus,
       });
     }
     if (query.rebateScanned !== undefined) {
-      andFilters.push({ rebateScanned: query.rebateScanned });
+      statusFilters.push({ rebateScanned: query.rebateScanned });
     }
     if (platformIds?.length)
-      andFilters.push({ platformId: { in: platformIds } });
+      baseFilters.push({ platformId: { in: platformIds } });
     if (submitterIds?.length)
-      andFilters.push({ submitterId: { in: submitterIds } });
+      baseFilters.push({ submitterId: { in: submitterIds } });
     if (categoryIds?.length)
-      andFilters.push({ categoryId: { in: categoryIds } });
+      baseFilters.push({ categoryId: { in: categoryIds } });
     if (schemeIds?.length) {
-      andFilters.push({
+      baseFilters.push({
         OR: [
           { schemeId: { in: schemeIds } },
           { shareForm: { is: { schemeId: { in: schemeIds } } } },
@@ -1109,7 +1130,7 @@ export class OrdersService {
       });
     }
     if (query.orderedFrom || query.orderedTo) {
-      andFilters.push({
+      baseFilters.push({
         orderedAt: {
           gte: query.orderedFrom ? this.date(query.orderedFrom) : undefined,
           lt: query.orderedTo
@@ -1122,7 +1143,11 @@ export class OrdersService {
     }
 
     // 不同筛选字段全部放进同一个 AND 组；同一字段的多选仍通过 in 表示任一选项匹配。
-    const where: Prisma.OrderWhereInput = { AND: andFilters };
+    const where: Prisma.OrderWhereInput = {
+      AND: [...baseFilters, ...statusFilters],
+    };
+    // 状态计数在基础筛选范围内统计，保证标签数字与筛选器联动
+    const baseWhere: Prisma.OrderWhereInput = { AND: baseFilters };
 
     const totalRequest = includeSummary
       ? this.prisma.order.aggregate({
@@ -1153,6 +1178,10 @@ export class OrdersService {
             orderBy: { name: 'asc' },
             select: { id: true, code: true, name: true },
           }),
+          this.prisma.fundingMethod.findMany({
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            select: { code: true, name: true, enabled: true },
+          }),
           this.prisma.customFieldDefinition.findMany({
             where: { scope: CustomFieldScope.ORDER, enabled: true },
             orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -1167,11 +1196,19 @@ export class OrdersService {
             },
           }),
         ]).then(
-          ([platforms, categories, schemes, submitters, customFields]) => ({
+          ([
             platforms,
             categories,
             schemes,
             submitters,
+            fundingMethods,
+            customFields,
+          ]) => ({
+            platforms,
+            categories,
+            schemes,
+            submitters,
+            fundingMethods,
             customFields,
             orderTableFields: orderTableFieldOptions(),
           }),
@@ -1204,10 +1241,62 @@ export class OrdersService {
       serialItemsRequest,
       totalRequest,
       this.prisma.order.count({
-        where: { deletedAt: null, reviewStatus: ReviewStatus.PENDING },
+        where: { AND: [baseWhere, { reviewStatus: ReviewStatus.PENDING }] },
       }),
       optionsRequest,
       submitterGroupsRequest,
+    ]);
+    // 各状态快捷视图的数量：在基础筛选范围内分别统计，供标签徽标展示
+    const [
+      allCount,
+      shippedUnpaidCount,
+      receivedNotPaidCount,
+      settledCount,
+      exceptionCount,
+    ] = await Promise.all([
+      this.prisma.order.count({ where: baseWhere }),
+      this.prisma.order.count({
+        where: {
+          AND: [
+            baseWhere,
+            { shipmentStatus: ShipmentStatus.SHIPPED },
+            { receivableStatus: SettlementStatus.UNPAID },
+          ],
+        },
+      }),
+      this.prisma.order.count({
+        where: {
+          AND: [
+            baseWhere,
+            { receivableStatus: SettlementStatus.PAID },
+            { submitterSettlementStatus: SettlementStatus.UNPAID },
+          ],
+        },
+      }),
+      this.prisma.order.count({
+        where: {
+          AND: [
+            baseWhere,
+            { receivableStatus: SettlementStatus.PAID },
+            { submitterSettlementStatus: SettlementStatus.PAID },
+          ],
+        },
+      }),
+      this.prisma.order.count({
+        where: {
+          AND: [
+            baseWhere,
+            {
+              OR: [
+                { reviewStatus: ReviewStatus.REJECTED },
+                { shipmentStatus: ShipmentStatus.EXCEPTION },
+                { receivableStatus: SettlementStatus.EXCEPTION },
+                { submitterSettlementStatus: SettlementStatus.EXCEPTION },
+              ],
+            },
+          ],
+        },
+      }),
     ]);
     type OrderListRow = Prisma.OrderGetPayload<{
       select: typeof ORDER_LIST_SELECT;
@@ -1322,6 +1411,11 @@ export class OrdersService {
       },
       quickCounts: {
         pendingReview: pendingReviewCount,
+        all: allCount,
+        shippedUnpaid: shippedUnpaidCount,
+        receivedNotPaid: receivedNotPaidCount,
+        settled: settledCount,
+        exception: exceptionCount,
       },
       options: optionsResult,
     };

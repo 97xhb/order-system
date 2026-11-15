@@ -218,7 +218,7 @@ onMounted(load);
   align-items: center;
   padding: 12px 14px;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
   gap: 11px;
 }
@@ -229,7 +229,7 @@ onMounted(load);
   height: 38px;
   flex: 0 0 38px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--app-success);
   background: color-mix(in srgb, var(--app-success) 12%, transparent);
 }
@@ -250,26 +250,26 @@ onMounted(load);
 .overview-main small,
 .overview-document small {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .overview-main strong,
 .overview-document strong {
   overflow: hidden;
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .overview-main strong {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .overview-document em {
   color: var(--app-primary);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-style: normal;
 }
 
@@ -282,13 +282,13 @@ onMounted(load);
 }
 
 .overview-count strong {
-  font-size: 25px;
+  font-size: var(--app-text-2xl);
   font-variant-numeric: tabular-nums;
 }
 
 .overview-count span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .api-catalog-card {
@@ -300,7 +300,7 @@ onMounted(load);
   align-items: center;
   padding: 10px;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 54%, transparent);
   gap: 10px;
 }
@@ -316,7 +316,7 @@ onMounted(load);
 .api-search :deep(.el-input__wrapper),
 .api-module-select :deep(.el-select__wrapper) {
   min-height: 39px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 82%, transparent);
   box-shadow: 0 0 0 1px var(--app-border) inset;
 }
@@ -324,28 +324,28 @@ onMounted(load);
 .api-filter-summary {
   margin-left: auto;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   white-space: nowrap;
 }
 
 .api-filter-summary strong {
   color: var(--app-primary);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .api-catalog-error {
   margin: 11px 0 0;
   padding: 9px 11px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 8%, transparent);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .api-catalog-loading {
   margin-top: 12px;
   padding: 14px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 48%, transparent);
 }
 
@@ -358,7 +358,7 @@ onMounted(load);
 .api-group {
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 63%, transparent);
 }
 
@@ -371,13 +371,13 @@ onMounted(load);
   border-bottom: 1px solid var(--app-border);
   color: var(--app-heading);
   background: color-mix(in srgb, var(--app-primary-soft) 30%, transparent);
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 650;
 }
 
 .api-group-heading small {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 500;
 }
 
@@ -403,48 +403,48 @@ onMounted(load);
 }
 
 .api-method {
-  --method-color: #64748b;
+  --method-color: var(--app-text-subtle);
   display: inline-flex;
   width: 62px;
   min-height: 25px;
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, var(--method-color) 24%, transparent);
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
   color: var(--method-color);
   background: color-mix(in srgb, var(--method-color) 9%, transparent);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 750;
   letter-spacing: 0.04em;
 }
 
 .api-method--get {
-  --method-color: #3b82f6;
+  --method-color: var(--app-primary);
 }
 .api-method--post {
-  --method-color: #10b981;
+  --method-color: var(--app-success);
 }
 .api-method--put {
-  --method-color: #8b5cf6;
+  --method-color: var(--app-purple);
 }
 .api-method--patch {
-  --method-color: #f59e0b;
+  --method-color: var(--app-warning);
 }
 .api-method--delete {
-  --method-color: #ef4444;
+  --method-color: var(--app-danger);
 }
 
 .api-endpoint-row code {
   overflow-wrap: anywhere;
   color: var(--app-heading);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.55;
 }
 
 .api-endpoint-summary {
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.55;
 }
 

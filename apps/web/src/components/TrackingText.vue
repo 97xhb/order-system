@@ -66,10 +66,10 @@ const lines = computed(() => {
 .tracking-phone-suffix {
   flex: 0 0 auto;
   padding: 0 5px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
   background: color-mix(in srgb, var(--app-primary) 10%, transparent);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 600;
   line-height: 17px;
 }

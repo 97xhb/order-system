@@ -342,10 +342,10 @@ onMounted(() => void load());
   height: 46px;
   flex: 0 0 46px;
   place-items: center;
-  border-radius: 16px;
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.12);
-  font-size: 15px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
+  font-size: var(--app-text-base);
   font-weight: 800;
 }
 
@@ -360,21 +360,21 @@ onMounted(() => void load());
 
 .query-card-copy strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .query-card-copy p,
 .query-note p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.65;
 }
 
 .query-permission {
   padding: 10px 13px;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 18px;
 }
@@ -386,13 +386,13 @@ onMounted(() => void load());
 
 .query-permission b {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .query-permission span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .query-link-row,
@@ -401,7 +401,7 @@ onMounted(() => void load());
   min-width: 0;
   padding: 10px 10px 10px 13px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: var(--app-control);
   gap: 9px;
 }
@@ -412,7 +412,7 @@ onMounted(() => void load());
   overflow: hidden;
   color: var(--app-muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -420,7 +420,7 @@ onMounted(() => void load());
 .query-error {
   justify-content: space-between;
   color: var(--app-danger);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .query-fields-card {
@@ -442,13 +442,13 @@ onMounted(() => void load());
 
 .query-fields-heading strong {
   color: var(--app-heading);
-  font-size: 16px;
+  font-size: var(--app-text-md);
 }
 
 .query-fields-heading span {
   margin-top: 4px;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.6;
 }
 
@@ -464,7 +464,7 @@ onMounted(() => void load());
 .query-fields-actions .query-fields-count {
   margin: 0 3px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .query-field-grid {
@@ -493,12 +493,12 @@ onMounted(() => void load());
   flex: 0 0 auto;
   padding: 3px 7px;
   border: 1px solid color-mix(in srgb, var(--app-warning) 48%, var(--app-border));
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-warning);
   background: transparent;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.2;
   transition:
     background 0.18s ease,
@@ -528,7 +528,7 @@ onMounted(() => void load());
   flex-wrap: wrap;
   gap: 4px;
   color: var(--app-heading);
-  font-size: 12.5px;
+  font-size: var(--app-text-xs);
   line-height: 1.35;
 }
 
@@ -537,7 +537,7 @@ onMounted(() => void load());
   margin-top: 2px;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 9.5px;
+  font-size: var(--app-text-micro);
   line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -561,16 +561,16 @@ onMounted(() => void load());
   height: 32px;
   flex: 0 0 32px;
   place-items: center;
-  border-radius: 11px;
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.1);
-  font-size: 11px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+  font-size: var(--app-text-micro);
   font-weight: 800;
 }
 
 .query-note strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 @media (max-width: 860px) {

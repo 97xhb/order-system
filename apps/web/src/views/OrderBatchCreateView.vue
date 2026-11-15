@@ -11,7 +11,7 @@ import {
 } from '../lib/money-formula';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 
-type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
+type FundingType = string;
 type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 
 interface OptionItem {
@@ -199,11 +199,14 @@ const moneyKeys: BatchMoneyKey[] = [
   'scanAmount',
   'saleAmount',
 ];
-const fundingTypeOptions: Array<{ value: FundingType; label: string }> = [
+const fallbackFundingTypeOptions: Array<{ value: FundingType; label: string }> = [
   { value: 'SELF_PAID', label: '自己付' },
   { value: 'SUBMITTER_ADVANCED', label: '代付' },
   { value: 'OTHER', label: '其他' },
 ];
+const fundingTypeOptions = ref<Array<{ value: FundingType; label: string }>>([
+  ...fallbackFundingTypeOptions,
+]);
 const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
   { value: 'NOT_SHIPPED', label: '未发货' },
   { value: 'SHIPPED', label: '已发货' },
@@ -433,6 +436,14 @@ const fundingTypeByText = (
   const raw = value.trim();
   const normalized = raw.toLocaleLowerCase();
   if (!normalized) return { fundingType: defaults.fundingType, fundingTypeOther: '' };
+  // 先按支付方式目录里的名称 / 编码精确匹配，匹配不到再走兜底规则
+  const matched = fundingTypeOptions.value.find(
+    (option) =>
+      normalized === option.value.toLocaleLowerCase() ||
+      normalized === option.label.toLocaleLowerCase() ||
+      (option.label.length >= 2 && normalized.includes(option.label.toLocaleLowerCase())),
+  );
+  if (matched) return { fundingType: matched.value, fundingTypeOther: '' };
   if (normalized.includes('自己') || normalized === 'self_paid') {
     return { fundingType: 'SELF_PAID', fundingTypeOther: '' };
   }
@@ -794,12 +805,19 @@ const saveBatch = async () => {
 const loadOptions = async () => {
   loadingOptions.value = true;
   try {
-    const [platformResult, categoryResult] = await Promise.all([
+    const [platformResult, categoryResult, fundingResult] = await Promise.all([
       http.get<{ items: OptionItem[] }>('/admin/platforms'),
       http.get<{ items: OptionItem[] }>('/admin/categories'),
+      http.get<{ items: Array<{ code: string; name: string }> }>('/admin/funding-methods'),
     ]);
     platforms.value = platformResult.data.items;
     categories.value = categoryResult.data.items;
+    if (fundingResult.data.items.length) {
+      fundingTypeOptions.value = fundingResult.data.items.map((item) => ({
+        value: item.code,
+        label: item.name,
+      }));
+    }
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '平台和品类加载失败'));
   } finally {
@@ -1144,13 +1162,13 @@ onMounted(loadOptions);
 .batch-create-footer strong,
 .paste-guide strong {
   color: var(--app-heading);
-  font-size: 16px;
+  font-size: var(--app-text-md);
 }
 .batch-intro p,
 .paste-guide p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .batch-intro-actions,
 .batch-footer-actions {
@@ -1166,7 +1184,7 @@ onMounted(loadOptions);
 .batch-default-panel {
   padding: 12px 14px 14px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 62%, transparent);
 }
 .batch-section-title {
@@ -1183,7 +1201,7 @@ onMounted(loadOptions);
 .batch-grid-summary span,
 .batch-create-footer span {
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .batch-default-grid {
   display: grid;
@@ -1198,7 +1216,7 @@ onMounted(loadOptions);
 }
 .batch-default-grid label > span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 650;
 }
 .batch-default-grid :deep(.el-select),
@@ -1216,7 +1234,7 @@ onMounted(loadOptions);
   max-height: min(56vh, 610px);
   overflow: auto;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-card);
   background: var(--app-card-solid);
   scrollbar-gutter: stable;
 }
@@ -1243,7 +1261,7 @@ onMounted(loadOptions);
   height: 40px;
   color: var(--app-heading);
   background: color-mix(in srgb, var(--app-control) 92%, var(--app-card-solid));
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1265,7 +1283,7 @@ onMounted(loadOptions);
 .batch-grid :deep(.el-input__inner),
 .batch-grid :deep(.el-select__placeholder),
 .batch-grid :deep(.el-select__selected-item) {
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 550;
 }
 .sticky-tools-column {
@@ -1274,7 +1292,7 @@ onMounted(loadOptions);
   left: 0;
   width: 112px;
   min-width: 112px;
-  box-shadow: 8px 0 16px rgba(15, 23, 42, 0.055);
+  box-shadow: var(--app-shadow-md);
 }
 th.sticky-tools-column {
   z-index: 6 !important;
@@ -1291,17 +1309,17 @@ th.sticky-tools-column {
 }
 .row-number-line strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .row-error-badge {
   display: inline-flex;
   align-items: center;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
-  color: #dc2626;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 10%, transparent);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 700;
   cursor: help;
 }
@@ -1323,8 +1341,8 @@ th.sticky-tools-column {
   gap: 5px;
 }
 .scan-rebate-editor span {
-  color: #059669;
-  font-size: 12px;
+  color: var(--app-success);
+  font-size: var(--app-text-xs);
   font-weight: 750;
   white-space: nowrap;
 }
@@ -1336,7 +1354,7 @@ th.sticky-tools-column {
   padding: 13px 20px 16px;
   border-top: 1px solid var(--app-border);
   background: color-mix(in srgb, var(--app-card-solid) 92%, transparent);
-  box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.055);
+  box-shadow: var(--app-shadow-md);
   backdrop-filter: blur(16px);
 }
 .paste-guide {
@@ -1349,11 +1367,11 @@ th.sticky-tools-column {
   padding: 10px 12px;
   overflow: auto;
   border: 1px solid var(--app-border);
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-muted);
   background: var(--app-hover);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.55;
   white-space: pre;
 }

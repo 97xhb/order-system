@@ -45,6 +45,10 @@ const createService = (
     category: {
       findMany: jest.fn(async () => []),
     },
+    fundingMethod: {
+      findMany: jest.fn(async () => []),
+      findFirst: jest.fn(async () => null),
+    },
     externalIdentity: {
       findUnique: jest.fn(async () => ({
         id: identity.id,

@@ -8,7 +8,7 @@ import { http } from '../lib/http';
 import { extractProductQuantity, MONEY_FORMULA_VARIABLE_LABELS } from '../lib/money-formula';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
 
-type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
+type FundingType = string;
 type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 type ShipmentStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'DELIVERED' | 'EXCEPTION';
 type SettlementStatus = 'UNPAID' | 'PAID' | 'EXCEPTION';
@@ -103,11 +103,12 @@ interface OrderDraft {
 const draftStorageKey = 'order-system:manual-order-draft-v5';
 const previousStorageKey = 'order-system:last-order-defaults-v5';
 const scanAmountMultiplier = 0.9;
-const fundingTypeOptions = [
-  { value: 'SELF_PAID' as const, label: '自己付', hint: '我直接支付' },
-  { value: 'SUBMITTER_ADVANCED' as const, label: '代付', hint: '后续结算' },
-  { value: 'OTHER' as const, label: '其他', hint: '填写说明' },
+const fallbackFundingTypeOptions = [
+  { value: 'SELF_PAID', label: '自己付', hint: '我直接支付' },
+  { value: 'SUBMITTER_ADVANCED', label: '代付', hint: '后续结算' },
+  { value: 'OTHER', label: '其他', hint: '填写说明' },
 ];
+const fundingTypeOptions = ref([...fallbackFundingTypeOptions]);
 const dispatchStatusOptions: Array<{ value: DispatchStatus; label: string }> = [
   { value: 'NOT_SHIPPED', label: '未发货' },
   { value: 'SHIPPED', label: '已发货' },
@@ -522,15 +523,23 @@ const clearAllEditReasons = async () => {
 const loadOptions = async () => {
   loadingOptions.value = true;
   try {
-    const [platformResult, categoryResult] = await Promise.allSettled([
+    const [platformResult, categoryResult, fundingResult] = await Promise.allSettled([
       http.get<{ items: PlatformOption[] }>('/admin/platforms'),
       http.get<{ items: CategoryOption[] }>('/admin/categories'),
+      http.get<{ items: Array<{ code: string; name: string }> }>('/admin/funding-methods'),
     ]);
     if (platformResult.status === 'fulfilled') {
       platforms.value = platformResult.value.data.items;
     }
     if (categoryResult.status === 'fulfilled') {
       categories.value = categoryResult.value.data.items;
+    }
+    if (fundingResult.status === 'fulfilled' && fundingResult.value.data.items.length) {
+      fundingTypeOptions.value = fundingResult.value.data.items.map((item) => ({
+        value: item.code,
+        label: item.name,
+        hint: item.code === 'OTHER' ? '填写说明' : '',
+      }));
     }
     if (platformResult.status === 'rejected') {
       ElMessage.error(getApiErrorMessage(platformResult.reason, '平台加载失败'));
@@ -1094,9 +1103,9 @@ onMounted(async () => {
   align-items: center;
   flex-wrap: wrap;
   padding: 11px 13px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.72);
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 18%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-sunken) 72%, transparent);
   gap: 10px 18px;
 }
 .quick-group {
@@ -1107,7 +1116,7 @@ onMounted(async () => {
 .quick-group > span {
   margin-right: 2px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .quick-actions {
   margin-left: auto;
@@ -1121,10 +1130,10 @@ onMounted(async () => {
 .form-panel {
   min-width: 0;
   padding: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 20%, transparent);
+  border-radius: var(--app-radius-card);
   background: var(--app-card);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+  box-shadow: var(--app-shadow-md);
 }
 .status-panel {
   grid-column: 1 / -1;
@@ -1142,12 +1151,12 @@ onMounted(async () => {
 }
 .section-heading strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .section-heading span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .form-grid {
   display: grid;
@@ -1182,7 +1191,7 @@ onMounted(async () => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 4px;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 4px;
 }
@@ -1194,7 +1203,7 @@ onMounted(async () => {
   align-items: center;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
   background: transparent;
   text-align: left;
@@ -1208,15 +1217,15 @@ onMounted(async () => {
     transform 0.18s ease;
 }
 .funding-option:hover {
-  border-color: rgba(59, 130, 246, 0.24);
+  border-color: color-mix(in srgb, var(--app-primary) 24%, transparent);
   background: var(--app-control);
   transform: translateY(-1px);
 }
 .funding-option.is-selected {
-  border-color: rgba(59, 130, 246, 0.42);
+  border-color: color-mix(in srgb, var(--app-primary) 42%, transparent);
   color: var(--app-primary);
   background: var(--app-card-solid);
-  box-shadow: 0 5px 14px rgba(59, 130, 246, 0.11);
+  box-shadow: var(--app-shadow-md);
 }
 .funding-option > span:last-child {
   display: flex;
@@ -1225,7 +1234,7 @@ onMounted(async () => {
 }
 .funding-option strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: var(--app-text-base);
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1234,7 +1243,7 @@ onMounted(async () => {
   margin-top: 3px;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1304,18 +1313,18 @@ onMounted(async () => {
   align-items: center;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   gap: 3px 10px;
 }
 .scan-amount-field {
-  border-color: rgba(37, 99, 235, 0.22);
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.08);
+  border-color: color-mix(in srgb, var(--app-primary) 22%, transparent);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 8%, transparent);
 }
 .scan-amount-field > span,
 .scan-rebate-result > span {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 750;
   overflow-wrap: anywhere;
 }
@@ -1329,22 +1338,22 @@ onMounted(async () => {
 .scan-rebate-result {
   min-height: 48px;
   padding-block: 5px;
-  border-color: rgba(5, 150, 105, 0.24);
-  color: #047857;
-  background: rgba(16, 185, 129, 0.09);
+  border-color: color-mix(in srgb, var(--app-success) 24%, transparent);
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 9%, transparent);
   line-height: 1.2;
 }
 .scan-rebate-result strong {
   min-width: 0;
   grid-row: 1 / span 2;
   grid-column: 2;
-  font-size: 18px;
+  font-size: var(--app-text-lg);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 .scan-rebate-result small {
-  color: #059669;
-  font-size: 11px;
+  color: var(--app-success);
+  font-size: var(--app-text-micro);
   overflow-wrap: anywhere;
 }
 .scan-rebate-result.is-disabled {
@@ -1368,12 +1377,12 @@ onMounted(async () => {
 }
 .address-quick-actions > span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .field-help {
   margin-top: 4px;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-xs);
 }
 .account-option {
   width: 100%;
@@ -1382,13 +1391,13 @@ onMounted(async () => {
   gap: 12px;
 }
 .account-option small {
-  color: #94a3b8;
+  color: var(--app-text-placeholder);
 }
 .form-actions {
   align-items: center;
   justify-content: space-between;
   padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  border-top: 1px solid color-mix(in srgb, var(--app-text-placeholder) 18%, transparent);
 }
 .order-create.is-embedded .form-actions {
   position: sticky;
@@ -1397,7 +1406,7 @@ onMounted(async () => {
   margin: 0 -20px -18px;
   padding: 12px 20px 14px;
   background: var(--app-card-solid);
-  box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--app-shadow-md);
 }
 .form-actions > div {
   gap: 8px;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete, Edit, Plus, ArrowRight } from '@element-plus/icons-vue';
+import { ArrowRight, Delete, Edit, Plus, View } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { onMounted, reactive, ref } from 'vue';
 import { getApiErrorMessage } from '../lib/api-error';
@@ -41,8 +41,7 @@ const dialogSaving = ref(false);
 const editingId = ref('');
 const form = reactive({ name: '', description: '' });
 
-const money = (value: string | number | null | undefined) =>
-  `¥${Number(value ?? 0).toFixed(2)}`;
+const money = (value: string | number | null | undefined) => `¥${Number(value ?? 0).toFixed(2)}`;
 
 const statusText: Record<GroupStatus, string> = {
   EMPTY: '空分组',
@@ -177,9 +176,25 @@ onMounted(loadGroups);
           {{ statusText[group.summary.status] }}
         </el-tag>
         <div class="archive-actions" @click.stop>
-          <el-button text type="primary" @click="emit('open-group', group)">查看订单</el-button>
-          <el-button text :icon="Edit" @click="openRename(group)">重命名</el-button>
-          <el-button text type="danger" :icon="Delete" @click="removeGroup(group)">删除</el-button>
+          <el-button
+            class="app-action-button app-action-button--primary"
+            size="small"
+            :icon="View"
+            @click="emit('open-group', group)"
+          >
+            查看订单
+          </el-button>
+          <el-button class="app-action-button" size="small" :icon="Edit" @click="openRename(group)">
+            重命名
+          </el-button>
+          <el-button
+            class="app-action-button app-action-button--danger"
+            size="small"
+            :icon="Delete"
+            @click="removeGroup(group)"
+          >
+            删除
+          </el-button>
         </div>
       </header>
     </section>
@@ -191,11 +206,7 @@ onMounted(loadGroups);
     >
       <el-form label-position="top">
         <el-form-item label="归档名称">
-          <el-input
-            v-model="form.name"
-            maxlength="120"
-            placeholder="例如：美的空调N8KS"
-          />
+          <el-input v-model="form.name" maxlength="120" placeholder="例如：美的空调N8KS" />
         </el-form-item>
         <el-form-item label="备注（可选）">
           <el-input
@@ -232,12 +243,12 @@ onMounted(loadGroups);
 .archive-panel-head strong {
   display: block;
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .archive-panel-head span {
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .archive-group {
@@ -270,12 +281,12 @@ onMounted(loadGroups);
 
 .archive-title strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .archive-title span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .archive-metrics {
@@ -288,7 +299,7 @@ onMounted(loadGroups);
 
 .archive-metrics span {
   color: var(--app-text);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -296,17 +307,17 @@ onMounted(loadGroups);
 .archive-metrics small {
   margin-right: 4px;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .archive-metrics em {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-style: normal;
 }
 
 .archive-metrics .is-profit {
-  color: #059669;
+  color: var(--app-success);
   font-weight: 700;
 }
 

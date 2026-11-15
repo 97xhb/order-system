@@ -2,6 +2,7 @@
 import { CopyDocument, Delete, Link, Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onMounted, reactive, ref } from 'vue';
+import PayoutQrCodeField from '../components/PayoutQrCodeField.vue';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
 
@@ -14,6 +15,7 @@ interface PayoutMethod {
   accountName: string | null;
   accountMasked: string | null;
   bankName: string | null;
+  hasQrCode: boolean;
   isDefault: boolean;
   status: string;
   _count: { payouts: number };
@@ -68,12 +70,17 @@ const payoutForm = reactive({
   accountName: '',
   accountValue: '',
   bankName: '',
+  qrCodeDataUrl: null as string | null,
+  /** 二维码是否被用户改动过，未改动时不回传，保持原图。 */
+  qrCodeTouched: false,
   isDefault: true,
   enabled: true,
 });
 
 const bulkPayoutForms = reactive({
   alipayAccount: '',
+  alipayAccountName: '',
+  alipayQrCodeDataUrl: null as string | null,
   bankAccountName: '',
   bankName: '',
   bankCardNumber: '',
@@ -113,6 +120,64 @@ const payoutTypeLabels: Record<string, string> = {
   DIGITAL_CNY: '数字人民币',
   CASH: '现金',
   OTHER: '其他方式',
+};
+
+const payoutTypeShorts: Record<string, string> = {
+  WECHAT: '微',
+  ALIPAY: '支',
+  BANK_CARD: '卡',
+  QR_CODE: '码',
+  DIGITAL_CNY: '数',
+  CASH: '现',
+  OTHER: '他',
+};
+
+const expandedRows = ref<string[]>([]);
+const tableRef = ref<{ toggleRowExpansion: (row: unknown) => void } | null>(null);
+
+/**
+ * 二维码图片数据按需拉取并缓存。
+ * 列表接口只返回「有没有二维码」，避免整页响应被 base64 图片撑大。
+ */
+const qrCodeCache = ref<Record<string, string>>({});
+
+const loadQrCode = async (methodId: string) => {
+  if (qrCodeCache.value[methodId]) return qrCodeCache.value[methodId];
+  try {
+    const response = await http.get<{ qrCodeDataUrl: string | null }>(
+      `/admin/payout-methods/${methodId}/qr-code`,
+    );
+    if (response.data.qrCodeDataUrl) {
+      qrCodeCache.value = {
+        ...qrCodeCache.value,
+        [methodId]: response.data.qrCodeDataUrl,
+      };
+      return response.data.qrCodeDataUrl;
+    }
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '二维码加载失败'));
+  }
+  return '';
+};
+
+const qrCodeOf = (methodId: string) => qrCodeCache.value[methodId] ?? '';
+
+/** 展开行时预加载该下单人所有回款方式的二维码。 */
+const ensureQrCodes = async (row: SubmitterItem) => {
+  await Promise.all(
+    row.payoutMethods.filter((method) => method.hasQrCode).map((method) => loadQrCode(method.id)),
+  );
+};
+
+/** 点整行展开回款方式明细，再点一次收起。 */
+const toggleRow = (row: SubmitterItem) => {
+  tableRef.value?.toggleRowExpansion(row);
+};
+
+/** 展开行时按需加载该行回款方式的二维码。 */
+const handleExpandChange = (row: SubmitterItem, expanded: boolean) => {
+  if (!expanded) return;
+  void ensureQrCodes(row);
 };
 
 const profileNickname = (item: SubmitterItem) => item.nickname?.trim() || item.name;
@@ -238,6 +303,8 @@ const resetPayoutForm = (method?: PayoutMethod, hasExistingMethods = false) => {
     accountName: method?.accountName ?? '',
     accountValue: '',
     bankName: method?.bankName ?? '',
+    qrCodeDataUrl: null,
+    qrCodeTouched: false,
     isDefault: method?.isDefault ?? !hasExistingMethods,
     enabled: method ? method.status !== 'DISABLED' : true,
   });
@@ -247,6 +314,8 @@ const resetBulkPayoutForms = () => {
   selectedPayoutTypes.value = ['WECHAT'];
   Object.assign(bulkPayoutForms, {
     alipayAccount: '',
+    alipayAccountName: '',
+    alipayQrCodeDataUrl: null,
     bankAccountName: '',
     bankName: '',
     bankCardNumber: '',
@@ -274,9 +343,19 @@ const togglePayoutType = (type: SupportedPayoutType) => {
 const selectPayoutType = (type: SupportedPayoutType) => {
   payoutForm.type = type;
   payoutForm.accountValue = '';
-  if (type !== 'BANK_CARD') {
+  // 切换方式时只保留目标方式仍然需要的字段，避免把银行卡的开户行带到支付宝里。
+  if (type === 'WECHAT') {
     payoutForm.accountName = '';
     payoutForm.bankName = '';
+    payoutForm.qrCodeDataUrl = null;
+    payoutForm.qrCodeTouched = false;
+  }
+  if (type === 'ALIPAY') {
+    payoutForm.bankName = '';
+  }
+  if (type === 'BANK_CARD') {
+    payoutForm.qrCodeDataUrl = null;
+    payoutForm.qrCodeTouched = false;
   }
 };
 
@@ -304,17 +383,24 @@ const validatePayoutForm = () => {
   return true;
 };
 
-const payoutPayload = () => ({
-  type: payoutForm.type,
-  accountName: payoutForm.type === 'BANK_CARD' ? payoutForm.accountName.trim() : undefined,
-  accountValue:
-    payoutForm.type === 'WECHAT' || !payoutForm.accountValue.trim()
-      ? undefined
-      : payoutForm.accountValue.trim(),
-  bankName: payoutForm.type === 'BANK_CARD' ? payoutForm.bankName.trim() : undefined,
-  isDefault: payoutForm.isDefault,
-  status: payoutForm.enabled ? 'ACTIVE' : 'DISABLED',
-});
+const payoutPayload = () => {
+  const isAlipay = payoutForm.type === 'ALIPAY';
+  const isBankCard = payoutForm.type === 'BANK_CARD';
+  return {
+    type: payoutForm.type,
+    accountName: isBankCard || isAlipay ? payoutForm.accountName.trim() : undefined,
+    accountValue:
+      payoutForm.type === 'WECHAT' || !payoutForm.accountValue.trim()
+        ? undefined
+        : payoutForm.accountValue.trim(),
+    bankName: isBankCard ? payoutForm.bankName.trim() : undefined,
+    // 二维码是选填项：只在用户主动改动时才提交，避免无意义地回传大字符串。
+    qrCodeDataUrl:
+      isAlipay && payoutForm.qrCodeTouched ? (payoutForm.qrCodeDataUrl ?? '') : undefined,
+    isDefault: payoutForm.isDefault,
+    status: payoutForm.enabled ? 'ACTIVE' : 'DISABLED',
+  };
+};
 
 const validateBulkPayoutForms = () => {
   if (!selectedPayoutTypes.value.length) {
@@ -345,7 +431,12 @@ const validateBulkPayoutForms = () => {
 const bulkPayoutPayloads = (hasExistingDefault: boolean) =>
   selectedPayoutTypes.value.map((type, index) => ({
     type,
-    accountName: type === 'BANK_CARD' ? bulkPayoutForms.bankAccountName.trim() : undefined,
+    accountName:
+      type === 'BANK_CARD'
+        ? bulkPayoutForms.bankAccountName.trim()
+        : type === 'ALIPAY'
+          ? bulkPayoutForms.alipayAccountName.trim()
+          : undefined,
     accountValue:
       type === 'ALIPAY'
         ? bulkPayoutForms.alipayAccount.trim()
@@ -353,6 +444,8 @@ const bulkPayoutPayloads = (hasExistingDefault: boolean) =>
           ? bulkPayoutForms.bankCardNumber.trim()
           : undefined,
     bankName: type === 'BANK_CARD' ? bulkPayoutForms.bankName.trim() : undefined,
+    qrCodeDataUrl:
+      type === 'ALIPAY' ? (bulkPayoutForms.alipayQrCodeDataUrl ?? undefined) : undefined,
     isDefault: !hasExistingDefault && index === 0,
     status: 'ACTIVE',
   }));
@@ -436,6 +529,13 @@ const openPayout = (item: SubmitterItem, method?: PayoutMethod) => {
   activeProfileHasDefault.value = item.payoutMethods.some((entry) => entry.isDefault);
   if (method) resetPayoutForm(method, item.payoutMethods.length > 0);
   else resetBulkPayoutForms();
+  if (method?.hasQrCode) {
+    // 编辑时先把已有二维码读回来，用户可以直接看到并决定是否更换。
+    void loadQrCode(method.id).then((dataUrl) => {
+      if (editingPayoutId.value !== method.id) return;
+      payoutForm.qrCodeDataUrl = dataUrl || null;
+    });
+  }
   payoutDialog.value = true;
 };
 
@@ -448,6 +548,16 @@ const savePayout = async () => {
   try {
     if (editingPayoutId.value) {
       await http.patch(`/admin/payout-methods/${editingPayoutId.value}`, payoutPayload());
+      // 二维码改动后立刻同步本地缓存，缩略图不用等下次展开才刷新。
+      if (payoutForm.qrCodeTouched) {
+        const nextCache = { ...qrCodeCache.value };
+        if (payoutForm.qrCodeDataUrl) {
+          nextCache[editingPayoutId.value] = payoutForm.qrCodeDataUrl;
+        } else {
+          delete nextCache[editingPayoutId.value];
+        }
+        qrCodeCache.value = nextCache;
+      }
     } else {
       const createdMethodIds: string[] = [];
       try {
@@ -529,9 +639,28 @@ const confirmPayoutMethod = async (method: PayoutMethod) => {
 
 const payoutDetail = (item: SubmitterItem, method: PayoutMethod) => {
   if (method.type === 'WECHAT') return `按微信昵称“${profileNickname(item)}”转账`;
-  if (method.type === 'ALIPAY') return `支付宝账号：${method.accountMasked || '未填写'}`;
+  if (method.type === 'ALIPAY') {
+    return [
+      `支付宝账号：${method.accountMasked || '未填写'}`,
+      method.accountName ? `实名：${method.accountName}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
   if (method.type === 'BANK_CARD') {
     return [method.bankName, method.accountName, method.accountMasked].filter(Boolean).join(' · ');
+  }
+  return method.accountMasked || method.label;
+};
+
+/** 列表行内的回款方式摘要，一眼能看出钱打到哪儿。 */
+const payoutChipDetail = (item: SubmitterItem, method: PayoutMethod) => {
+  if (method.type === 'WECHAT') return profileNickname(item);
+  if (method.type === 'ALIPAY') {
+    return [method.accountName, method.accountMasked].filter(Boolean).join(' · ') || '未填写账号';
+  }
+  if (method.type === 'BANK_CARD') {
+    return [method.bankName, method.accountMasked].filter(Boolean).join(' · ') || '未填写卡号';
   }
   return method.accountMasked || method.label;
 };
@@ -622,140 +751,195 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
       <el-button :icon="Refresh" circle :loading="loading" @click="load" />
     </section>
 
-    <section v-loading="loading" class="profile-grid">
-      <el-empty v-if="!filteredItems.length" description="还没有回款登记" />
-      <article v-for="item in filteredItems" :key="item.id" class="surface-card profile-card">
-        <header class="profile-head">
-          <div class="profile-identity">
-            <div class="profile-avatar">{{ profileNickname(item).slice(0, 1) }}</div>
-            <div class="profile-name">
-              <div>
-                <strong>{{ profileNickname(item) }}</strong>
-                <el-tag
-                  :type="item.status === 'ACTIVE' ? 'success' : 'info'"
+    <section v-loading="loading" class="surface-card profile-table-card">
+      <el-table
+        ref="tableRef"
+        :data="filteredItems"
+        row-key="id"
+        class="profile-table"
+        v-model:expand-row-keys="expandedRows"
+        @row-click="toggleRow"
+        @expand-change="handleExpandChange"
+      >
+        <el-table-column type="expand" width="42">
+          <template #default="{ row }">
+            <div class="payout-expanded">
+              <div class="section-title">
+                <div>
+                  <strong>给下单人的回款方式</strong>
+                  <span>支付宝账号和银行卡号加密保存，页面默认脱敏</span>
+                </div>
+                <el-button
+                  class="payout-add-action"
                   size="small"
-                  effect="light"
+                  :icon="Plus"
+                  @click.stop="openPayout(row)"
                 >
-                  {{ item.status === 'ACTIVE' ? '启用' : '停用' }}
-                </el-tag>
+                  添加方式
+                </el-button>
               </div>
-              <p>
-                微信昵称 <span>·</span> 识别码
-                {{ item.code || '等待下单人提交后生成' }}
-              </p>
-            </div>
-          </div>
-          <div class="profile-actions">
-            <el-button size="small" round @click="openProfile(item)">编辑昵称</el-button>
-            <el-button size="small" round type="danger" plain @click="removeProfile(item)">
-              删除
-            </el-button>
-          </div>
-        </header>
 
-        <div class="profile-stats">
-          <div>
-            <span>有效订单</span><b>{{ item._count.orders }}</b>
-          </div>
-          <div>
-            <span>回款方式</span><b>{{ item.payoutMethods.length }}</b>
-          </div>
-          <div>
-            <span>已登记回款</span><b>{{ item._count.payouts }}</b>
-          </div>
-        </div>
-
-        <p v-if="item.notes" class="profile-notes">{{ item.notes }}</p>
-
-        <section class="payout-section">
-          <div class="section-title">
-            <div>
-              <strong>给下单人的回款方式</strong>
-              <span>支付宝账号和银行卡号加密保存，页面默认脱敏</span>
-            </div>
-            <el-button
-              class="payout-add-action"
-              size="small"
-              :icon="Plus"
-              @click="openPayout(item)"
-            >
-              添加方式
-            </el-button>
-          </div>
-
-          <el-empty
-            v-if="!item.payoutMethods.length"
-            :image-size="42"
-            description="还没有登记回款方式"
-          />
-          <div v-for="method in item.payoutMethods" :key="method.id" class="payout-row">
-            <div class="method-icon" :class="`type-${method.type.toLowerCase()}`">
-              {{
-                method.type === 'WECHAT'
-                  ? '微'
-                  : method.type === 'ALIPAY'
-                    ? '支'
-                    : method.type === 'BANK_CARD'
-                      ? '卡'
-                      : '款'
-              }}
-            </div>
-            <div class="method-copy">
-              <div>
-                <strong>{{ payoutTypeLabels[method.type] ?? method.label }}</strong>
-                <el-tag v-if="method.isDefault" size="small" type="warning" effect="light">
-                  常用
-                </el-tag>
-                <el-tag
-                  v-if="method.status !== 'ACTIVE'"
-                  size="small"
-                  :type="method.status === 'PENDING' ? 'warning' : 'info'"
-                  effect="light"
-                >
-                  {{ method.status === 'PENDING' ? '待确认' : '停用' }}
-                </el-tag>
+              <el-empty
+                v-if="!row.payoutMethods.length"
+                :image-size="42"
+                description="还没有登记回款方式"
+              />
+              <div v-for="method in row.payoutMethods" :key="method.id" class="payout-row">
+                <div class="method-icon" :class="`type-${method.type.toLowerCase()}`">
+                  {{
+                    method.type === 'WECHAT'
+                      ? '微'
+                      : method.type === 'ALIPAY'
+                        ? '支'
+                        : method.type === 'BANK_CARD'
+                          ? '卡'
+                          : '款'
+                  }}
+                </div>
+                <div class="method-copy">
+                  <div>
+                    <strong>{{ payoutTypeLabels[method.type] ?? method.label }}</strong>
+                    <el-tag v-if="method.isDefault" size="small" type="warning" effect="light">
+                      常用
+                    </el-tag>
+                    <el-tag
+                      v-if="method.status !== 'ACTIVE'"
+                      size="small"
+                      :type="method.status === 'PENDING' ? 'warning' : 'info'"
+                      effect="light"
+                    >
+                      {{ method.status === 'PENDING' ? '待确认' : '停用' }}
+                    </el-tag>
+                  </div>
+                  <p>{{ payoutDetail(row, method) }}</p>
+                </div>
+                <div v-if="method.hasQrCode" class="method-qr">
+                  <el-image
+                    :src="qrCodeOf(method.id)"
+                    :preview-src-list="[qrCodeOf(method.id)]"
+                    preview-teleported
+                    fit="contain"
+                  />
+                  <span>收款码</span>
+                </div>
+                <div class="method-actions payout-method-actions">
+                  <el-button
+                    v-if="method.status === 'PENDING'"
+                    class="payout-method-action payout-method-action--confirm"
+                    size="small"
+                    :loading="confirmingPayoutId === method.id"
+                    @click.stop="confirmPayoutMethod(method)"
+                  >
+                    确认启用
+                  </el-button>
+                  <el-button
+                    v-if="['ALIPAY', 'BANK_CARD'].includes(method.type)"
+                    class="payout-method-action payout-method-action--copy"
+                    size="small"
+                    :icon="CopyDocument"
+                    @click.stop="copyAccountValue(method)"
+                  >
+                    复制
+                  </el-button>
+                  <el-button
+                    v-if="isSupportedPayoutType(method.type)"
+                    class="payout-method-action payout-method-action--edit"
+                    size="small"
+                    @click.stop="openPayout(row, method)"
+                  >
+                    编辑
+                  </el-button>
+                  <el-button
+                    class="payout-method-action payout-method-action--delete"
+                    size="small"
+                    :icon="Delete"
+                    @click.stop="removePayout(method)"
+                  >
+                    删除
+                  </el-button>
+                </div>
               </div>
-              <p>{{ payoutDetail(item, method) }}</p>
             </div>
-            <div class="method-actions payout-method-actions">
-              <el-button
-                v-if="method.status === 'PENDING'"
-                class="payout-method-action payout-method-action--confirm"
-                size="small"
-                :loading="confirmingPayoutId === method.id"
-                @click="confirmPayoutMethod(method)"
+          </template>
+        </el-table-column>
+
+        <el-table-column label="下单人" min-width="230">
+          <template #default="{ row }">
+            <div class="profile-identity profile-identity--cell">
+              <div class="profile-avatar">{{ profileNickname(row).slice(0, 1) }}</div>
+              <div class="profile-name">
+                <div>
+                  <strong>{{ profileNickname(row) }}</strong>
+                  <el-tag
+                    :type="row.status === 'ACTIVE' ? 'success' : 'info'"
+                    size="small"
+                    effect="light"
+                  >
+                    {{ row.status === 'ACTIVE' ? '启用' : '停用' }}
+                  </el-tag>
+                </div>
+                <p>识别码 {{ row.code || '待生成' }}</p>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="回款方式" min-width="300">
+          <template #default="{ row }">
+            <div v-if="row.payoutMethods.length" class="payout-chips">
+              <span
+                v-for="method in row.payoutMethods"
+                :key="method.id"
+                class="payout-chip"
+                :class="[
+                  `type-${method.type.toLowerCase()}`,
+                  { 'is-dim': method.status !== 'ACTIVE' },
+                ]"
+                :title="payoutDetail(row, method)"
               >
-                确认启用
-              </el-button>
-              <el-button
-                v-if="['ALIPAY', 'BANK_CARD'].includes(method.type)"
-                class="payout-method-action payout-method-action--copy"
-                size="small"
-                :icon="CopyDocument"
-                @click="copyAccountValue(method)"
-              >
-                复制
-              </el-button>
-              <el-button
-                v-if="isSupportedPayoutType(method.type)"
-                class="payout-method-action payout-method-action--edit"
-                size="small"
-                @click="openPayout(item, method)"
-              >
-                编辑
-              </el-button>
-              <el-button
-                class="payout-method-action payout-method-action--delete"
-                size="small"
-                :icon="Delete"
-                @click="removePayout(method)"
-              >
+                <i class="payout-chip-icon">{{ payoutTypeShorts[method.type] ?? '款' }}</i>
+                <span class="payout-chip-text">
+                  <b>{{ payoutTypeLabels[method.type] ?? method.label }}</b>
+                  <em class="payout-chip-detail">{{ payoutChipDetail(row, method) }}</em>
+                </span>
+                <em v-if="method.isDefault" class="payout-chip-flag">常用</em>
+              </span>
+            </div>
+            <span v-else class="payout-empty">未登记</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="有效订单" width="100" align="right">
+          <template #default="{ row }">
+            <b class="cell-number">{{ row._count.orders }}</b>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="已登记回款" width="110" align="right">
+          <template #default="{ row }">
+            <b class="cell-number">{{ row._count.payouts }}</b>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="备注" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="cell-notes">{{ row.notes || '—' }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="196" align="right">
+          <template #default="{ row }">
+            <div class="profile-actions profile-actions--cell">
+              <el-button size="small" round @click.stop="openProfile(row)">编辑昵称</el-button>
+              <el-button size="small" round type="danger" plain @click.stop="removeProfile(row)">
                 删除
               </el-button>
             </div>
-          </div>
-        </section>
-      </article>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-empty v-if="!filteredItems.length && !loading" description="还没有回款登记" />
     </section>
 
     <el-dialog
@@ -821,6 +1005,16 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
                 placeholder="请输入手机号、邮箱或支付宝账号"
               />
             </el-form-item>
+            <el-form-item label="真实姓名">
+              <el-input
+                v-model="bulkPayoutForms.alipayAccountName"
+                maxlength="150"
+                placeholder="选填，对应支付宝实名"
+              />
+            </el-form-item>
+            <el-form-item label="收款二维码">
+              <PayoutQrCodeField v-model="bulkPayoutForms.alipayQrCodeDataUrl" />
+            </el-form-item>
           </section>
           <section v-if="selectedPayoutTypes.includes('BANK_CARD')" class="selected-method-block">
             <div class="selected-method-title">银行卡资料</div>
@@ -884,13 +1078,28 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
           <div v-if="payoutForm.type === 'WECHAT'" class="wechat-tip">
             微信转账直接使用该下单人的微信昵称，不需要填写其他账号。
           </div>
-          <el-form-item v-else-if="payoutForm.type === 'ALIPAY'" label="支付宝账号" required>
-            <el-input
-              v-model="payoutForm.accountValue"
-              maxlength="500"
-              placeholder="留空表示保留原支付宝账号"
-            />
-          </el-form-item>
+          <div v-else-if="payoutForm.type === 'ALIPAY'" class="alipay-fields">
+            <el-form-item label="支付宝账号" required>
+              <el-input
+                v-model="payoutForm.accountValue"
+                maxlength="500"
+                placeholder="留空表示保留原支付宝账号"
+              />
+            </el-form-item>
+            <el-form-item label="真实姓名">
+              <el-input
+                v-model="payoutForm.accountName"
+                maxlength="150"
+                placeholder="选填，对应支付宝实名"
+              />
+            </el-form-item>
+            <el-form-item label="收款二维码">
+              <PayoutQrCodeField
+                v-model="payoutForm.qrCodeDataUrl"
+                @update:model-value="payoutForm.qrCodeTouched = true"
+              />
+            </el-form-item>
+          </div>
           <div v-else class="bank-fields">
             <el-form-item label="真实姓名" required>
               <el-input v-model="payoutForm.accountName" maxlength="150" />
@@ -945,6 +1154,16 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
                 placeholder="请输入支付宝账号"
               />
             </el-form-item>
+            <el-form-item label="真实姓名">
+              <el-input
+                v-model="bulkPayoutForms.alipayAccountName"
+                maxlength="150"
+                placeholder="选填，对应支付宝实名"
+              />
+            </el-form-item>
+            <el-form-item label="收款二维码">
+              <PayoutQrCodeField v-model="bulkPayoutForms.alipayQrCodeDataUrl" />
+            </el-form-item>
           </section>
           <section v-if="selectedPayoutTypes.includes('BANK_CARD')" class="selected-method-block">
             <div class="selected-method-title">银行卡资料</div>
@@ -990,7 +1209,6 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 .registration-error,
 .profile-toolbar,
 .toolbar-summary,
-.profile-head,
 .profile-identity,
 .profile-actions,
 .profile-name > div,
@@ -1028,10 +1246,10 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   flex: 0 0 42px;
   height: 42px;
   place-items: center;
-  border-radius: 14px;
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.12);
-  font-size: 19px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
+  font-size: var(--app-text-lg);
 }
 
 .registration-share-icon svg {
@@ -1051,20 +1269,20 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .registration-share-copy strong {
   color: var(--app-heading);
-  font-size: 16px;
+  font-size: var(--app-text-md);
 }
 
 .registration-share-copy p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .registration-permission {
   align-items: center;
   padding: 9px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 86%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 62%, transparent);
   gap: 14px;
@@ -1077,13 +1295,13 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .registration-permission b {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .registration-permission span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
 }
 
 .registration-link-row {
@@ -1092,7 +1310,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   align-items: center;
   padding: 8px 9px 8px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 90%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 62%, transparent);
   gap: 8px;
@@ -1104,7 +1322,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   overflow: hidden;
   color: var(--app-muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1114,10 +1332,10 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--app-danger);
-  background: rgba(239, 68, 68, 0.08);
-  font-size: 13px;
+  background: color-mix(in srgb, var(--app-danger) 8%, transparent);
+  font-size: var(--app-text-sm);
 }
 
 .profile-toolbar {
@@ -1134,7 +1352,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .profile-toolbar :deep(.el-input__wrapper) {
   min-height: 36px;
-  border-radius: 12px !important;
+  border-radius: var(--app-radius-card) !important;
   background: color-mix(in srgb, var(--app-card-solid) 90%, transparent);
 }
 
@@ -1142,14 +1360,14 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   align-items: center;
   margin-left: auto;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   gap: 8px;
 }
 
 .toolbar-summary span {
   padding: 7px 11px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 86%, transparent);
 }
 
@@ -1160,42 +1378,36 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .toolbar-summary .pending-summary,
 .toolbar-summary .pending-summary b {
-  color: #d97706;
+  color: var(--app-warning);
 }
 
-.profile-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 16px;
-}
-
-.profile-grid > .el-empty {
-  grid-column: 1 / -1;
-}
-
-.profile-card {
+.profile-table-card {
   overflow: hidden;
-  padding: 18px;
   border-color: color-mix(in srgb, var(--app-primary) 9%, var(--app-border));
   background: color-mix(in srgb, var(--app-card-solid) 91%, var(--app-card));
   box-shadow:
     var(--app-shadow-sm),
     inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 64%, transparent);
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
 }
 
-.profile-card:hover {
+.profile-table-card:hover {
   border-color: color-mix(in srgb, var(--app-primary) 20%, var(--app-border));
   box-shadow: var(--app-shadow);
 }
 
-.profile-head {
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
+.profile-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.profile-table :deep(.el-table__expanded-cell) {
+  padding: 0 !important;
+  background: color-mix(in srgb, var(--app-primary-soft) 16%, var(--app-card-solid));
+}
+
+.profile-table :deep(.el-table__expand-icon) {
+  color: var(--app-muted);
+  border-radius: var(--app-radius-chip);
+  transition: transform 0.18s ease;
 }
 
 .profile-identity {
@@ -1204,17 +1416,29 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   gap: 12px;
 }
 
+.profile-identity--cell {
+  gap: 9px;
+  padding: 4px 0;
+}
+
 .profile-avatar {
   display: grid;
   flex: 0 0 44px;
   height: 44px;
   place-items: center;
-  border-radius: 15px;
-  color: #fff;
-  background: linear-gradient(145deg, #60a5fa, #2563eb);
-  box-shadow: 0 9px 20px rgba(37, 99, 235, 0.18);
-  font-size: 17px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-md);
+  font-size: var(--app-text-md);
   font-weight: 700;
+}
+
+.profile-identity--cell .profile-avatar {
+  flex-basis: 32px;
+  height: 32px;
+  border-radius: var(--app-radius-chip);
+  font-size: var(--app-text-sm);
 }
 
 .profile-name > div {
@@ -1225,13 +1449,22 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .profile-name strong {
   color: var(--app-heading);
-  font-size: 18px;
+  font-size: var(--app-text-lg);
+}
+
+.profile-identity--cell .profile-name strong {
+  font-size: var(--app-text-md);
 }
 
 .profile-name p {
   margin: 5px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
+}
+
+.profile-identity--cell .profile-name p {
+  margin-top: 2px;
+  font-size: var(--app-text-micro);
 }
 
 .profile-name p span {
@@ -1245,61 +1478,109 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   gap: 4px;
 }
 
-.profile-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin-top: 16px;
-  overflow: hidden;
-  border: 1px solid var(--app-border);
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--app-primary-soft) 14%, var(--app-control));
+.profile-actions--cell {
+  justify-content: flex-end;
 }
 
-.profile-stats > div {
-  padding: 10px 13px;
-  border-right: 1px solid var(--app-border);
-}
-
-.profile-stats > div:last-child {
-  border-right: 0;
-}
-
-.profile-stats span,
-.profile-stats b {
-  display: block;
-}
-
-.profile-stats span {
-  color: var(--app-muted);
-  font-size: 12px;
-}
-
-.profile-stats b {
-  margin-top: 2px;
+.cell-number {
   color: var(--app-heading);
-  font-size: 19px;
+  font-size: var(--app-text-md);
+  font-variant-numeric: tabular-nums;
 }
 
-.profile-notes {
-  margin: 12px 0 0;
-  padding: 9px 11px;
-  border-radius: 11px;
-  color: var(--app-text);
-  background: var(--app-hover);
-  font-size: 13px;
-  line-height: 1.6;
+.cell-notes {
+  color: var(--app-muted);
+  font-size: var(--app-text-sm);
 }
 
-.payout-section {
-  margin-top: 14px;
-  padding: 13px;
+.payout-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.payout-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 9px 3px 4px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-text);
   background: color-mix(in srgb, var(--app-card-solid) 88%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 64%, transparent);
+  font-size: var(--app-text-xs);
+  gap: 5px;
 }
 
-.payout-section :deep(.el-empty) {
+.payout-chip.is-dim {
+  color: var(--app-muted);
+  opacity: 0.72;
+}
+
+.payout-chip-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  font-size: var(--app-text-sm);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.payout-chip.type-alipay .payout-chip-icon {
+  background: var(--app-info);
+}
+
+.payout-chip.type-bank_card .payout-chip-icon {
+  background: var(--app-warning);
+}
+
+.payout-chip em {
+  padding: 1px 5px;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-warning);
+  background: color-mix(in srgb, var(--app-warning) 14%, transparent);
+  font-size: var(--app-text-micro);
+  font-style: normal;
+}
+
+.payout-chip-text {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.payout-chip-text b {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.payout-chip em.payout-chip-detail {
+  padding: 0;
+  color: var(--app-muted);
+  background: transparent;
+  font-size: var(--app-text-micro);
+}
+
+.payout-chip-flag {
+  flex-shrink: 0;
+}
+
+.payout-empty {
+  color: var(--app-muted);
+  font-size: var(--app-text-sm);
+}
+
+.payout-expanded {
+  padding: 12px 16px 14px 58px;
+}
+
+.payout-expanded :deep(.el-empty) {
   padding: 18px 0 2px;
 }
 
@@ -1316,13 +1597,13 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .section-title strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .section-title span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .payout-add-action {
@@ -1330,10 +1611,10 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   margin: 0 !important;
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--app-primary) 22%, var(--app-border)) !important;
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
   color: color-mix(in srgb, var(--app-primary) 84%, var(--app-text)) !important;
   background: color-mix(in srgb, var(--app-primary-soft) 62%, var(--app-card-solid)) !important;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 650;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 54%, transparent),
@@ -1347,7 +1628,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .payout-add-action :deep(.el-icon) {
   margin-right: 3px;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .payout-add-action:hover,
@@ -1355,7 +1636,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border)) !important;
   color: var(--app-primary) !important;
   background: color-mix(in srgb, var(--app-primary-soft) 82%, var(--app-card-solid)) !important;
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--app-primary) 14%, transparent) !important;
+  box-shadow: var(--app-shadow-sm) !important;
 }
 
 .payout-row {
@@ -1364,7 +1645,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   margin-top: 8px;
   padding: 9px 10px;
   border: 1px solid var(--app-border);
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
   gap: 10px;
   transition:
@@ -1386,26 +1667,26 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   flex: 0 0 34px;
   height: 34px;
   place-items: center;
-  border-radius: 11px;
-  color: #64748b;
-  background: rgba(148, 163, 184, 0.13);
-  font-size: 13px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-text-subtle);
+  background: color-mix(in srgb, var(--app-text-placeholder) 13%, transparent);
+  font-size: var(--app-text-sm);
   font-weight: 700;
 }
 
 .method-icon.type-wechat {
-  color: #16a34a;
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 12%, transparent);
 }
 
 .method-icon.type-alipay {
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.12);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
 }
 
 .method-icon.type-bank_card {
-  color: #7c3aed;
-  background: rgba(139, 92, 246, 0.12);
+  color: var(--app-purple);
+  background: color-mix(in srgb, var(--app-purple) 12%, transparent);
 }
 
 .method-copy {
@@ -1421,16 +1702,38 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .method-copy strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .method-copy p {
   margin: 3px 0 0;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.method-qr {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.method-qr .el-image {
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-control);
+  background: var(--app-surface-card);
+}
+
+.method-qr span {
+  color: var(--app-muted);
+  font-size: var(--app-text-micro);
 }
 
 .payout-method-actions {
@@ -1440,7 +1743,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   justify-content: center;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 62%, transparent),
@@ -1458,10 +1761,10 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   margin: 0 !important;
   padding: 0 8px;
   border: 0 !important;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: color-mix(in srgb, var(--payout-action-accent) 80%, var(--app-text)) !important;
   background: transparent !important;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
   box-shadow: none !important;
   transition:
@@ -1472,18 +1775,18 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .payout-method-action :deep(.el-icon) {
   margin-right: 4px;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .payout-method-action:hover,
 .payout-method-action:focus-visible {
   color: var(--app-heading) !important;
   background: color-mix(in srgb, var(--payout-action-accent) 12%, var(--app-card-solid)) !important;
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--payout-action-accent) 14%, transparent) !important;
+  box-shadow: var(--app-shadow-sm) !important;
 }
 
 .payout-method-action--confirm {
-  --payout-action-accent: #16a34a;
+  --payout-action-accent: var(--app-success);
 }
 
 .payout-method-action--copy {
@@ -1491,7 +1794,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 }
 
 .payout-method-action--edit {
-  --payout-action-accent: #94a3b8;
+  --payout-action-accent: var(--app-text-placeholder);
 }
 
 .payout-method-action--delete {
@@ -1512,13 +1815,13 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .form-section-title b {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .form-section-title span {
   margin-top: 3px;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .method-options {
@@ -1534,7 +1837,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   align-items: center;
   padding: 10px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
   background: var(--app-control);
   cursor: pointer;
@@ -1544,19 +1847,19 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 }
 
 .method-option:hover {
-  border-color: rgba(59, 130, 246, 0.38);
+  border-color: color-mix(in srgb, var(--app-primary) 38%, transparent);
   transform: translateY(-1px);
 }
 
 .method-option:focus-visible {
-  outline: 2px solid rgba(59, 130, 246, 0.48);
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 48%, transparent);
   outline-offset: 2px;
 }
 
 .method-option.is-selected {
-  border-color: rgba(59, 130, 246, 0.52);
+  border-color: color-mix(in srgb, var(--app-primary) 52%, transparent);
   background: var(--app-primary-soft);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-primary) 8%, transparent);
 }
 
 .method-option > span {
@@ -1564,10 +1867,10 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   flex: 0 0 31px;
   height: 31px;
   place-items: center;
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
-  background: rgba(59, 130, 246, 0.12);
-  font-size: 13px;
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
+  font-size: var(--app-text-sm);
   font-weight: 700;
 }
 
@@ -1582,14 +1885,14 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .method-option b {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .method-option small {
   margin-top: 2px;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1597,11 +1900,11 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 .wechat-tip {
   margin-bottom: 15px;
   padding: 11px 13px;
-  border: 1px solid rgba(34, 197, 94, 0.18);
-  border-radius: 12px;
-  color: #15803d;
-  background: rgba(34, 197, 94, 0.08);
-  font-size: 13px;
+  border: 1px solid color-mix(in srgb, var(--app-success) 18%, transparent);
+  border-radius: var(--app-radius-card);
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 8%, transparent);
+  font-size: var(--app-text-sm);
   line-height: 1.6;
 }
 
@@ -1609,14 +1912,14 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   margin-top: 10px;
   padding: 13px 14px 2px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
 }
 
 .selected-method-title {
   margin-bottom: 10px;
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 700;
 }
 
@@ -1624,6 +1927,16 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 12px;
+}
+
+.alipay-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.alipay-fields > :last-child {
+  grid-column: 1 / -1;
 }
 
 .span-two {
@@ -1634,7 +1947,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
   align-items: center;
   margin-top: 4px;
   padding: 12px 13px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 24px;
 }
@@ -1646,18 +1959,12 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
 
 .payout-switches span {
   color: var(--app-text);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .profile-form :deep(.el-form-item:last-child),
 .payout-dialog-form :deep(.el-form-item:last-child) {
   margin-bottom: 0;
-}
-
-@media (max-width: 1100px) {
-  .profile-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 700px) {
@@ -1674,8 +1981,7 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
     justify-content: space-between;
   }
 
-  .profile-toolbar,
-  .profile-head {
+  .profile-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1722,29 +2028,8 @@ onMounted(() => void Promise.all([load(), loadRegistrationForm()]));
     margin-left: 0;
   }
 
-  .profile-card {
-    padding: 14px;
-  }
-
-  .payout-section {
-    padding: 11px;
-    border-radius: 14px;
-  }
-
-  .profile-stats {
-    grid-template-columns: 1fr;
-  }
-
-  .profile-stats > div {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-right: 0;
-    border-bottom: 1px solid var(--app-border);
-  }
-
-  .profile-stats > div:last-child {
-    border-bottom: 0;
+  .payout-expanded {
+    padding-left: 16px;
   }
 
   .payout-row {

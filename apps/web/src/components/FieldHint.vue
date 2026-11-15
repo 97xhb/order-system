@@ -19,7 +19,7 @@ const normalizedText = computed(() => props.text?.trim() ?? '');
 .field-hint {
   width: 100%;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 550;
   line-height: 1.55;
   overflow-wrap: anywhere;

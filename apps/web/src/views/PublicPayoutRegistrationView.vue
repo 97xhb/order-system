@@ -36,6 +36,7 @@ const selectedTypes = ref<PayoutType[]>(['WECHAT']);
 const form = reactive({
   nickname: '',
   alipayAccount: '',
+  alipayAccountName: '',
   bankAccountName: '',
   bankName: '',
   bankCardNumber: '',
@@ -122,7 +123,12 @@ const payload = () => ({
   nickname: form.nickname.trim(),
   methods: selectedTypes.value.map((type) => ({
     type,
-    accountName: type === 'BANK_CARD' ? form.bankAccountName.trim() : undefined,
+    accountName:
+      type === 'BANK_CARD'
+        ? form.bankAccountName.trim()
+        : type === 'ALIPAY'
+          ? form.alipayAccountName.trim()
+          : undefined,
     accountValue:
       type === 'ALIPAY'
         ? form.alipayAccount.trim()
@@ -143,6 +149,7 @@ const submit = async () => {
     );
     submitted.value = response.data;
     form.alipayAccount = '';
+    form.alipayAccountName = '';
     form.bankAccountName = '';
     form.bankName = '';
     form.bankCardNumber = '';
@@ -295,6 +302,14 @@ onMounted(() => void load());
                   placeholder="手机号、邮箱或支付宝账号"
                 />
               </el-form-item>
+              <el-form-item label="真实姓名">
+                <el-input
+                  v-model="form.alipayAccountName"
+                  maxlength="150"
+                  size="large"
+                  placeholder="选填，支付宝实名"
+                />
+              </el-form-item>
             </section>
 
             <section v-if="selectedTypes.includes('BANK_CARD')" class="method-fields bank-fields">
@@ -352,13 +367,17 @@ onMounted(() => void load());
   --el-font-size-base: 17px;
   --el-font-size-small: 16px;
   --el-font-size-extra-small: 15px;
-  --el-result-title-font-size: 23px;
+  --el-result-title-font-size: var(--app-text-xl);
   min-height: 100vh;
   padding: 18px 14px 28px;
   color: var(--app-text);
   background:
-    radial-gradient(circle at 12% 0, rgba(96, 165, 250, 0.2), transparent 32%),
-    linear-gradient(180deg, #eef6ff 0, #f6f8fb 280px);
+    radial-gradient(
+      circle at 12% 0,
+      color-mix(in srgb, var(--app-primary) 20%, transparent),
+      transparent 32%
+    ),
+    linear-gradient(180deg, var(--app-info-soft) 0, var(--app-surface-sunken) 280px);
 }
 
 .public-payout-header,
@@ -381,16 +400,16 @@ footer {
   width: 50px;
   height: 50px;
   place-items: center;
-  border-radius: 14px;
-  color: #fff;
-  background: linear-gradient(145deg, #60a5fa, #2563eb);
-  box-shadow: 0 9px 22px rgba(37, 99, 235, 0.22);
-  font-size: 16px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-md);
+  font-size: var(--app-text-md);
   font-weight: 800;
 }
 
 .brand-mark.is-long {
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   letter-spacing: 0;
 }
 
@@ -401,21 +420,21 @@ footer {
 
 .public-payout-header strong {
   color: var(--app-heading);
-  font-size: 20px;
+  font-size: var(--app-text-xl);
 }
 
 .public-payout-header span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .registration-card {
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.1);
+  border: 1px solid color-mix(in srgb, var(--app-text-placeholder) 24%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 90%, transparent);
+  box-shadow: var(--app-shadow-pop);
   backdrop-filter: blur(16px);
 }
 
@@ -424,8 +443,8 @@ footer {
   align-items: center;
   justify-content: space-between;
   padding: 15px 18px;
-  border-bottom: 1px solid #e8edf4;
-  background: rgba(239, 246, 255, 0.7);
+  border-bottom: 1px solid var(--app-border-soft);
+  background: color-mix(in srgb, var(--app-surface-hover) 70%, transparent);
   gap: 20px;
 }
 
@@ -441,13 +460,13 @@ footer {
 .intro-block span,
 .intro-block p {
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .intro-block strong {
   margin-top: 2px;
-  color: #2563eb;
-  font-size: 19px;
+  color: var(--app-primary);
+  font-size: var(--app-text-lg);
   letter-spacing: 0.04em;
 }
 
@@ -460,9 +479,9 @@ footer {
 
 .intro-actions :deep(.el-button) {
   margin-top: 7px;
-  border-color: rgba(59, 130, 246, 0.25);
-  color: #2563eb;
-  background: rgba(255, 255, 255, 0.72);
+  border-color: color-mix(in srgb, var(--app-primary) 25%, transparent);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-surface-card) 72%, transparent);
 }
 
 .registration-form {
@@ -472,7 +491,7 @@ footer {
 .form-section + .form-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #e8edf4;
+  border-top: 1px solid var(--app-border-soft);
 }
 
 .section-heading,
@@ -490,10 +509,10 @@ footer {
 .method-fields-title > span {
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  color: #2563eb;
-  background: #eaf2ff;
-  font-size: 13px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+  font-size: var(--app-text-sm);
   font-weight: 800;
 }
 
@@ -509,13 +528,13 @@ footer {
 
 .section-heading strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .section-heading small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .method-options {
@@ -530,10 +549,10 @@ footer {
   min-width: 0;
   align-items: center;
   padding: 10px;
-  border: 1px solid #dde5ef;
-  border-radius: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
-  background: #fff;
+  background: var(--app-surface-card);
   cursor: pointer;
   text-align: left;
   transition: 0.18s ease;
@@ -541,19 +560,19 @@ footer {
 }
 
 .method-option:hover {
-  border-color: #9fc3fa;
+  border-color: var(--app-info-border);
   transform: translateY(-1px);
 }
 
 .method-option:focus-visible {
-  outline: 2px solid rgba(59, 130, 246, 0.48);
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 48%, transparent);
   outline-offset: 2px;
 }
 
 .method-option.is-selected {
-  border-color: #7db0f7;
-  background: #f0f6ff;
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+  border-color: var(--app-info-border);
+  background: var(--app-info-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-primary) 8%, transparent);
 }
 
 .method-option > span {
@@ -561,10 +580,10 @@ footer {
   flex: 0 0 31px;
   height: 31px;
   place-items: center;
-  border-radius: 10px;
-  color: #2563eb;
-  background: #eaf2ff;
-  font-size: 15px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: var(--app-info-soft);
+  font-size: var(--app-text-base);
   font-weight: 700;
 }
 
@@ -579,14 +598,14 @@ footer {
 
 .method-option b {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .method-option small {
   margin-top: 2px;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -594,20 +613,20 @@ footer {
 .wechat-tip {
   margin-top: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  border-radius: 12px;
-  color: #15803d;
-  background: rgba(34, 197, 94, 0.08);
-  font-size: 14px;
+  border: 1px solid color-mix(in srgb, var(--app-success) 20%, transparent);
+  border-radius: var(--app-radius-card);
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 8%, transparent);
+  font-size: var(--app-text-base);
   line-height: 1.6;
 }
 
 .method-fields {
   margin-top: 12px;
   padding: 14px 14px 1px;
-  border: 1px solid #e2e8f0;
-  border-radius: 15px;
-  background: #f8fafc;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: var(--app-surface-sunken);
 }
 
 .method-fields-title {
@@ -622,7 +641,7 @@ footer {
 
 .method-fields-title strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .bank-grid {
@@ -637,7 +656,7 @@ footer {
 
 .registration-form :deep(.el-form-item__label) {
   color: var(--app-text);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   font-weight: 600;
 }
 
@@ -647,7 +666,7 @@ footer {
   justify-content: space-between;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #e8edf4;
+  border-top: 1px solid var(--app-border-soft);
   gap: 16px;
 }
 
@@ -655,7 +674,7 @@ footer {
   max-width: 390px;
   margin: 0;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.6;
 }
 
@@ -669,20 +688,20 @@ footer {
   width: min(320px, 100%);
   margin: 0 auto 16px;
   padding: 12px 14px;
-  border-radius: 14px;
-  background: #f8fafc;
+  border-radius: var(--app-radius-card);
+  background: var(--app-surface-sunken);
   gap: 8px 20px;
   text-align: left;
 }
 
 .success-summary span {
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .success-summary strong {
   color: var(--app-text);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   text-align: right;
 }
 
@@ -695,7 +714,7 @@ footer {
 footer {
   padding-top: 18px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   text-align: center;
 }
 
@@ -707,12 +726,12 @@ footer {
     --el-font-size-base: 18px;
     --el-font-size-small: 17px;
     --el-font-size-extra-small: 16px;
-    --el-result-title-font-size: 24px;
+    --el-result-title-font-size: var(--app-text-2xl);
     padding: 13px 10px 24px;
   }
 
   .registration-card {
-    border-radius: 18px;
+    border-radius: var(--app-radius-card);
   }
 
   .intro-block {
@@ -749,7 +768,7 @@ footer {
   }
 
   .method-option small {
-    font-size: 13px;
+    font-size: var(--app-text-sm);
     white-space: normal;
   }
 

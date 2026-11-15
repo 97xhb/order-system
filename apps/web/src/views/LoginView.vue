@@ -92,17 +92,27 @@ const submit = async () => {
   padding: 24px;
   place-items: center;
   background:
-    radial-gradient(circle at 20% 10%, rgba(22, 119, 255, 0.18), transparent 38%),
-    linear-gradient(145deg, #0f172a 0%, #172554 48%, #0f172a 100%);
+    radial-gradient(
+      circle at 20% 10%,
+      color-mix(in srgb, var(--app-primary) 14%, transparent),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 84% 82%,
+      color-mix(in srgb, var(--app-purple) 10%, transparent),
+      transparent 40%
+    ),
+    linear-gradient(180deg, var(--app-surface-sunken) 0, var(--app-background) 420px);
 }
 
 .login-panel {
   width: min(430px, 100%);
   padding: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 28px 70px rgba(2, 6, 23, 0.42);
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: var(--app-card);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--app-shadow-pop);
 }
 
 .login-brand,
@@ -120,16 +130,17 @@ const submit = async () => {
   width: 50px;
   height: 50px;
   place-items: center;
-  border-radius: 15px;
-  color: #fff;
-  font-size: 15px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-surface-card);
+  font-size: var(--app-text-base);
   font-weight: 800;
   letter-spacing: 0.04em;
-  background: linear-gradient(145deg, #409eff, #155eef);
+  background: var(--app-primary);
+  box-shadow: 0 6px 16px -8px var(--app-primary);
 }
 
 .brand-mark.is-long {
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   letter-spacing: 0;
 }
 
@@ -138,14 +149,14 @@ const submit = async () => {
 }
 
 .login-brand strong {
-  color: #101828;
-  font-size: 17px;
+  color: var(--app-text-strong);
+  font-size: var(--app-text-md);
 }
 
 .login-brand span {
   margin-top: 2px;
-  color: #98a2b3;
-  font-size: 12px;
+  color: var(--app-text-placeholder);
+  font-size: var(--app-text-xs);
 }
 
 .login-copy {
@@ -153,21 +164,21 @@ const submit = async () => {
 }
 
 .login-copy > span {
-  color: #175cd3;
-  font-size: 13px;
+  color: var(--app-info);
+  font-size: var(--app-text-sm);
   font-weight: 700;
 }
 
 .login-copy h1 {
   margin: 7px 0 5px;
-  color: #101828;
-  font-size: 26px;
+  color: var(--app-text-strong);
+  font-size: var(--app-text-2xl);
 }
 
 .login-copy p,
 .login-note {
-  color: #667085;
-  font-size: 14px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-base);
   line-height: 1.6;
 }
 
@@ -183,7 +194,7 @@ const submit = async () => {
 .login-note {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #eaecf0;
+  border-top: 1px solid var(--app-border);
   text-align: center;
 }
 

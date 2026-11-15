@@ -11,7 +11,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   ExternalIdentityStatus,
   DispatchStatus,
-  FundingType,
   OrderSource,
   PayoutMethodStatus,
   Prisma,
@@ -20,6 +19,7 @@ import {
   SubmitterStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DEFAULT_FUNDING_METHOD_CODE } from '../catalog/funding-methods';
 import {
   assertNicknameCanBeClaimed,
   throwSubmitterNicknameConflict,
@@ -361,46 +361,52 @@ export class PublicFormsService {
 
   async describe(publicToken: string, identity: ResolvedPublicIdentity) {
     const form = await this.getForm(publicToken, true);
-    const [platforms, categories, fullIdentity] = await Promise.all([
-      this.prisma.platform.findMany({
-        where: { enabled: true },
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-        select: { id: true, code: true, name: true },
-      }),
-      this.prisma.category.findMany({
-        where: { enabled: true },
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-        select: { id: true, name: true },
-      }),
-      this.prisma.externalIdentity.findUnique({
-        where: { id: identity.id },
-        include: {
-          submitter: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              nickname: true,
-              payoutMethods: {
-                where: { deletedAt: null },
-                orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
-                select: {
-                  id: true,
-                  type: true,
-                  label: true,
-                  accountName: true,
-                  accountValueEncrypted: true,
-                  bankName: true,
-                  isDefault: true,
-                  status: true,
-                  createdAt: true,
+    const [platforms, categories, fundingMethods, fullIdentity] =
+      await Promise.all([
+        this.prisma.platform.findMany({
+          where: { enabled: true },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          select: { id: true, code: true, name: true },
+        }),
+        this.prisma.category.findMany({
+          where: { enabled: true },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          select: { id: true, name: true },
+        }),
+        this.prisma.fundingMethod.findMany({
+          where: { enabled: true },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          select: { code: true, name: true },
+        }),
+        this.prisma.externalIdentity.findUnique({
+          where: { id: identity.id },
+          include: {
+            submitter: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                nickname: true,
+                payoutMethods: {
+                  where: { deletedAt: null },
+                  orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+                  select: {
+                    id: true,
+                    type: true,
+                    label: true,
+                    accountName: true,
+                    accountValueEncrypted: true,
+                    bankName: true,
+                    isDefault: true,
+                    status: true,
+                    createdAt: true,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-    ]);
+        }),
+      ]);
 
     return {
       identity: {
@@ -432,7 +438,7 @@ export class PublicFormsService {
           defaultValues: form.scheme.defaultValues,
         },
       },
-      options: { platforms, categories },
+      options: { platforms, categories, fundingMethods },
     };
   }
 
@@ -529,8 +535,14 @@ export class PublicFormsService {
             config,
             'fundingType',
             dto.fundingType,
-            FundingType.SELF_PAID,
+            DEFAULT_FUNDING_METHOD_CODE,
           );
+          const fundingMethod = await transaction.fundingMethod.findFirst({
+            where: { code: fundingType, enabled: true },
+            select: { code: true },
+          });
+          const safeFundingType =
+            fundingMethod?.code ?? DEFAULT_FUNDING_METHOD_CODE;
           const order = await transaction.order.create({
             data: {
               source: OrderSource.SHARE,
@@ -576,7 +588,7 @@ export class PublicFormsService {
                 ),
               ),
               receiverName,
-              fundingType,
+              fundingType: safeFundingType,
               orderAmount: this.visibleValue(
                 config,
                 'orderAmount',

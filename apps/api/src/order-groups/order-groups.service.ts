@@ -142,8 +142,14 @@ export class OrderGroupsService {
     if (!group) throw new NotFoundException('归档分组不存在');
 
     const safePage = Math.max(1, Math.floor(page) || 1);
-    const safePageSize = Math.min(200, Math.max(1, Math.floor(pageSize) || 100));
-    const where: Prisma.OrderWhereInput = { archiveGroupId: id, deletedAt: null };
+    const safePageSize = Math.min(
+      200,
+      Math.max(1, Math.floor(pageSize) || 100),
+    );
+    const where: Prisma.OrderWhereInput = {
+      archiveGroupId: id,
+      deletedAt: null,
+    };
 
     const [items, total] = await Promise.all([
       this.prisma.order.findMany({
@@ -210,7 +216,11 @@ export class OrderGroupsService {
     });
   }
 
-  async update(id: string, dto: UpdateOrderGroupDto, admin: AuthenticatedAdmin) {
+  async update(
+    id: string,
+    dto: UpdateOrderGroupDto,
+    admin: AuthenticatedAdmin,
+  ) {
     const existing = await this.prisma.orderArchiveGroup.findUnique({
       where: { id },
       select: { id: true, name: true },
@@ -227,7 +237,9 @@ export class OrderGroupsService {
         data: {
           name: name ?? undefined,
           description:
-            dto.description === undefined ? undefined : this.clean(dto.description),
+            dto.description === undefined
+              ? undefined
+              : this.clean(dto.description),
           color: dto.color === undefined ? undefined : dto.color,
         },
       });

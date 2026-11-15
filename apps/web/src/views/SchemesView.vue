@@ -6,6 +6,7 @@ import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
+import { resolveThemeColor } from '../lib/theme-color';
 import FieldNoteColorPopover from '../components/FieldNoteColorPopover.vue';
 import RichTextEditor from '../components/RichTextEditor.vue';
 
@@ -119,7 +120,7 @@ const fieldModes: Array<{ value: FieldMode; label: string }> = [
   { value: 'READ_ONLY', label: '只读' },
   { value: 'EDITABLE', label: '可填写' },
 ];
-const DEFAULT_FIELD_NOTE_COLOR = '#64748B';
+const DEFAULT_FIELD_NOTE_COLOR = 'var(--app-text-subtle)';
 const fixedRequiredFields = new Set<FieldKey>(['wechatNickname', 'platformId']);
 
 const fieldMode = (key: FieldKey): FieldMode => {
@@ -489,12 +490,19 @@ const shareSchemeLink = async (item: Scheme) => {
 const showQr = async (item: Scheme) => {
   if (!item.shareForm) return;
   qrLink.value = publicLink(item.shareForm.publicToken);
-  qrDataUrl.value = await QRCode.toDataURL(qrLink.value, {
-    width: 320,
-    margin: 2,
-    color: { dark: '#101828', light: '#ffffff' },
-  });
-  qrDialog.value = true;
+  try {
+    qrDataUrl.value = await QRCode.toDataURL(qrLink.value, {
+      width: 320,
+      margin: 2,
+      color: {
+        dark: resolveThemeColor('--app-text-strong'),
+        light: resolveThemeColor('--app-surface-card', '#ffffff'),
+      },
+    });
+    qrDialog.value = true;
+  } catch {
+    ElMessage.error('二维码生成失败，请稍后重试');
+  }
 };
 
 const copyQrLink = async () => {
@@ -1072,7 +1080,7 @@ onBeforeUnmount(() => {
 .scheme-intro p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .scheme-list {
   min-height: 430px;
@@ -1089,7 +1097,7 @@ onBeforeUnmount(() => {
 .scheme-name span,
 .config-title span {
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .scheme-name {
   display: flex;
@@ -1109,10 +1117,10 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   padding: 2px 7px;
   border: 1px solid color-mix(in srgb, var(--app-primary) 18%, var(--app-border));
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-muted);
   background: color-mix(in srgb, var(--app-primary-soft) 32%, var(--app-card-solid));
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
@@ -1122,14 +1130,14 @@ onBeforeUnmount(() => {
 }
 .scheme-content-preview {
   color: var(--app-text);
-  font-size: 12.5px;
+  font-size: var(--app-text-xs);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 .scheme-content-preview.is-expanded {
   padding: 7px 9px;
   border: 1px solid var(--app-border);
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
   background: color-mix(in srgb, var(--app-control) 42%, transparent);
 }
 .scheme-meta-row {
@@ -1140,7 +1148,7 @@ onBeforeUnmount(() => {
 }
 .scheme-meta-row code {
   color: var(--app-muted);
-  font-size: 10.5px;
+  font-size: var(--app-text-micro);
 }
 .scheme-content-toggle {
   padding: 0;
@@ -1149,7 +1157,7 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 650;
 }
 .scheme-content-toggle:hover {
@@ -1167,7 +1175,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 68%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 64%, transparent),
@@ -1183,10 +1191,10 @@ onBeforeUnmount(() => {
   margin: 0 !important;
   padding: 0 8px;
   border: 0 !important;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: color-mix(in srgb, var(--scheme-action-accent) 78%, var(--app-text)) !important;
   background: transparent !important;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 600;
   box-shadow: none !important;
   transition:
@@ -1198,10 +1206,10 @@ onBeforeUnmount(() => {
 .scheme-manage-action:focus {
   color: var(--app-heading) !important;
   background: color-mix(in srgb, var(--scheme-action-accent) 12%, var(--app-card-solid)) !important;
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--scheme-action-accent) 14%, transparent) !important;
+  box-shadow: var(--app-shadow-sm) !important;
 }
 .scheme-manage-action--edit {
-  --scheme-action-accent: #94a3b8;
+  --scheme-action-accent: var(--app-text-placeholder);
 }
 .scheme-manage-action--link {
   --scheme-action-accent: var(--app-primary);
@@ -1238,7 +1246,7 @@ onBeforeUnmount(() => {
 .share-config-card {
   padding: 16px;
   border: 1px solid var(--app-border);
-  border-radius: 18px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 52%, var(--app-card-solid));
   box-shadow: var(--app-shadow-sm);
 }
@@ -1254,10 +1262,10 @@ onBeforeUnmount(() => {
   height: 34px;
   flex: 0 0 34px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 800;
 }
 .share-section-step.is-description {
@@ -1271,25 +1279,25 @@ onBeforeUnmount(() => {
 }
 .share-section-heading strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .share-section-heading small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 11.5px;
+  font-size: var(--app-text-micro);
 }
 .share-config-card :deep(.el-form-item) {
   margin-bottom: 14px;
 }
 .share-config-card :deep(.el-form-item__label) {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
 }
 .share-config-card :deep(.el-input__wrapper),
 .share-config-card :deep(.el-select__wrapper) {
   min-height: 38px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: var(--app-card-solid);
   box-shadow: 0 0 0 1px var(--app-border) inset;
 }
@@ -1304,9 +1312,9 @@ onBeforeUnmount(() => {
 }
 .scheme-description-form-item {
   padding: 13px;
-  border: 1px solid rgba(245, 158, 11, 0.22);
-  border-radius: 16px;
-  background: rgba(255, 251, 235, 0.82);
+  border: 1px solid color-mix(in srgb, var(--app-warning) 22%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-warning-soft) 82%, transparent);
 }
 .scheme-description-form-item :deep(.el-form-item__label) {
   width: 100%;
@@ -1326,13 +1334,13 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 .scheme-description-heading strong {
-  color: #92400e;
-  font-size: 15px;
+  color: var(--app-warning);
+  font-size: var(--app-text-base);
 }
 .scheme-description-heading small {
   margin-top: 2px;
-  color: #b7791f;
-  font-size: 11px;
+  color: var(--app-warning);
+  font-size: var(--app-text-micro);
 }
 .scheme-description-mark {
   display: grid;
@@ -1340,20 +1348,20 @@ onBeforeUnmount(() => {
   height: 30px;
   flex: 0 0 30px;
   place-items: center;
-  border-radius: 10px;
-  color: #b45309;
-  background: #fef3c7;
-  font-size: 13px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-warning);
+  background: var(--app-warning-soft);
+  font-size: var(--app-text-sm);
   font-weight: 800;
 }
 .scheme-description-form-item :deep(.rich-text-field) {
-  border-color: rgba(245, 158, 11, 0.2);
-  background: rgba(255, 255, 255, 0.78);
+  border-color: color-mix(in srgb, var(--app-warning) 20%, transparent);
+  background: color-mix(in srgb, var(--app-surface-card) 78%, transparent);
   box-shadow: none;
 }
 .scheme-description-form-item :deep(.rich-text-toolbar) {
-  border-bottom-color: rgba(245, 158, 11, 0.15);
-  background: rgba(254, 243, 199, 0.58);
+  border-bottom-color: color-mix(in srgb, var(--app-warning) 15%, transparent);
+  background: color-mix(in srgb, var(--app-warning-soft) 58%, transparent);
 }
 .switch-stack {
   width: 100%;
@@ -1367,7 +1375,7 @@ onBeforeUnmount(() => {
   min-height: 44px;
   padding: 7px 10px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: var(--app-card-solid);
   gap: 12px;
 }
@@ -1378,12 +1386,12 @@ onBeforeUnmount(() => {
 }
 .permission-option strong {
   color: var(--app-heading);
-  font-size: 12.5px;
+  font-size: var(--app-text-xs);
 }
 .permission-option small {
   margin-top: 1px;
   color: var(--app-muted);
-  font-size: 10.5px;
+  font-size: var(--app-text-micro);
 }
 .config-title {
   display: flex;
@@ -1417,14 +1425,14 @@ onBeforeUnmount(() => {
 }
 .field-card-copy strong {
   color: var(--app-heading);
-  font-size: 13.5px;
+  font-size: var(--app-text-sm);
 }
 .field-card-copy small {
   display: -webkit-box;
   margin-top: 2px;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 10.5px;
+  font-size: var(--app-text-micro);
   line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1432,10 +1440,10 @@ onBeforeUnmount(() => {
 .field-mode-badge {
   flex: 0 0 auto;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-primary);
   background: var(--app-primary-soft);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   white-space: nowrap;
 }
 .field-mode-options {
@@ -1444,7 +1452,7 @@ onBeforeUnmount(() => {
   margin-top: 9px;
   padding: 3px;
   border: 1px solid var(--app-border);
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 3px;
 }
@@ -1459,8 +1467,8 @@ onBeforeUnmount(() => {
 }
 .field-mode-choice {
   min-height: 28px;
-  border-radius: 8px;
-  font-size: 11px;
+  border-radius: var(--app-radius-control);
+  font-size: var(--app-text-micro);
 }
 .field-mode-choice.is-selected {
   border-color: color-mix(in srgb, var(--app-primary) 36%, var(--app-border));
@@ -1477,8 +1485,8 @@ onBeforeUnmount(() => {
   margin-top: 7px;
   padding: 3px 9px;
   border-color: var(--app-border);
-  border-radius: 999px;
-  font-size: 10.5px;
+  border-radius: var(--app-radius-chip);
+  font-size: var(--app-text-micro);
 }
 .field-required-toggle.is-selected {
   border-color: color-mix(in srgb, var(--app-danger) 38%, var(--app-border));
@@ -1494,7 +1502,7 @@ onBeforeUnmount(() => {
 .field-note-editor > span {
   flex: 0 0 auto;
   color: var(--app-muted);
-  font-size: 10.5px;
+  font-size: var(--app-text-micro);
   font-weight: 650;
 }
 .field-note-editor :deep(.el-input) {
@@ -1529,7 +1537,7 @@ onBeforeUnmount(() => {
 .qr-content img {
   width: min(320px, 80vw);
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: var(--app-card-solid);
 }
 .qr-content p {
@@ -1545,9 +1553,9 @@ onBeforeUnmount(() => {
 :global(.share-config-dialog.el-dialog) {
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 24px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 94%, transparent);
-  box-shadow: 0 28px 80px color-mix(in srgb, var(--app-heading) 18%, transparent);
+  box-shadow: var(--app-shadow-pop);
   backdrop-filter: blur(22px);
 }
 :global(.share-config-dialog .el-dialog__header) {
@@ -1560,7 +1568,7 @@ onBeforeUnmount(() => {
   right: 17px;
   width: 34px;
   height: 34px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
 }
 :global(.share-config-dialog .el-dialog__headerbtn:hover) {
   background: var(--app-hover);
@@ -1578,12 +1586,12 @@ onBeforeUnmount(() => {
 :global(.share-config-dialog .el-dialog__footer .el-button) {
   min-width: 92px;
   min-height: 38px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
 }
 :global(.share-config-dialog .el-dialog__footer .el-button--primary) {
   border: 0;
-  background: linear-gradient(135deg, #60a5fa, #2563eb);
-  box-shadow: 0 9px 22px rgba(37, 99, 235, 0.2);
+  background: linear-gradient(135deg, var(--app-info-border), var(--app-primary));
+  box-shadow: var(--app-shadow-md);
 }
 .share-dialog-heading {
   display: flex;
@@ -1597,11 +1605,11 @@ onBeforeUnmount(() => {
   height: 40px;
   flex: 0 0 40px;
   place-items: center;
-  border-radius: 13px;
-  color: #fff;
-  background: linear-gradient(145deg, #60a5fa, #2563eb);
-  box-shadow: 0 9px 20px rgba(37, 99, 235, 0.2);
-  font-size: 14px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  box-shadow: var(--app-shadow-md);
+  font-size: var(--app-text-base);
   font-weight: 800;
 }
 .share-dialog-copy {
@@ -1612,12 +1620,12 @@ onBeforeUnmount(() => {
 }
 .share-dialog-copy strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 .share-dialog-copy small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 11.5px;
+  font-size: var(--app-text-micro);
 }
 @media (max-width: 700px) {
   .heading-actions {
@@ -1635,7 +1643,7 @@ onBeforeUnmount(() => {
     padding: 14px;
   }
   .scheme-intro p {
-    font-size: 12.5px;
+    font-size: var(--app-text-xs);
     line-height: 1.55;
   }
   .scheme-list {
@@ -1654,7 +1662,7 @@ onBeforeUnmount(() => {
   .scheme-mobile-card {
     overflow: hidden;
     border: 1px solid var(--app-border);
-    border-radius: 16px;
+    border-radius: var(--app-radius-card);
     background: color-mix(in srgb, var(--app-card-solid) 94%, transparent);
     box-shadow: var(--app-shadow-sm);
   }
@@ -1669,7 +1677,7 @@ onBeforeUnmount(() => {
     min-width: 0;
   }
   .scheme-mobile-card .scheme-name strong {
-    font-size: 14px;
+    font-size: var(--app-text-base);
   }
   .scheme-mobile-card .scheme-title-row {
     align-items: flex-start;
@@ -1677,7 +1685,7 @@ onBeforeUnmount(() => {
   .scheme-mobile-card .scheme-content-preview {
     margin-top: 2px;
     color: var(--app-text);
-    font-size: 12.5px;
+    font-size: var(--app-text-xs);
     line-height: 1.5;
   }
   .scheme-mobile-card .scheme-meta-row {
@@ -1685,7 +1693,7 @@ onBeforeUnmount(() => {
   }
   .scheme-mobile-card .scheme-meta-row code {
     color: var(--app-muted);
-    font-size: 10.5px;
+    font-size: var(--app-text-micro);
     overflow-wrap: anywhere;
   }
   .scheme-mobile-stats {
@@ -1706,7 +1714,7 @@ onBeforeUnmount(() => {
     justify-content: center;
     flex-direction: column;
     border: 0;
-    border-radius: 10px;
+    border-radius: var(--app-radius-card);
     color: var(--app-text);
     background: transparent;
     font: inherit;
@@ -1714,15 +1722,15 @@ onBeforeUnmount(() => {
   }
   .scheme-mobile-stats span {
     color: var(--app-muted);
-    font-size: 10px;
+    font-size: var(--app-text-micro);
   }
   .scheme-mobile-stats strong {
     color: var(--app-heading);
-    font-size: 14px;
+    font-size: var(--app-text-base);
   }
   .scheme-mobile-stats small {
     color: var(--app-muted);
-    font-size: 11px;
+    font-size: var(--app-text-micro);
   }
   .scheme-count-button:not(:disabled) {
     color: var(--app-warning);
@@ -1742,7 +1750,7 @@ onBeforeUnmount(() => {
     display: block;
     margin-bottom: 7px;
     color: var(--app-muted);
-    font-size: 10.5px;
+    font-size: var(--app-text-micro);
   }
   .scheme-mobile-action-group > div {
     display: grid;
@@ -1753,7 +1761,7 @@ onBeforeUnmount(() => {
     width: 100%;
     min-width: 0;
     margin-left: 0;
-    border-radius: 10px;
+    border-radius: var(--app-radius-card);
   }
   .scheme-mobile-management {
     display: grid;
@@ -1777,7 +1785,7 @@ onBeforeUnmount(() => {
   }
   .share-config-card {
     padding: 13px;
-    border-radius: 16px;
+    border-radius: var(--app-radius-card);
   }
   .share-dialog-copy small,
   .share-dialog-heading :deep(.el-tag) {

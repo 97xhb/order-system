@@ -32,8 +32,8 @@ const hideRestrictedAdminRoute = computed(
   display: grid;
   min-height: 100vh;
   place-items: center;
-  color: #64748b;
-  background: #f4f7fb;
-  font-size: 14px;
+  color: var(--app-text-subtle);
+  background: var(--app-surface-page);
+  font-size: var(--app-text-base);
 }
 </style>

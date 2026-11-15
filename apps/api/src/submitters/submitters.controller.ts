@@ -83,6 +83,12 @@ export class PayoutMethodsController {
     return this.submitters.getPayoutMethodAccountValue(id);
   }
 
+  @Get(':id/qr-code')
+  @ApiOperation({ summary: '读取回款二维码图片数据' })
+  qrCode(@Param('id') id: string) {
+    return this.submitters.getPayoutMethodQrCode(id);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: '修改下单人的回款方式资料或确认状态' })
   update(

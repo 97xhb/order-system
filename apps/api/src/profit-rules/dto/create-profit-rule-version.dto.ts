@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FundingType, ProfitRuleScope } from '@prisma/client';
+import { ProfitRuleScope } from '@prisma/client';
 import {
   IsBoolean,
   IsEnum,
@@ -30,10 +30,14 @@ export class CreateProfitRuleVersionDto {
   @IsUUID()
   categoryId?: string;
 
-  @ApiPropertyOptional({ enum: FundingType })
+  @ApiPropertyOptional({
+    description:
+      '支付方式 code，来自支付方式目录；scope 为 FUNDING_TYPE 时必填',
+  })
   @IsOptional()
-  @IsEnum(FundingType)
-  fundingType?: FundingType;
+  @IsString()
+  @MaxLength(64)
+  fundingType?: string;
 
   @ApiProperty({
     example: {

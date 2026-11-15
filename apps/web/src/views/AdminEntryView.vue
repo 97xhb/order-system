@@ -49,10 +49,19 @@ onMounted(async () => {
   display: grid;
   min-height: 100vh;
   place-items: center;
-  color: #e2e8f0;
+  color: var(--app-text-body);
   background:
-    radial-gradient(circle at 18% 12%, rgba(59, 130, 246, 0.16), transparent 34%),
-    linear-gradient(145deg, #0f172a, #172554 48%, #111827);
+    radial-gradient(
+      circle at 18% 12%,
+      color-mix(in srgb, var(--app-primary) 14%, transparent),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 82% 86%,
+      color-mix(in srgb, var(--app-purple) 10%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(180deg, var(--app-surface-sunken) 0, var(--app-background) 420px);
   text-align: center;
 }
 
@@ -64,21 +73,21 @@ onMounted(async () => {
 .entry-check-page span {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(96, 165, 250, 0.24);
-  border-top-color: #60a5fa;
+  border: 3px solid color-mix(in srgb, var(--app-primary) 24%, transparent);
+  border-top-color: var(--app-info-border);
   border-radius: 50%;
   animation: rotate 0.75s linear infinite;
 }
 
 .entry-check-page h1 {
   margin: 17px 0 5px;
-  font-size: 20px;
+  font-size: var(--app-text-xl);
 }
 
 .entry-check-page p {
   margin: 0;
-  color: #94a3b8;
-  font-size: 14px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-base);
 }
 
 @keyframes rotate {

@@ -69,10 +69,10 @@ const changeSection = (value: string | number) => {
   height: 42px;
   padding: 0 14px !important;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--app-muted);
   line-height: 40px;
-  font-size: 15px;
+  font-size: var(--app-text-base);
   font-weight: 600;
   transition:
     color 160ms ease,
@@ -128,7 +128,7 @@ const changeSection = (value: string | number) => {
     min-width: 142px;
     flex: 0 0 auto;
     padding-inline: 8px;
-    font-size: 14px;
+    font-size: var(--app-text-base);
   }
 }
 </style>

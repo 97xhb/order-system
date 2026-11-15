@@ -393,6 +393,10 @@ export class PayoutRegistrationService {
         submitter: { select: { code: true, name: true, nickname: true } },
       },
     });
+    const fundingMethods = await this.prisma.fundingMethod.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { code: true, name: true, enabled: true },
+    });
     return {
       enabled: form.lookupEnabled,
       linked: Boolean(currentIdentity?.submitter?.code),
@@ -407,12 +411,16 @@ export class PayoutRegistrationService {
         lockedFields,
       ),
       fieldOptions: publicFieldOptions,
+      fundingMethods,
     };
   }
 
-  private payoutMethodView<T extends { accountValueEncrypted: string | null }>(
-    method: T,
-  ) {
+  private payoutMethodView<
+    T extends {
+      accountValueEncrypted: string | null;
+      qrCodeDataUrl?: string | null;
+    },
+  >(method: T) {
     let accountMasked: string | null = null;
     if (method.accountValueEncrypted) {
       try {
@@ -426,7 +434,12 @@ export class PayoutRegistrationService {
         accountMasked = '加密资料不可读';
       }
     }
-    return { ...method, accountValueEncrypted: undefined, accountMasked };
+    return {
+      ...method,
+      accountValueEncrypted: undefined,
+      accountMasked,
+      qrCodeDataUrl: method.qrCodeDataUrl ?? null,
+    };
   }
 
   async lookup(
@@ -504,6 +517,7 @@ export class PayoutRegistrationService {
           accountName: true,
           accountValueEncrypted: true,
           bankName: true,
+          qrCodeDataUrl: true,
           isDefault: true,
           status: true,
           updatedAt: true,
@@ -709,7 +723,7 @@ export class PayoutRegistrationService {
       return {
         type: method.type,
         label: this.methodLabel(method.type),
-        accountName: null,
+        accountName,
         accountValueEncrypted: encryptSensitiveValue(
           accountValue,
           this.encryptionKey(),

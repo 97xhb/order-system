@@ -2,6 +2,7 @@
 import { Minus, Picture } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { nextTick, onMounted, ref, watch } from 'vue';
+import { compressImageToDataUrl } from '../lib/image-compress';
 import { TEXT_COLOR_PRESETS } from '../lib/text-colors';
 import TextColorPalette from './TextColorPalette.vue';
 
@@ -169,48 +170,6 @@ const handleEditorInput = () => {
   emitContent();
 };
 
-const loadImage = (file: File) =>
-  new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    image.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(image);
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('图片读取失败，请更换图片后重试'));
-    };
-    image.src = objectUrl;
-  });
-
-const compressImage = async (file: File) => {
-  const image = await loadImage(file);
-  const sourceWidth = image.naturalWidth;
-  const sourceHeight = image.naturalHeight;
-  if (!sourceWidth || !sourceHeight) throw new Error('无法识别图片尺寸');
-
-  const maxEdge = 1_600;
-  const maxDataUrlLength = 180_000;
-  let scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
-  let quality = 0.82;
-
-  for (let attempt = 0; attempt < 7; attempt += 1) {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
-    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('浏览器无法处理这张图片');
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/webp', quality);
-    if (dataUrl.length <= maxDataUrlLength) return dataUrl;
-    scale *= 0.82;
-    quality = Math.max(0.45, quality - 0.07);
-  }
-
-  throw new Error('图片压缩后仍然过大，请选择更小的图片');
-};
-
 const insertImage = (dataUrl: string) => {
   const element = editor.value;
   if (!element) return;
@@ -283,18 +242,10 @@ const handleImageSelected = async (event: Event) => {
   const file = input.files?.[0];
   input.value = '';
   if (!file) return;
-  if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
-    ElMessage.warning('仅支持 PNG、JPG 或 WebP 图片');
-    return;
-  }
-  if (file.size > 15 * 1024 * 1024) {
-    ElMessage.warning('原始图片不能超过 15MB');
-    return;
-  }
 
   imageUploading.value = true;
   try {
-    insertImage(await compressImage(file));
+    insertImage(await compressImageToDataUrl(file));
     ElMessage.success('图片已插入');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '图片处理失败');
@@ -478,9 +429,9 @@ onMounted(() => nextTick(renderValue));
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 15px;
+  border-radius: var(--app-radius-card);
   background: var(--app-card-solid);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--app-heading) 5%, transparent);
+  box-shadow: var(--app-shadow-md);
 }
 .rich-text-toolbar {
   display: flex;
@@ -497,12 +448,12 @@ onMounted(() => nextTick(renderValue));
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: var(--app-text);
   background: var(--app-card-solid);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .rich-tool-button:hover {
   border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
@@ -557,7 +508,7 @@ onMounted(() => nextTick(renderValue));
 .rich-image-size-value {
   flex: 0 0 auto;
   color: var(--app-text-secondary);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .rich-image-size-value {
   min-width: 38px;
@@ -570,12 +521,12 @@ onMounted(() => nextTick(renderValue));
   height: 28px;
   padding: 0 9px;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: var(--app-text);
   background: var(--app-card-solid);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .rich-image-size-reset:hover {
   border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
@@ -603,7 +554,7 @@ onMounted(() => nextTick(renderValue));
   padding: 0 0 4px;
 }
 .rich-color-letter {
-  font-size: 15px;
+  font-size: var(--app-text-base);
   font-weight: 800;
   line-height: 1;
 }
@@ -613,7 +564,7 @@ onMounted(() => nextTick(renderValue));
   bottom: 4px;
   left: 6px;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   background: var(--rich-color-current);
 }
 .rich-color-picker-panel {
@@ -629,11 +580,11 @@ onMounted(() => nextTick(renderValue));
 }
 .rich-color-picker-heading strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .rich-color-picker-heading span {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-variant-numeric: tabular-nums;
 }
 .rich-text-editor {
@@ -643,7 +594,7 @@ onMounted(() => nextTick(renderValue));
   padding: 10px 12px;
   color: var(--app-text);
   outline: none;
-  font-size: 14px;
+  font-size: var(--app-text-base);
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -652,7 +603,7 @@ onMounted(() => nextTick(renderValue));
   max-width: 100%;
   height: auto;
   margin: 10px 0;
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
 }
 .rich-text-editor :deep(img.is-image-selected) {
   outline: 3px solid color-mix(in srgb, var(--app-primary) 72%, transparent);
@@ -672,7 +623,7 @@ onMounted(() => nextTick(renderValue));
 .rich-text-counter {
   padding: 4px 10px 6px;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   text-align: right;
 }
 .rich-text-counter.is-over-limit {

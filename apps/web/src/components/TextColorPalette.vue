@@ -60,18 +60,18 @@ const emit = defineEmits<{
   place-items: center;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--choice-color) 74%, var(--app-border));
-  border-radius: 7px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
   background: var(--choice-color);
   cursor: pointer;
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--app-card-solid) 24%, transparent);
 }
 .text-color-choice > span {
-  color: #fff;
-  font-size: 11px;
+  color: var(--app-surface-card);
+  font-size: var(--app-text-micro);
   font-weight: 800;
   opacity: 0;
-  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.46);
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--app-text-strong) 46%, transparent);
 }
 .text-color-choice:hover {
   transform: translateY(-1px);
@@ -91,7 +91,7 @@ const emit = defineEmits<{
   border-color: var(--app-border);
   color: var(--app-text);
   background: var(--app-control);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 650;
 }
 </style>

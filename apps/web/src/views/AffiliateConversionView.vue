@@ -14,6 +14,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
+import { resolveThemeColor } from '../lib/theme-color';
 
 interface AffiliatePlatformItem {
   code: string;
@@ -229,7 +230,10 @@ const showConversionQr = async () => {
       width: 280,
       margin: 2,
       errorCorrectionLevel: 'M',
-      color: { dark: '#101828', light: '#ffffff' },
+      color: {
+        dark: resolveThemeColor('--app-text-strong'),
+        light: resolveThemeColor('--app-surface-card', '#ffffff'),
+      },
     });
   } catch {
     ElMessage.error('二维码生成失败，请稍后重试');
@@ -699,9 +703,9 @@ onMounted(() => void load());
   height: 42px;
   flex: 0 0 42px;
   place-items: center;
-  border-radius: 14px;
-  color: #7c3aed;
-  background: rgba(124, 58, 237, 0.11);
+  border-radius: var(--app-radius-card);
+  color: var(--app-purple);
+  background: color-mix(in srgb, var(--app-purple) 11%, transparent);
 }
 
 .status-icon svg {
@@ -716,13 +720,13 @@ onMounted(() => void load());
 
 .status-title strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 
 .status-copy p {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .status-actions {
@@ -736,39 +740,40 @@ onMounted(() => void load());
   display: inline-flex;
   padding: 3px;
   border: 1px solid var(--app-border);
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 4px;
 }
 
 .platform-switch-option {
   padding: 7px 12px;
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-xs);
 }
 
 .config-shortcut {
   display: flex;
-  min-width: 92px;
-  padding: 9px 12px;
+  min-width: 0;
+  align-items: center;
+  padding: 9px 14px;
   border: 1px solid var(--app-border);
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
   background: var(--app-hover);
   cursor: pointer;
-  flex-direction: column;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .config-shortcut span {
   color: var(--app-primary);
-  font-size: 16px;
+  font-size: var(--app-text-md);
   font-weight: 750;
 }
 
 .config-shortcut small {
-  margin-top: 2px;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
 }
 
 .conversion-workbench {
@@ -793,9 +798,9 @@ onMounted(() => void load());
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 12px;
-  color: #7c3aed;
-  background: rgba(124, 58, 237, 0.12);
+  border-radius: var(--app-radius-card);
+  color: var(--app-purple);
+  background: color-mix(in srgb, var(--app-purple) 12%, transparent);
 }
 
 .conversion-heading svg {
@@ -807,13 +812,13 @@ onMounted(() => void load());
 .conversion-panel-heading strong,
 .conversion-result-heading strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .conversion-heading p {
   margin: 2px 0 0;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.6;
 }
 
@@ -830,7 +835,7 @@ onMounted(() => void load());
   min-width: 0;
   padding: 14px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-card-solid) 92%, transparent);
   flex-direction: column;
 }
@@ -856,16 +861,16 @@ onMounted(() => void load());
   height: 31px;
   flex: 0 0 31px;
   place-items: center;
-  border-radius: 10px;
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.11);
-  font-size: 11px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 11%, transparent);
+  font-size: var(--app-text-micro);
   font-weight: 750;
 }
 
 .conversion-result-heading > div > span {
-  color: #059669;
-  background: rgba(16, 185, 129, 0.11);
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 11%, transparent);
 }
 
 .conversion-panel-heading > div > div,
@@ -879,7 +884,7 @@ onMounted(() => void load());
 .conversion-result-heading small {
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -913,7 +918,7 @@ onMounted(() => void load());
 .conversion-input-actions > span,
 .conversion-result-meta {
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
 }
 
 .conversion-input-actions :deep(.el-button) {
@@ -921,8 +926,12 @@ onMounted(() => void load());
 }
 
 .conversion-result-card {
-  border-color: rgba(16, 185, 129, 0.24);
-  background: color-mix(in srgb, rgba(16, 185, 129, 0.08) 68%, var(--app-card-solid));
+  border-color: color-mix(in srgb, var(--app-success) 24%, transparent);
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--app-success) 8%, transparent) 68%,
+    var(--app-card-solid)
+  );
 }
 
 .conversion-result-card.is-empty {
@@ -945,7 +954,7 @@ onMounted(() => void load());
   overflow: hidden;
   max-width: 100%;
   padding: 4px 7px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   background: var(--app-hover);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -964,17 +973,17 @@ onMounted(() => void load());
   align-items: flex-start;
   padding: 7px 9px;
   border: 1px solid var(--app-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
   gap: 8px;
   background: color-mix(in srgb, var(--app-hover) 60%, var(--app-card-solid));
 }
 
 .conversion-entry.is-ok {
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: color-mix(in srgb, var(--app-success) 30%, transparent);
 }
 
 .conversion-entry.is-failed {
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: color-mix(in srgb, var(--app-danger) 30%, transparent);
 }
 
 .conversion-entry-index {
@@ -982,7 +991,7 @@ onMounted(() => void load());
   min-width: 18px;
   padding-top: 1px;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   font-weight: 600;
 }
 
@@ -996,7 +1005,7 @@ onMounted(() => void load());
   display: flex;
   align-items: center;
   color: var(--app-heading);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 600;
   gap: 6px;
   line-height: 1.5;
@@ -1006,14 +1015,14 @@ onMounted(() => void load());
 .conversion-entry-reason {
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   line-height: 1.55;
   text-overflow: ellipsis;
   word-break: break-all;
 }
 
 .conversion-entry-reason {
-  color: #ef4444;
+  color: var(--app-danger);
 }
 
 .conversion-empty-state {
@@ -1034,8 +1043,8 @@ onMounted(() => void load());
   height: 48px;
   margin-bottom: 10px;
   place-items: center;
-  border-radius: 16px;
-  color: #64748b;
+  border-radius: var(--app-radius-card);
+  color: var(--app-text-subtle);
   background: color-mix(in srgb, var(--app-hover) 78%, transparent);
 }
 
@@ -1046,14 +1055,14 @@ onMounted(() => void load());
 
 .conversion-empty-state strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .conversion-empty-state p {
   max-width: 310px;
   margin: 5px 0 0;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   line-height: 1.65;
 }
 
@@ -1063,9 +1072,13 @@ onMounted(() => void load());
   align-items: center;
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid rgba(16, 185, 129, 0.22);
-  border-radius: 14px;
-  background: color-mix(in srgb, rgba(16, 185, 129, 0.07) 68%, var(--app-card-solid));
+  border: 1px solid color-mix(in srgb, var(--app-success) 22%, transparent);
+  border-radius: var(--app-radius-card);
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--app-success) 7%, transparent) 68%,
+    var(--app-card-solid)
+  );
   gap: 12px;
 }
 
@@ -1075,9 +1088,9 @@ onMounted(() => void load());
   height: 118px;
   flex: 0 0 118px;
   padding: 7px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  border-radius: var(--app-radius-card);
+  background: var(--app-surface-card);
+  box-shadow: var(--app-shadow-md);
   box-sizing: border-box;
 }
 
@@ -1089,14 +1102,14 @@ onMounted(() => void load());
 
 .conversion-inline-qr strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .conversion-inline-qr p,
 .conversion-inline-qr small {
   margin: 4px 0 0;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   line-height: 1.6;
 }
 
@@ -1104,7 +1117,7 @@ onMounted(() => void load());
   overflow: hidden;
   max-width: 100%;
   padding: 5px 7px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   background: var(--app-hover);
   overflow-wrap: anywhere;
 }
@@ -1131,9 +1144,9 @@ onMounted(() => void load());
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 12px;
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.11);
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 11%, transparent);
 }
 
 .history-heading svg {
@@ -1143,13 +1156,13 @@ onMounted(() => void load());
 
 .history-heading strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .history-heading p {
   margin: 2px 0 0;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .history-actions,
@@ -1161,11 +1174,11 @@ onMounted(() => void load());
   display: inline-flex;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 62%, transparent),
-    0 1px 3px rgba(15, 23, 42, 0.04);
+    0 1px 3px color-mix(in srgb, var(--app-text-strong) 4%, transparent);
 }
 
 .history-row-actions :deep(.el-button + .el-button) {
@@ -1177,10 +1190,10 @@ onMounted(() => void load());
   margin: 0;
   padding: 0 9px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
   box-shadow: none;
   transition:
@@ -1191,7 +1204,7 @@ onMounted(() => void load());
 
 .history-row-action :deep(.el-icon) {
   margin-right: 4px;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .history-row-action--copy {
@@ -1202,7 +1215,7 @@ onMounted(() => void load());
 .history-row-action--copy:focus {
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary-soft) 58%, var(--app-card-solid));
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--app-primary) 12%, transparent);
+  box-shadow: var(--app-shadow-sm);
 }
 
 .history-row-action--delete {
@@ -1213,7 +1226,7 @@ onMounted(() => void load());
 .history-row-action--delete:focus {
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 10%, var(--app-card-solid));
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--app-danger) 12%, transparent);
+  box-shadow: var(--app-shadow-sm);
 }
 
 .history-table {
@@ -1226,14 +1239,14 @@ onMounted(() => void load());
 
 .history-time {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .history-text {
   display: -webkit-box;
   overflow: hidden;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1247,7 +1260,7 @@ onMounted(() => void load());
 
 .history-error {
   color: var(--app-danger);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .history-pagination {
@@ -1260,7 +1273,7 @@ onMounted(() => void load());
   justify-content: space-between;
   padding: 16px 18px;
   color: var(--app-danger);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 @media (max-width: 980px) {

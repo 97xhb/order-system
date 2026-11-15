@@ -8,13 +8,11 @@ import {
   MagicStick,
   Menu,
   Money,
-  Moon,
   Setting,
-  Sunny,
   Tools,
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { APP_BUILD_TIME, APP_VERSION } from '../lib/app-version';
@@ -28,9 +26,6 @@ const auth = useAuthStore();
 const system = useSystemStore();
 const collapsed = ref(false);
 const mobileMenuVisible = ref(false);
-const theme = ref<'light' | 'dark'>(
-  localStorage.getItem('order-system:theme') === 'dark' ? 'dark' : 'light',
-);
 const passwordDialogVisible = ref(false);
 const changingPassword = ref(false);
 const MIN_ADMIN_PASSWORD_LENGTH = 6;
@@ -48,7 +43,6 @@ const activeMenu = computed(() =>
       ? '/admin/system-settings'
       : route.path,
 );
-const isDark = computed(() => theme.value === 'dark');
 const buildDate = APP_BUILD_TIME.slice(0, 10);
 const navigationItems = [
   { path: '/admin/dashboard', label: '业务总览', icon: DataAnalysis },
@@ -59,23 +53,6 @@ const navigationItems = [
   { path: '/admin/settings', label: '基础设置', icon: Setting },
   { path: '/admin/system-settings', label: '系统设置', icon: Tools },
 ];
-
-const applyTheme = (value: 'light' | 'dark') => {
-  document.documentElement.classList.toggle('dark', value === 'dark');
-  document.documentElement.dataset.theme = value;
-  // VXE UI uses its own theme selector. Keep it in sync with the app theme
-  // so table borders, backgrounds, scrollbars and text do not fall back to
-  // the light palette while the rest of the application is dark.
-  document.documentElement.setAttribute('data-vxe-ui-theme', value);
-  localStorage.setItem('order-system:theme', value);
-};
-
-applyTheme(theme.value);
-watch(theme, applyTheme);
-
-const toggleTheme = () => {
-  theme.value = isDark.value ? 'light' : 'dark';
-};
 
 const handleMenuSelect = (path: string) => {
   mobileMenuVisible.value = false;
@@ -143,8 +120,8 @@ const changePassword = async () => {
         :collapse="collapsed"
         :collapse-transition="false"
         background-color="transparent"
-        text-color="#98a2b3"
-        active-text-color="#ffffff"
+        text-color="var(--app-text-placeholder)"
+        active-text-color="var(--app-surface-card)"
         @select="handleMenuSelect"
       >
         <el-menu-item v-for="item in navigationItems" :key="item.path" :index="item.path">
@@ -179,16 +156,6 @@ const changePassword = async () => {
           <span class="version-chip" :title="`构建时间 ${APP_BUILD_TIME}`">
             v{{ APP_VERSION }} <small>{{ buildDate }}</small>
           </span>
-          <el-tooltip :content="isDark ? '切换为亮色' : '切换为暗色'" placement="bottom">
-            <button
-              class="icon-chip"
-              type="button"
-              :aria-label="isDark ? '切换为亮色' : '切换为暗色'"
-              @click="toggleTheme"
-            >
-              <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
-            </button>
-          </el-tooltip>
           <el-dropdown trigger="click" @command="handleAdminCommand">
             <button class="admin-chip" type="button">
               <span class="admin-avatar">{{ (auth.user?.displayName ?? '管').slice(0, 1) }}</span>
@@ -233,8 +200,8 @@ const changePassword = async () => {
         <el-menu
           :default-active="activeMenu"
           background-color="transparent"
-          text-color="#98a2b3"
-          active-text-color="#ffffff"
+          text-color="var(--app-text-placeholder)"
+          active-text-color="var(--app-surface-card)"
           @select="handleMenuSelect"
         >
           <el-menu-item v-for="item in navigationItems" :key="item.path" :index="item.path">
@@ -297,10 +264,10 @@ const changePassword = async () => {
   position: sticky;
   top: 0;
   display: flex;
-  flex: 0 0 218px;
+  flex: 0 0 212px;
   flex-direction: column;
   height: 100vh;
-  padding: 14px 10px;
+  padding: 12px 10px;
   overflow: hidden;
   border-right: 1px solid var(--app-border);
   color: var(--app-text);
@@ -316,29 +283,31 @@ const changePassword = async () => {
 .brand {
   display: flex;
   align-items: center;
-  min-height: 58px;
-  padding: 0 8px 14px;
-  gap: 11px;
+  min-height: 50px;
+  padding: 0 6px 12px;
+  gap: 10px;
 }
 
 .brand-mark {
   display: grid;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
   place-items: center;
-  border-radius: 14px;
-  color: #fff;
-  font-size: 14px;
+  border-radius: var(--app-radius-control);
+  color: var(--app-surface-card);
+  font-size: var(--app-text-micro);
   font-weight: 800;
-  letter-spacing: 0.04em;
-  background: linear-gradient(145deg, #60a5fa, #2563eb);
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22);
+  letter-spacing: 0.02em;
+  background: var(--app-primary);
+  box-shadow:
+    0 8px 18px -8px color-mix(in srgb, var(--app-primary) 46%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--app-surface-card) 26%, transparent);
 }
 
 .brand-mark.is-long {
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   letter-spacing: 0;
 }
 
@@ -355,15 +324,16 @@ const changePassword = async () => {
 
 .brand-copy strong {
   color: var(--app-heading);
-  font-size: 16px;
+  font-size: var(--app-text-base);
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .brand-copy span {
   margin-top: 3px;
   color: var(--app-muted);
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  font-size: var(--app-text-micro);
+  letter-spacing: 0.14em;
 }
 
 .sidebar :deep(.el-menu) {
@@ -372,9 +342,10 @@ const changePassword = async () => {
 }
 
 .sidebar :deep(.el-menu-item) {
-  height: 43px;
-  margin: 3px 0;
-  border-radius: 12px;
+  height: 36px;
+  margin: 2px 0;
+  border-radius: var(--app-radius-control);
+  font-size: var(--app-text-sm);
   color: var(--app-muted) !important;
 }
 
@@ -385,7 +356,12 @@ const changePassword = async () => {
 
 .sidebar :deep(.el-menu-item.is-active) {
   color: var(--app-primary) !important;
-  background: var(--app-primary-soft);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--app-primary) 13%, transparent),
+    color-mix(in srgb, var(--app-primary) 3%, transparent)
+  );
+  box-shadow: inset 2px 0 0 var(--app-primary);
   font-weight: 600;
 }
 
@@ -393,13 +369,13 @@ const changePassword = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 40px;
+  height: 32px;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
   background: var(--app-hover);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--app-text-xs);
   gap: 8px;
 }
 
@@ -407,7 +383,13 @@ const changePassword = async () => {
   min-width: 0;
   flex: 1;
   background:
-    radial-gradient(circle at 85% -10%, var(--app-glow), transparent 30%), var(--app-background);
+    radial-gradient(900px 420px at 88% -12%, var(--app-glow), transparent 62%),
+    radial-gradient(
+      760px 380px at 12% -8%,
+      color-mix(in srgb, var(--app-primary) 9%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(180deg, var(--app-surface-sunken) 0, var(--app-background) 240px);
 }
 
 .topbar {
@@ -417,8 +399,8 @@ const changePassword = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
-  padding: 0 22px;
+  height: 56px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--app-border);
   background: var(--app-topbar);
   backdrop-filter: blur(22px) saturate(140%);
@@ -439,7 +421,7 @@ const changePassword = async () => {
 
 .topbar-eyebrow {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .topbar-eyebrow i {
   margin: 0 5px;
@@ -450,7 +432,7 @@ const changePassword = async () => {
 .topbar strong {
   margin-top: 2px;
   color: var(--app-heading);
-  font-size: 16px;
+  font-size: var(--app-text-base);
 }
 
 .topbar-actions,
@@ -463,16 +445,16 @@ const changePassword = async () => {
 }
 .version-chip {
   display: flex;
-  min-height: 38px;
+  min-height: 34px;
   flex-direction: column;
   justify-content: center;
   padding: 5px 10px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-control);
   color: var(--app-heading);
   background: var(--app-control);
   box-shadow: var(--app-shadow-sm);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 700;
   line-height: 1.15;
   white-space: nowrap;
@@ -480,24 +462,24 @@ const changePassword = async () => {
 .version-chip small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 9px;
+  font-size: var(--app-text-micro);
   font-weight: 500;
 }
 .icon-chip,
 .admin-chip {
-  padding: 7px 11px;
+  padding: 6px 10px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-control);
   color: var(--app-text);
   background: var(--app-control);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--app-text-base);
   box-shadow: var(--app-shadow-sm);
 }
 .icon-chip {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   place-items: center;
 }
@@ -513,15 +495,15 @@ const changePassword = async () => {
   width: 24px;
   height: 24px;
   place-items: center;
-  border-radius: 8px;
-  color: #fff;
-  background: #3b82f6;
-  font-size: 12px;
+  border-radius: var(--app-radius-control);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  font-size: var(--app-text-xs);
   font-weight: 700;
 }
 
 .content {
-  padding: 20px 22px 38px;
+  padding: 16px 20px 32px;
 }
 
 @media (max-width: 900px) {
@@ -580,7 +562,7 @@ const changePassword = async () => {
     max-width: 36vw;
     margin-top: 0;
     overflow: hidden;
-    font-size: 15px;
+    font-size: var(--app-text-base);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -617,7 +599,7 @@ const changePassword = async () => {
 :global(.mobile-nav-drawer.el-drawer) {
   border-right: 1px solid var(--app-border);
   background: color-mix(in srgb, var(--app-sidebar) 96%, var(--app-card-solid));
-  box-shadow: 20px 0 54px rgba(15, 23, 42, 0.2);
+  box-shadow: var(--app-shadow-pop);
   backdrop-filter: blur(24px) saturate(140%);
 }
 
@@ -643,7 +625,7 @@ const changePassword = async () => {
 .mobile-drawer-shell :deep(.el-menu-item) {
   height: 46px;
   margin: 4px 0;
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   color: var(--app-muted) !important;
 }
 

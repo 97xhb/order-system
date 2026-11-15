@@ -72,6 +72,6 @@ describe('payout query field permissions', () => {
     expect(
       ORDER_TABLE_FIELD_DEFINITIONS.find((field) => field.key === 'serialNo')
         ?.width,
-    ).toBe(96);
+    ).toBe(72);
   });
 });

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DispatchStatus, FundingType } from '@prisma/client';
+import { DispatchStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -97,11 +97,17 @@ export class CreateAdminOrderDto {
   @Matches(/^#[0-9a-fA-F]{6}$/)
   textColor?: string | null;
 
-  @ApiProperty({ enum: FundingType })
-  @IsEnum(FundingType)
-  fundingType!: FundingType;
+  @ApiProperty({
+    example: 'SELF_PAID',
+    description: '支付方式 code，来自基础设置的支付方式目录',
+  })
+  @IsString()
+  @MaxLength(64)
+  fundingType!: string;
 
-  @ApiPropertyOptional({ description: '支付方式选择“其他”时填写的具体说明' })
+  @ApiPropertyOptional({
+    description: '支付方式选择“其他付款”时填写的具体说明',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)

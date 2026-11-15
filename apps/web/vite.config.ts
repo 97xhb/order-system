@@ -6,9 +6,9 @@ import { defineConfig, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
 const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
-const rootPackage = JSON.parse(
-  readFileSync(path.join(workspaceRoot, 'package.json'), 'utf8'),
-) as { version?: string };
+const rootPackage = JSON.parse(readFileSync(path.join(workspaceRoot, 'package.json'), 'utf8')) as {
+  version?: string;
+};
 const appVersion = rootPackage.version ?? '0.0.0';
 const appBuildTime = new Date().toISOString();
 const webRestartTriggerPath = fileURLToPath(

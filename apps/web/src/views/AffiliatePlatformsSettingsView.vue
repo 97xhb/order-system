@@ -543,9 +543,9 @@ onMounted(() => void load());
   flex: 0 0 46px;
   height: 46px;
   place-items: center;
-  border-radius: 16px;
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.12);
+  border-radius: var(--app-radius-card);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
 }
 
 .overview-icon :deep(svg),
@@ -561,7 +561,7 @@ onMounted(() => void load());
 
 .overview-title-row strong {
   color: var(--app-heading);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 
 .overview-copy p,
@@ -572,7 +572,7 @@ onMounted(() => void load());
 .config-actions span {
   margin: 3px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.65;
 }
 
@@ -580,7 +580,7 @@ onMounted(() => void load());
   flex: 0 0 auto;
   padding: 8px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 5px;
 }
@@ -591,19 +591,19 @@ onMounted(() => void load());
   flex-direction: column;
   align-items: center;
   padding: 5px 10px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
 }
 
 .overview-stats b {
   color: var(--app-heading);
-  font-size: 18px;
+  font-size: var(--app-text-lg);
   font-variant-numeric: tabular-nums;
 }
 
 .overview-stats small {
   margin-top: 1px;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
 }
 
 .affiliate-selection-card,
@@ -627,10 +627,10 @@ onMounted(() => void load());
   height: 31px;
   flex: 0 0 31px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 800;
 }
 
@@ -640,7 +640,7 @@ onMounted(() => void load());
 .credential-section-heading strong,
 .config-actions strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .provider-type-options {
@@ -649,7 +649,7 @@ onMounted(() => void load());
   margin-top: 15px;
   padding: 5px;
   border: 1px solid var(--app-border);
-  border-radius: 17px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 5px;
 }
@@ -660,7 +660,7 @@ onMounted(() => void load());
   align-items: center;
   padding: 11px 12px;
   border: 1px solid transparent;
-  border-radius: 13px;
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
   background: transparent;
   text-align: left;
@@ -670,16 +670,16 @@ onMounted(() => void load());
 }
 
 .provider-type-option:hover {
-  border-color: rgba(59, 130, 246, 0.25);
+  border-color: color-mix(in srgb, var(--app-primary) 25%, transparent);
   background: var(--app-control);
   transform: translateY(-1px);
 }
 
 .provider-type-option.is-selected {
-  border-color: rgba(59, 130, 246, 0.42);
+  border-color: color-mix(in srgb, var(--app-primary) 42%, transparent);
   color: var(--app-primary);
   background: var(--app-card-solid);
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.1);
+  box-shadow: var(--app-shadow-md);
 }
 
 .provider-type-option > span {
@@ -688,10 +688,10 @@ onMounted(() => void load());
   height: 34px;
   flex: 0 0 34px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 800;
 }
 
@@ -706,14 +706,14 @@ onMounted(() => void load());
 
 .provider-type-option b {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .provider-type-option small {
   margin-top: 2px;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -727,7 +727,7 @@ onMounted(() => void load());
 
 .provider-list-heading span {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .provider-grid {
@@ -744,7 +744,7 @@ onMounted(() => void load());
   min-height: 156px;
   padding: 13px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-card);
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
   text-align: left;
@@ -753,15 +753,15 @@ onMounted(() => void load());
 }
 
 .provider-card:hover {
-  border-color: rgba(59, 130, 246, 0.34);
+  border-color: color-mix(in srgb, var(--app-primary) 34%, transparent);
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--app-shadow-md);
 }
 
 .provider-card.is-selected {
-  border-color: rgba(59, 130, 246, 0.54);
+  border-color: color-mix(in srgb, var(--app-primary) 54%, transparent);
   background: color-mix(in srgb, var(--app-primary-soft) 70%, var(--app-card-solid));
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-primary) 8%, transparent);
 }
 
 .provider-card-top {
@@ -776,10 +776,10 @@ onMounted(() => void load());
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 800;
 }
 
@@ -792,7 +792,7 @@ onMounted(() => void load());
 
 .provider-card > strong {
   color: var(--app-heading);
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .provider-card p {
@@ -808,10 +808,10 @@ onMounted(() => void load());
 
 .supported-platforms span {
   padding: 3px 7px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
   background: var(--app-hover);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
 }
 
 .config-heading {
@@ -830,7 +830,7 @@ onMounted(() => void load());
   flex: 0 0 auto;
   padding: 9px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 16px;
 }
@@ -842,23 +842,23 @@ onMounted(() => void load());
 
 .enabled-switch-card b {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .enabled-switch-card span {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
 }
 
 .credential-warning {
   margin-top: 13px;
   padding: 9px 11px;
-  border: 1px solid rgba(245, 158, 11, 0.22);
-  border-radius: 11px;
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.09);
-  font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--app-warning) 22%, transparent);
+  border-radius: var(--app-radius-card);
+  color: var(--app-warning);
+  background: color-mix(in srgb, var(--app-warning) 9%, transparent);
+  font-size: var(--app-text-xs);
 }
 
 .affiliate-config-form {
@@ -882,7 +882,7 @@ onMounted(() => void load());
 
 .affiliate-config-form :deep(.el-form-item__label) {
   color: var(--app-text);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 650;
 }
 
@@ -897,7 +897,7 @@ onMounted(() => void load());
   margin: 2px 0 14px;
   padding: 12px 13px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
 }
 
@@ -910,13 +910,13 @@ onMounted(() => void load());
 
 .token-source-head strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .token-source-head p {
   margin: 3px 0 0;
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .token-source-options {
@@ -927,8 +927,8 @@ onMounted(() => void load());
 
 .token-source-option {
   padding: 6px 12px;
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: var(--app-radius-card);
+  font-size: var(--app-text-xs);
 }
 
 .token-endpoint-row {
@@ -963,7 +963,7 @@ onMounted(() => void load());
   margin: 2px 0 13px;
   padding: 11px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 12px;
 }
@@ -977,9 +977,9 @@ onMounted(() => void load());
   width: 31px;
   height: 31px;
   place-items: center;
-  border-radius: 10px;
-  color: #7c3aed;
-  background: rgba(124, 58, 237, 0.11);
+  border-radius: var(--app-radius-card);
+  color: var(--app-purple);
+  background: color-mix(in srgb, var(--app-purple) 11%, transparent);
 }
 
 .credential-section-heading svg,
@@ -990,23 +990,23 @@ onMounted(() => void load());
 
 .secure-label {
   flex: 0 0 auto;
-  color: #059669;
-  font-size: 11px;
+  color: var(--app-success);
+  font-size: var(--app-text-micro);
   gap: 4px;
 }
 
 .configured-field-hint {
   width: 100%;
   margin-top: 3px;
-  color: #059669;
-  font-size: 10px;
+  color: var(--app-success);
+  font-size: var(--app-text-micro);
 }
 
 .protocol-field-hint {
   width: 100%;
   margin-top: 4px;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   line-height: 1.55;
 }
 
@@ -1037,7 +1037,7 @@ onMounted(() => void load());
   justify-content: space-between;
   padding: 16px 18px;
   color: var(--app-danger);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 @media (max-width: 980px) {

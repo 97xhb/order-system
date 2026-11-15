@@ -87,21 +87,30 @@ onBeforeUnmount(() => {
   padding: 22px;
   place-items: center;
   background:
-    radial-gradient(circle at 18% 12%, rgba(59, 130, 246, 0.2), transparent 34%),
-    linear-gradient(145deg, #0f172a, #172554 48%, #111827);
+    radial-gradient(
+      circle at 18% 12%,
+      color-mix(in srgb, var(--app-primary) 14%, transparent),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 82% 86%,
+      color-mix(in srgb, var(--app-purple) 10%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(180deg, var(--app-surface-sunken) 0, var(--app-background) 420px);
 }
 
 .access-denied-card {
   display: grid;
   width: min(460px, 100%);
   padding: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 24px;
-  color: #e5e7eb;
-  background: rgba(15, 23, 42, 0.86);
-  box-shadow: 0 28px 75px rgba(2, 6, 23, 0.48);
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  color: var(--app-text-body);
+  background: var(--app-card);
+  box-shadow: var(--app-shadow-pop);
   text-align: center;
-  backdrop-filter: blur(22px);
+  backdrop-filter: blur(18px);
 }
 
 .brand-mark {
@@ -110,15 +119,16 @@ onBeforeUnmount(() => {
   height: 54px;
   margin: 0 auto 22px;
   place-items: center;
-  border-radius: 14px;
-  color: #fff;
-  background: linear-gradient(145deg, #409eff, #155eef);
-  font-size: 15px;
+  border-radius: var(--app-radius-card);
+  color: var(--app-surface-card);
+  background: var(--app-primary);
+  box-shadow: 0 6px 16px -8px var(--app-primary);
+  font-size: var(--app-text-base);
   font-weight: 800;
 }
 
 .brand-mark.is-long {
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   letter-spacing: 0;
 }
 
@@ -128,10 +138,10 @@ onBeforeUnmount(() => {
   height: 58px;
   margin: 0 auto 16px;
   place-items: center;
-  border: 1px solid rgba(96, 165, 250, 0.28);
-  border-radius: 18px;
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid var(--app-info-border);
+  border-radius: var(--app-radius-card);
+  color: var(--app-info);
+  background: var(--app-info-soft);
 }
 
 .lock-icon :deep(svg) {
@@ -141,20 +151,20 @@ onBeforeUnmount(() => {
 
 h1 {
   margin: 0;
-  color: #fff;
-  font-size: 22px;
+  color: var(--app-text-strong);
+  font-size: var(--app-text-xl);
 }
 
 h2 {
   margin: 18px 0 7px;
-  color: #f8fafc;
-  font-size: 18px;
+  color: var(--app-text-strong);
+  font-size: var(--app-text-lg);
 }
 
 p {
   margin: 0;
-  color: #94a3b8;
-  font-size: 14px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-base);
   line-height: 1.75;
 }
 
@@ -164,15 +174,15 @@ p {
   justify-content: space-between;
   margin-top: 22px;
   padding: 11px 13px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 13px;
-  color: #94a3b8;
-  background: rgba(15, 23, 42, 0.72);
-  font-size: 13px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  color: var(--app-text-subtle);
+  background: var(--app-surface-sunken);
+  font-size: var(--app-text-sm);
 }
 
 .access-address strong {
-  color: #e2e8f0;
+  color: var(--app-text-strong);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -183,7 +193,7 @@ p {
 
 .auto-refresh-note {
   margin-top: 10px;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-xs);
 }
 </style>

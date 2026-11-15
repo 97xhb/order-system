@@ -17,6 +17,7 @@ import { CreatePayoutMethodDto } from './dto/create-payout-method.dto';
 import { CreateSubmitterDto } from './dto/create-submitter.dto';
 import { UpdatePayoutMethodDto } from './dto/update-payout-method.dto';
 import { UpdateSubmitterDto } from './dto/update-submitter.dto';
+import { isValidQrCodeDataUrl, normalizeQrCodeDataUrl } from './payout-qr-code';
 
 @Injectable()
 export class SubmittersService {
@@ -56,9 +57,12 @@ export class SubmittersService {
     return labels[type] ?? '回款方式';
   }
 
-  private payoutMethodView<T extends { accountValueEncrypted: string | null }>(
-    method: T,
-  ) {
+  private payoutMethodView<
+    T extends {
+      accountValueEncrypted: string | null;
+      qrCodeDataUrl?: string | null;
+    },
+  >(method: T) {
     let accountMasked: string | null = null;
     if (method.accountValueEncrypted) {
       try {
@@ -73,8 +77,39 @@ export class SubmittersService {
       }
     }
 
-    const { accountValueEncrypted: _hidden, ...safeMethod } = method;
-    return { ...safeMethod, accountMasked };
+    const {
+      accountValueEncrypted: _hidden,
+      qrCodeDataUrl: _hiddenQrCode,
+      ...safeMethod
+    } = method;
+    return {
+      ...safeMethod,
+      accountMasked,
+      // 列表接口不直接回传二维码图片数据，避免整页响应体积过大，
+      // 需要时再通过专用接口按需读取。
+      hasQrCode: Boolean(method.qrCodeDataUrl),
+    };
+  }
+
+  /**
+   * 处理回款二维码的更新语义：
+   * - undefined 表示本次不改动，保留原有二维码
+   * - 空字符串表示清空二维码
+   * - data URL 表示替换为新二维码
+   */
+  private resolveQrCodeDataUrl(
+    requested: string | undefined,
+    options: { resetWhenUnset: boolean },
+  ): string | null | undefined {
+    if (requested === undefined) {
+      return options.resetWhenUnset ? null : undefined;
+    }
+    const normalized = this.clean(requested);
+    if (!normalized) return null;
+    if (!isValidQrCodeDataUrl(normalized)) {
+      throw new BadRequestException('收款二维码图片格式不正确，请重新上传');
+    }
+    return normalized;
   }
 
   private async audit(
@@ -296,6 +331,11 @@ export class SubmittersService {
     const accountValue = this.clean(dto.accountValue);
     const accountName = this.clean(dto.accountName);
     const bankName = this.clean(dto.bankName);
+    const qrCodeDataUrl = normalizeQrCodeDataUrl(dto.qrCodeDataUrl);
+
+    if (qrCodeDataUrl && !isValidQrCodeDataUrl(qrCodeDataUrl)) {
+      throw new BadRequestException('收款二维码图片格式不正确，请重新上传');
+    }
 
     if (dto.type === PayoutMethodType.ALIPAY && !accountValue) {
       throw new BadRequestException('请填写支付宝账号');
@@ -320,12 +360,13 @@ export class SubmittersService {
           type: dto.type,
           label: this.payoutMethodLabel(dto.type),
           accountName:
-            dto.type === PayoutMethodType.BANK_CARD ? accountName : null,
+            dto.type === PayoutMethodType.WECHAT ? null : accountName,
           accountValueEncrypted:
             dto.type === PayoutMethodType.WECHAT || !accountValue
               ? null
               : encryptSensitiveValue(accountValue, this.encryptionKey()),
           bankName: dto.type === PayoutMethodType.BANK_CARD ? bankName : null,
+          qrCodeDataUrl,
           isDefault: dto.isDefault ?? false,
           status: dto.status ?? PayoutMethodStatus.ACTIVE,
         },
@@ -342,6 +383,8 @@ export class SubmittersService {
           submitterId,
           type: method.type,
           label: method.label,
+          accountName: method.accountName,
+          hasQrCode: Boolean(method.qrCodeDataUrl),
           accountMasked: accountValue ? maskSensitiveValue(accountValue) : null,
           isDefault: method.isDefault,
           status: method.status,
@@ -371,22 +414,32 @@ export class SubmittersService {
     let accountName: string | null | undefined;
     let bankName: string | null | undefined;
     let accountValueEncrypted: string | null | undefined;
+    let qrCodeDataUrl: string | null | undefined;
 
     if (targetType === PayoutMethodType.WECHAT) {
       accountName = null;
       bankName = null;
       accountValueEncrypted = null;
+      qrCodeDataUrl = null;
     } else if (targetType === PayoutMethodType.ALIPAY) {
       const hasSavedAccount =
         !typeChanged && Boolean(existing.accountValueEncrypted);
       if (!requestedAccountValue && !hasSavedAccount) {
         throw new BadRequestException('请填写支付宝账号');
       }
-      accountName = null;
+      accountName =
+        dto.accountName === undefined
+          ? typeChanged
+            ? null
+            : existing.accountName
+          : this.clean(dto.accountName);
       bankName = null;
       accountValueEncrypted = requestedAccountValue
         ? encryptSensitiveValue(requestedAccountValue, this.encryptionKey())
         : undefined;
+      qrCodeDataUrl = this.resolveQrCodeDataUrl(dto.qrCodeDataUrl, {
+        resetWhenUnset: typeChanged,
+      });
     } else {
       accountName =
         dto.accountName === undefined
@@ -412,6 +465,9 @@ export class SubmittersService {
       accountValueEncrypted = requestedAccountValue
         ? encryptSensitiveValue(requestedAccountValue, this.encryptionKey())
         : undefined;
+      qrCodeDataUrl = this.resolveQrCodeDataUrl(dto.qrCodeDataUrl, {
+        resetWhenUnset: typeChanged,
+      });
     }
 
     return this.prisma.$transaction(async (transaction) => {
@@ -430,6 +486,7 @@ export class SubmittersService {
           accountName,
           accountValueEncrypted,
           bankName,
+          qrCodeDataUrl,
           isDefault: dto.isDefault,
           status: dto.status,
         },
@@ -450,6 +507,8 @@ export class SubmittersService {
         {
           type: method.type,
           label: method.label,
+          accountName: method.accountName,
+          hasQrCode: Boolean(method.qrCodeDataUrl),
           accountMasked:
             requestedAccountValue === undefined
               ? undefined
@@ -481,6 +540,14 @@ export class SubmittersService {
     } catch {
       throw new BadRequestException('回款账号暂时无法读取，请重新编辑保存');
     }
+  }
+
+  async getPayoutMethodQrCode(id: string) {
+    const method = await this.prisma.payoutMethod.findUnique({ where: { id } });
+    if (!method || method.deletedAt) {
+      throw new NotFoundException('回款方式不存在');
+    }
+    return { qrCodeDataUrl: method.qrCodeDataUrl ?? null };
   }
 
   async removePayoutMethod(id: string, admin: AuthenticatedAdmin) {

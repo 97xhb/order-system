@@ -7,6 +7,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { PAYOUT_QR_CODE_MAX_LENGTH } from '../payout-qr-code';
 
 export class CreatePayoutMethodDto {
   @ApiProperty({ enum: PayoutMethodType })
@@ -24,6 +25,14 @@ export class CreatePayoutMethodDto {
   @IsString()
   @MaxLength(150)
   accountName?: string;
+
+  @ApiPropertyOptional({
+    description: '收款二维码图片数据（data URL），仅支付宝等扫码收款方式使用',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(PAYOUT_QR_CODE_MAX_LENGTH)
+  qrCodeDataUrl?: string;
 
   @ApiPropertyOptional({ description: '账号、卡号或其他收款标识，入库前加密' })
   @IsOptional()

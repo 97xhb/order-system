@@ -87,11 +87,11 @@ const confirm = () => {
 }
 .field-note-color-heading strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .field-note-color-heading span {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-variant-numeric: tabular-nums;
 }
 .field-note-color-actions {

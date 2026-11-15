@@ -57,12 +57,6 @@ enum SettlementStatus {
   EXCEPTION
 }
 
-enum FundingType {
-  SELF_PAID
-  SUBMITTER_ADVANCED
-  OTHER
-}
-
 enum ShareFormStatus {
   DRAFT
   ACTIVE
@@ -204,6 +198,12 @@ model SystemSetting {
   id                    String         @id @default("default") @db.VarChar(32)
   systemName            String         @default("下单登记系统") @map("system_name") @db.VarChar(80)
   brandMarkText         String         @default("浪姐") @map("brand_mark_text") @db.VarChar(4)
+  themePrimary          String         @default("#4f7ef0") @map("theme_primary") @db.VarChar(16)
+  themeRadiusChip       Int            @default(5) @map("theme_radius_chip") @db.SmallInt
+  themeRadiusControl    Int            @default(7) @map("theme_radius_control") @db.SmallInt
+  themeRadiusCard       Int            @default(10) @map("theme_radius_card") @db.SmallInt
+  themeRadiusDialog     Int            @default(12) @map("theme_radius_dialog") @db.SmallInt
+  themeSurface          ThemeSurface   @default(GLASS) @map("theme_surface")
   externalAccessEnabled Boolean        @default(true) @map("external_access_enabled")
   allowedHosts          String[]       @default(["localhost"]) @map("allowed_hosts")
   adminEntryPath        String?        @map("admin_entry_path") @db.VarChar(12)
@@ -212,6 +212,11 @@ model SystemSetting {
   updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("system_settings")
+}
+
+enum ThemeSurface {
+  SOLID
+  GLASS
 }
 
 model LogisticsSetting {
@@ -277,6 +282,20 @@ model Category {
   profitRules ProfitRule[]
 
   @@map("categories")
+}
+
+/// 支付方式目录：订单与利润规则都按这里的 code 记录，
+/// 管理员可以在基础设置里自行增删（自己付 / 代付 / 朋友付款 / 其他付款…）。
+model FundingMethod {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(64)
+  name      String   @unique @db.VarChar(100)
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("funding_methods")
 }
 
 model OrderScheme {
@@ -354,7 +373,7 @@ model ProfitRule {
   activeScopeKey              String?          @unique @map("active_scope_key") @db.VarChar(100)
   categoryId                  String?          @map("category_id") @db.Uuid
   schemeId                    String?          @map("scheme_id") @db.Uuid
-  fundingType                 FundingType?     @map("funding_type")
+  fundingType                 String?          @map("funding_type") @db.VarChar(64)
   name                        String           @db.VarChar(150)
   version                     Int
   definition                  Json
@@ -408,7 +427,7 @@ model Order {
   purchaseAddress         String?     @map("purchase_address") @db.Text
   receiverName            String?     @map("receiver_name") @db.VarChar(100)
   textColor               String?     @map("text_color") @db.VarChar(7)
-  fundingType             FundingType @map("funding_type")
+  fundingType             String    @map("funding_type") @db.VarChar(64)
 
   orderAmount               Decimal @default(0) @map("order_amount") @db.Decimal(18, 2)
   paymentDiscountAmount     Decimal @default(0) @map("payment_discount_amount") @db.Decimal(18, 2)
@@ -561,7 +580,7 @@ model PayoutMethod {
   accountName           String?            @map("account_name") @db.VarChar(150)
   accountValueEncrypted String?            @map("account_value_encrypted") @db.Text
   bankName              String?            @map("bank_name") @db.VarChar(150)
-  qrCodeStorageKey      String?            @map("qr_code_storage_key") @db.VarChar(500)
+  qrCodeDataUrl         String?            @map("qr_code_data_url") @db.Text
   isDefault             Boolean            @default(false) @map("is_default")
   status                PayoutMethodStatus @default(PENDING)
   createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)

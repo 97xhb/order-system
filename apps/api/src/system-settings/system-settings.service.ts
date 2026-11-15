@@ -340,6 +340,12 @@ export class SystemSettingsService {
     return {
       systemName: decision.settings.systemName,
       brandMarkText: decision.settings.brandMarkText,
+      themePrimary: decision.settings.themePrimary,
+      themeRadiusChip: decision.settings.themeRadiusChip,
+      themeRadiusControl: decision.settings.themeRadiusControl,
+      themeRadiusCard: decision.settings.themeRadiusCard,
+      themeRadiusDialog: decision.settings.themeRadiusDialog,
+      themeSurface: decision.settings.themeSurface,
       externalAccessEnabled: decision.settings.externalAccessEnabled,
       accessAllowed: decision.allowed,
       publicAccessAllowed: decision.publicAllowed,
@@ -702,6 +708,12 @@ export class SystemSettingsService {
       settings: {
         systemName: settings.systemName,
         brandMarkText: settings.brandMarkText,
+        themePrimary: settings.themePrimary,
+        themeRadiusChip: settings.themeRadiusChip,
+        themeRadiusControl: settings.themeRadiusControl,
+        themeRadiusCard: settings.themeRadiusCard,
+        themeRadiusDialog: settings.themeRadiusDialog,
+        themeSurface: settings.themeSurface,
         externalAccessEnabled: settings.externalAccessEnabled,
         allowedHosts: settings.allowedHosts,
         adminEntryPath: settings.adminEntryPath,
@@ -954,6 +966,15 @@ export class SystemSettingsService {
     }
 
     const before = await this.loadSettings(true);
+    const themePrimary = dto.themePrimary
+      ? dto.themePrimary.toLowerCase()
+      : before.themePrimary;
+    const themeRadiusChip = dto.themeRadiusChip ?? before.themeRadiusChip;
+    const themeRadiusControl =
+      dto.themeRadiusControl ?? before.themeRadiusControl;
+    const themeRadiusCard = dto.themeRadiusCard ?? before.themeRadiusCard;
+    const themeRadiusDialog = dto.themeRadiusDialog ?? before.themeRadiusDialog;
+    const themeSurface = dto.themeSurface ?? before.themeSurface;
     const updated = await this.prisma.$transaction(async (transaction) => {
       const setting = await transaction.systemSetting.upsert({
         where: { id: SETTINGS_ID },
@@ -966,6 +987,12 @@ export class SystemSettingsService {
           adminEntryPath,
           rootAccessMode: dto.rootAccessMode,
           rootRedirectUrl,
+          themePrimary,
+          themeRadiusChip,
+          themeRadiusControl,
+          themeRadiusCard,
+          themeRadiusDialog,
+          themeSurface,
         },
         update: {
           systemName,
@@ -975,6 +1002,12 @@ export class SystemSettingsService {
           adminEntryPath,
           rootAccessMode: dto.rootAccessMode,
           rootRedirectUrl,
+          themePrimary,
+          themeRadiusChip,
+          themeRadiusControl,
+          themeRadiusCard,
+          themeRadiusDialog,
+          themeSurface,
         },
       });
 
@@ -993,6 +1026,12 @@ export class SystemSettingsService {
             adminEntryPath: before.adminEntryPath,
             rootAccessMode: before.rootAccessMode,
             rootRedirectUrl: before.rootRedirectUrl,
+            themePrimary: before.themePrimary,
+            themeRadiusChip: before.themeRadiusChip,
+            themeRadiusControl: before.themeRadiusControl,
+            themeRadiusCard: before.themeRadiusCard,
+            themeRadiusDialog: before.themeRadiusDialog,
+            themeSurface: before.themeSurface,
           } satisfies Prisma.InputJsonObject,
           afterData: {
             systemName: setting.systemName,
@@ -1002,6 +1041,12 @@ export class SystemSettingsService {
             adminEntryPath: setting.adminEntryPath,
             rootAccessMode: setting.rootAccessMode,
             rootRedirectUrl: setting.rootRedirectUrl,
+            themePrimary: setting.themePrimary,
+            themeRadiusChip: setting.themeRadiusChip,
+            themeRadiusControl: setting.themeRadiusControl,
+            themeRadiusCard: setting.themeRadiusCard,
+            themeRadiusDialog: setting.themeRadiusDialog,
+            themeSurface: setting.themeSurface,
           } satisfies Prisma.InputJsonObject,
           ipAddress: metadata.ipAddress,
           userAgent: metadata.userAgent,
@@ -1016,6 +1061,12 @@ export class SystemSettingsService {
     return {
       systemName: updated.systemName,
       brandMarkText: updated.brandMarkText,
+      themePrimary: updated.themePrimary,
+      themeRadiusChip: updated.themeRadiusChip,
+      themeRadiusControl: updated.themeRadiusControl,
+      themeRadiusCard: updated.themeRadiusCard,
+      themeRadiusDialog: updated.themeRadiusDialog,
+      themeSurface: updated.themeSurface,
       externalAccessEnabled: updated.externalAccessEnabled,
       allowedHosts: updated.allowedHosts,
       adminEntryPath: updated.adminEntryPath,

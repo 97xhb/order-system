@@ -40,7 +40,7 @@ interface OptionItem {
   code?: string;
 }
 
-type FundingType = 'SELF_PAID' | 'SUBMITTER_ADVANCED' | 'OTHER';
+type FundingType = string;
 type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 type ShipmentStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'DELIVERED' | 'EXCEPTION';
 type SettlementStatus = 'UNPAID' | 'PAID' | 'EXCEPTION';
@@ -141,6 +141,11 @@ interface OrdersResponse {
   } | null;
   quickCounts: {
     pendingReview: number;
+    all: number;
+    shippedUnpaid: number;
+    receivedNotPaid: number;
+    settled: number;
+    exception: number;
   };
   options: {
     platforms: OptionItem[];
@@ -149,6 +154,7 @@ interface OrdersResponse {
     submitters: OptionItem[];
     customFields: CustomFieldOption[];
     orderTableFields: OrderTableFieldMeta[];
+    fundingMethods: Array<{ code: string; name: string }>;
   } | null;
 }
 
@@ -185,7 +191,9 @@ interface TableColumnOption {
 }
 
 const baseDefaultVisibleColumnKeys: string[] = [];
-const columnSettingsStorageKey = 'order-system:order-table-columns-v4';
+const columnSettingsStorageKey = 'order-system:order-table-columns-v5';
+// v4 之前保存过自定义列顺序；升级后保留可见列，顺序回到新的默认排序
+const legacyColumnSettingsStorageKey = 'order-system:order-table-columns-v4';
 const copyColumnSettingsStorageKey = 'order-system:order-copy-columns-v1';
 const defaultCopyColumnKeys = ['inboundTrackingNo', 'shipmentTrackingNo'];
 const serialSortStorageKey = 'order-system:order-serial-sort';
@@ -198,6 +206,7 @@ const options = reactive<NonNullable<OrdersResponse['options']>>({
   submitters: [],
   customFields: [],
   orderTableFields: [],
+  fundingMethods: [],
 });
 const tableColumnOptions = computed<TableColumnOption[]>(() => [
   ...options.orderTableFields.map((field) => ({
@@ -446,10 +455,24 @@ const statusTypes: Record<string, 'primary' | 'success' | 'warning' | 'danger' |
   NOT_SHIPPED: 'info',
   SHIPPED: 'primary',
   DELIVERED: 'success',
-  UNPAID: 'danger',
-  PARTIAL: 'danger',
+  UNPAID: 'warning',
+  PARTIAL: 'warning',
   PAID: 'success',
   EXCEPTION: 'danger',
+};
+// 状态标签的语义配色：未完成用琥珀色，只有真正异常才用红色
+const statusTagClasses: Record<string, string> = {
+  DRAFT: 'status-tag--neutral',
+  PENDING: 'status-tag--pending',
+  APPROVED: 'status-tag--done',
+  REJECTED: 'status-tag--exception',
+  NOT_SHIPPED: 'status-tag--neutral',
+  SHIPPED: 'status-tag--shipped',
+  DELIVERED: 'status-tag--done',
+  UNPAID: 'status-tag--pending',
+  PARTIAL: 'status-tag--pending',
+  PAID: 'status-tag--done',
+  EXCEPTION: 'status-tag--exception',
 };
 const dispatchStatusLabels: Record<DispatchStatus, string> = {
   NOT_SHIPPED: '未发货',
@@ -485,7 +508,14 @@ const activeFilterCount = computed(
       Array.isArray(value) ? value.length > 0 : Boolean(value),
     ).length,
 );
-const pendingCount = ref(0);
+const quickCounts = reactive({
+  pendingReview: 0,
+  all: 0,
+  shippedUnpaid: 0,
+  receivedNotPaid: 0,
+  settled: 0,
+  exception: 0,
+});
 
 const handleOrderSaved = async () => {
   createDialog.value = false;
@@ -572,18 +602,15 @@ const customFieldText = (row: OrderRow, column: TableColumnOption) => {
   }
   return plainCustomValue(value);
 };
-const fundingTypeLabels: Record<FundingType, string> = {
-  SELF_PAID: '自己付',
-  SUBMITTER_ADVANCED: '代付',
-  OTHER: '其他',
-};
+const fundingTypeName = (code: FundingType) =>
+  (options.fundingMethods ?? []).find((method) => method.code === code)?.name ?? code;
 const fundingTypeText = (row: OrderRow) => {
-  if (row.fundingType !== 'OTHER') return fundingTypeLabels[row.fundingType];
+  if (row.fundingType !== 'OTHER') return fundingTypeName(row.fundingType);
   if (!row.customData || typeof row.customData !== 'object' || Array.isArray(row.customData)) {
-    return fundingTypeLabels.OTHER;
+    return fundingTypeName(row.fundingType);
   }
   const value = (row.customData as Record<string, unknown>).fundingTypeOther;
-  return typeof value === 'string' && value.trim() ? value : fundingTypeLabels.OTHER;
+  return typeof value === 'string' && value.trim() ? value : fundingTypeName(row.fundingType);
 };
 const shipmentStatusText = (row: OrderRow) => statusLabels[row.shipmentStatus];
 const submitterSettlementStatusText = (row: OrderRow) =>
@@ -767,7 +794,7 @@ const load = async () => {
         saleAmount: 0,
       },
     );
-    pendingCount.value = response.data.quickCounts.pendingReview;
+    Object.assign(quickCounts, response.data.quickCounts);
     pagination.total = response.data.pagination.total;
     appliedFilterCount.value = activeFilterCount.value;
   } catch (error) {
@@ -896,6 +923,118 @@ const orderRowClassName = ({ row }: { row: OrderRow }) =>
   [isRowSelected(row) ? 'is-selected-row' : '', row.textColor ? 'has-order-color' : '']
     .filter(Boolean)
     .join(' ');
+
+// ── 框选（拖拽选择多行）────────────────────────────
+// 类似 WPS/Excel：在订单表空白单元格上按住拖拽即可圈选一段订单，
+// 支持 Ctrl 追加选择，Shift 从上一次锚点延伸选择。
+const marquee = reactive({
+  pending: false,
+  active: false,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  additive: false,
+});
+let marqueeAnchorId = '';
+let marqueeLastAnchorId = '';
+let marqueeBaseIds: string[] = [];
+
+const marqueeStyle = computed(() => {
+  const left = Math.min(marquee.startX, marquee.currentX);
+  const top = Math.min(marquee.startY, marquee.currentY);
+  const width = Math.abs(marquee.currentX - marquee.startX);
+  const height = Math.abs(marquee.currentY - marquee.startY);
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+  };
+});
+
+const rowIdFromEvent = (event: MouseEvent): string => {
+  const target = event.target as HTMLElement | null;
+  const tr = target?.closest('tr.vxe-body--row') as HTMLElement | null;
+  return tr?.getAttribute('rowid') ?? '';
+};
+
+const isInteractiveTarget = (event: MouseEvent) => {
+  const target = event.target as HTMLElement | null;
+  return Boolean(
+    target?.closest(
+      'button, a, input, label, .el-checkbox, .order-action, .el-select, .el-input, .vxe-cell--wrapper > .el-button',
+    ),
+  );
+};
+
+const rowsInRange = (startId: string, endId: string): OrderRow[] => {
+  const start = rows.value.findIndex((row) => row.id === startId);
+  const end = rows.value.findIndex((row) => row.id === endId);
+  if (start < 0 || end < 0) return [];
+  const [from, to] = start <= end ? [start, end] : [end, start];
+  return rows.value.slice(from, to + 1).filter((row) => canSelectOrder({ row }));
+};
+
+const commitMarqueeSelection = (endId: string) => {
+  const picked = rowsInRange(marqueeAnchorId, endId);
+  if (!picked.length) return;
+  const pickedIds = new Set(picked.map((row) => row.id));
+  if (marquee.additive) {
+    const merged = new Map<string, OrderRow>();
+    [...marqueeBaseIds, ...picked.map((row) => row.id)].forEach((id) => {
+      const row = rows.value.find((item) => item.id === id);
+      if (row) merged.set(id, row);
+    });
+    selectedRows.value = [...merged.values()];
+    return;
+  }
+  selectedRows.value = picked.filter((row) => pickedIds.has(row.id));
+};
+
+const handleMarqueeMove = (event: MouseEvent) => {
+  if (!marquee.pending) return;
+  const distance = Math.abs(event.clientY - marquee.startY);
+  if (!marquee.active && distance < 5) return;
+  if (!marquee.active) {
+    marquee.active = true;
+    marqueeBaseIds = selectedRows.value.map((row) => row.id);
+    document.body.classList.add('is-marquee-dragging');
+  }
+  marquee.currentX = event.clientX;
+  marquee.currentY = event.clientY;
+  const endId = rowIdFromEvent(event);
+  if (endId) commitMarqueeSelection(endId);
+};
+
+const handleMarqueeUp = () => {
+  marquee.pending = false;
+  marquee.active = false;
+  document.body.classList.remove('is-marquee-dragging');
+  document.removeEventListener('mousemove', handleMarqueeMove);
+  document.removeEventListener('mouseup', handleMarqueeUp);
+};
+
+const handleMarqueeDown = (event: MouseEvent) => {
+  if (event.button !== 0) return;
+  if (isInteractiveTarget(event)) return;
+  const rowId = rowIdFromEvent(event);
+  if (!rowId) return;
+  // 屏蔽浏览器原生文本选择，避免和框选冲突
+  event.preventDefault();
+  marquee.pending = true;
+  marquee.active = false;
+  marquee.additive = event.ctrlKey || event.metaKey;
+  marquee.startX = event.clientX;
+  marquee.startY = event.clientY;
+  marquee.currentX = event.clientX;
+  marquee.currentY = event.clientY;
+  // Shift 从上一次锚点延伸选择，与表格软件的行区间选择一致
+  marqueeAnchorId = event.shiftKey && marqueeLastAnchorId ? marqueeLastAnchorId : rowId;
+  marqueeLastAnchorId = rowId;
+  document.addEventListener('mousemove', handleMarqueeMove);
+  document.addEventListener('mouseup', handleMarqueeUp);
+};
 const orderRowStyle = ({ row }: { row: OrderRow }) =>
   row.textColor ? { '--order-row-color': row.textColor } : {};
 const updateTextColor = async (row: OrderRow, color: string | null) => {
@@ -1193,7 +1332,7 @@ const createSelectedOrdersTableCanvas = () => {
   if (!context) throw new Error('CANVAS_UNAVAILABLE');
   context.scale(scale, scale);
   context.textBaseline = 'top';
-  context.fillStyle = '#ffffff';
+  context.fillStyle = 'var(--app-surface-card)';
   context.fillRect(0, 0, logicalWidth, logicalHeight);
 
   const drawTextLines = (
@@ -1224,7 +1363,7 @@ const createSelectedOrdersTableCanvas = () => {
     context.strokeStyle = '#1f2937';
     context.lineWidth = 1;
     context.strokeRect(currentX + 0.5, headerTop + 0.5, width, headerHeight);
-    context.fillStyle = '#111827';
+    context.fillStyle = 'var(--app-text-strong)';
     drawTextLines(
       headerLines[index],
       currentX,
@@ -1245,12 +1384,12 @@ const createSelectedOrdersTableCanvas = () => {
     row.forEach((lines, columnIndex) => {
       const column = columns[columnIndex];
       const width = columnWidths[columnIndex];
-      context.fillStyle = '#ffffff';
+      context.fillStyle = 'var(--app-surface-card)';
       context.fillRect(currentX, currentY, width, rowHeight);
       context.strokeStyle = '#1f2937';
       context.lineWidth = 1;
       context.strokeRect(currentX + 0.5, currentY + 0.5, width, rowHeight);
-      context.fillStyle = '#1e293b';
+      context.fillStyle = 'var(--app-text-strong)';
       const align: CanvasTextAlign = imageRightAlignedColumnKeys.has(column.key)
         ? 'right'
         : imageCenteredColumnKeys.has(column.key)
@@ -1495,14 +1634,14 @@ const exportOrdersAsSpreadsheet = async () => {
       value: column.label,
       type: String,
       format: '@',
-      backgroundColor: '#3B82F6',
-      textColor: '#FFFFFF',
+      backgroundColor: 'var(--app-primary)',
+      textColor: 'var(--app-surface-card)',
       fontWeight: 'bold',
       align: 'center',
       alignVertical: 'center',
       wrap: true,
       height: 25,
-      borderColor: '#2563EB',
+      borderColor: 'var(--app-primary)',
       borderStyle: 'thin',
     }));
     const dataRows: SheetData = exportRows.map((row) => {
@@ -1578,12 +1717,13 @@ const resetVisibleColumns = () => {
 
 const loadVisibleColumns = () => {
   const stored = localStorage.getItem(columnSettingsStorageKey);
-  if (!stored) {
+  const legacyStored = stored ? null : localStorage.getItem(legacyColumnSettingsStorageKey);
+  if (!stored && !legacyStored) {
     resetVisibleColumns();
     return;
   }
   try {
-    const value = JSON.parse(stored) as unknown;
+    const value = JSON.parse(stored ?? legacyStored ?? 'null') as unknown;
     const allColumnKeys = tableColumnOptions.value.map((item) => item.key);
     const allowedKeys = new Set(allColumnKeys);
     const defaultVisibleKeys = new Set(defaultVisibleColumnKeys.value);
@@ -1626,7 +1766,8 @@ const loadVisibleColumns = () => {
         (key) => defaultVisibleKeys.has(key) && !storedVisible.includes(key),
       ),
     ];
-    columnOrderKeys.value = mergeColumnOrder(storedOrder);
+    // 旧版本的自定义顺序不再沿用，统一按新的默认列序渲染
+    columnOrderKeys.value = stored ? mergeColumnOrder(storedOrder) : [...allColumnKeys];
   } catch {
     localStorage.removeItem(columnSettingsStorageKey);
     resetVisibleColumns();
@@ -1668,7 +1809,7 @@ const toggleAllSelection = (checked: unknown) => {
 watch(
   [visibleColumnKeys, columnOrderKeys],
   ([visible, order]) =>
-    localStorage.setItem(columnSettingsStorageKey, JSON.stringify({ version: 4, visible, order })),
+    localStorage.setItem(columnSettingsStorageKey, JSON.stringify({ version: 5, visible, order })),
   { deep: true },
 );
 
@@ -1924,8 +2065,7 @@ const openArchiveAssign = async () => {
   archiveAssignNewName.value = '';
   archiveAssignVisible.value = true;
   try {
-    const response =
-      await http.get<Array<{ id: string; name: string }>>('/admin/order-groups');
+    const response = await http.get<Array<{ id: string; name: string }>>('/admin/order-groups');
     archiveGroupOptions.value = response.data;
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '归档分组加载失败'));
@@ -2107,6 +2247,9 @@ onBeforeUnmount(() => activeLoadController?.abort());
 
 <template>
   <div class="page-shell orders-page">
+    <Teleport to="body">
+      <div v-if="marquee.active" class="order-marquee" :style="marqueeStyle" aria-hidden="true" />
+    </Teleport>
     <div class="page-heading">
       <div>
         <span class="page-kicker">ORDER WORKSPACE</span>
@@ -2161,7 +2304,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
           :class="{ 'is-active': activeQuickView === 'all' }"
           @click="clearFilters"
         >
-          全部订单
+          <span>全部订单</span>
+          <b class="view-tab-count">{{ quickCounts.all }}</b>
         </button>
         <button
           type="button"
@@ -2169,7 +2313,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
           :class="{ 'is-active': activeQuickView === 'pending' }"
           @click="quickView('pending')"
         >
-          待确认 {{ pendingCount }}
+          <span>待确认</span>
+          <b class="view-tab-count">{{ quickCounts.pendingReview }}</b>
         </button>
         <button
           type="button"
@@ -2177,7 +2322,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
           :class="{ 'is-active': activeQuickView === 'shipped-unpaid' }"
           @click="quickView('shipped-unpaid')"
         >
-          已寄出未收款
+          <span>已寄出未收款</span>
+          <b class="view-tab-count">{{ quickCounts.shippedUnpaid }}</b>
         </button>
         <button
           type="button"
@@ -2185,7 +2331,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
           :class="{ 'is-active': activeQuickView === 'received-not-paid' }"
           @click="quickView('received-not-paid')"
         >
-          已收未结算
+          <span>已收未结算</span>
+          <b class="view-tab-count">{{ quickCounts.receivedNotPaid }}</b>
         </button>
         <button
           type="button"
@@ -2193,7 +2340,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
           :class="{ 'is-active': activeQuickView === 'settled' }"
           @click="quickView('settled')"
         >
-          双向结清
+          <span>双向结清</span>
+          <b class="view-tab-count">{{ quickCounts.settled }}</b>
         </button>
         <button
           type="button"
@@ -2201,7 +2349,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
           :class="{ 'is-active': activeQuickView === 'exception' }"
           @click="quickView('exception')"
         >
-          异常
+          <span>异常</span>
+          <b class="view-tab-count">{{ quickCounts.exception }}</b>
         </button>
       </div>
       <div class="filter-surface">
@@ -2674,7 +2823,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
           <el-button circle :icon="Refresh" :loading="loading" @click="load" />
         </div>
       </div>
-      <div class="order-table-shell desktop-order-table">
+      <div class="order-table-shell desktop-order-table" @mousedown="handleMarqueeDown">
         <vxe-table
           :key="tableRenderKey"
           class="order-table"
@@ -2795,7 +2944,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 </div>
               </template>
               <template v-else-if="column.key === 'shipmentStatus'">
-                <el-tag :type="statusTypes[row.shipmentStatus]" size="small">
+                <el-tag
+                  :type="statusTypes[row.shipmentStatus]"
+                  :class="statusTagClasses[row.shipmentStatus]"
+                  size="small"
+                >
                   {{ shipmentStatusText(row) }}
                 </el-tag>
               </template>
@@ -2812,7 +2965,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 {{ money(row.saleAmount) }}
               </template>
               <template v-else-if="column.key === 'receivableStatus'">
-                <el-tag :type="statusTypes[row.receivableStatus]">
+                <el-tag
+                  :type="statusTypes[row.receivableStatus]"
+                  :class="statusTagClasses[row.receivableStatus]"
+                >
                   {{ statusLabels[row.receivableStatus] }}
                 </el-tag>
               </template>
@@ -2820,7 +2976,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 {{ money(row.submitterSettlementAmount) }}
               </template>
               <template v-else-if="column.key === 'submitterSettlementStatus'">
-                <el-tag :type="statusTypes[row.submitterSettlementStatus]">
+                <el-tag
+                  :type="statusTypes[row.submitterSettlementStatus]"
+                  :class="statusTagClasses[row.submitterSettlementStatus]"
+                >
                   {{ submitterSettlementStatusText(row) }}
                 </el-tag>
               </template>
@@ -2976,7 +3135,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 </template>
               </small>
             </div>
-            <el-tag :type="statusTypes[row.reviewStatus]" size="small">
+            <el-tag
+              :type="statusTypes[row.reviewStatus]"
+              :class="statusTagClasses[row.reviewStatus]"
+              size="small"
+            >
               {{ statusLabels[row.reviewStatus] }}
             </el-tag>
           </header>
@@ -2990,19 +3153,31 @@ onBeforeUnmount(() => activeLoadController?.abort());
             </div>
             <div>
               <span>寄件</span>
-              <el-tag :type="statusTypes[row.shipmentStatus]" size="small">
+              <el-tag
+                :type="statusTypes[row.shipmentStatus]"
+                :class="statusTagClasses[row.shipmentStatus]"
+                size="small"
+              >
                 {{ shipmentStatusText(row) }}
               </el-tag>
             </div>
             <div>
               <span>回款</span>
-              <el-tag :type="statusTypes[row.receivableStatus]" size="small">
+              <el-tag
+                :type="statusTypes[row.receivableStatus]"
+                :class="statusTagClasses[row.receivableStatus]"
+                size="small"
+              >
                 {{ statusLabels[row.receivableStatus] }}
               </el-tag>
             </div>
             <div>
               <span>结算</span>
-              <el-tag :type="statusTypes[row.submitterSettlementStatus]" size="small">
+              <el-tag
+                :type="statusTypes[row.submitterSettlementStatus]"
+                :class="statusTagClasses[row.submitterSettlementStatus]"
+                size="small"
+              >
                 {{ submitterSettlementStatusText(row) }}
               </el-tag>
             </div>
@@ -3637,10 +3812,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .submitter-volume-cell > small {
   flex: 0 0 auto;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary) 10%, var(--app-card-solid));
-  font-size: 10px;
+  font-size: var(--app-text-micro);
   font-weight: 700;
   line-height: 1.6;
 }
@@ -3655,9 +3830,9 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .tracking-phone-suffix {
   flex: 0 0 auto;
   padding: 0 5px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 600;
   line-height: 17px;
   background: color-mix(in srgb, var(--app-primary) 10%, transparent);
@@ -3687,13 +3862,13 @@ onBeforeUnmount(() => activeLoadController?.abort());
   gap: 10px;
   padding: 11px 13px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 70%, transparent);
 }
 
 .logistics-query-summary span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 
 .logistics-query-summary strong {
@@ -3708,7 +3883,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .logistics-query-reason {
   margin: 10px 0 0;
   color: var(--app-warning);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .logistics-query-options {
@@ -3724,12 +3899,12 @@ onBeforeUnmount(() => activeLoadController?.abort());
   gap: 7px;
   margin: 10px 2px 0;
   color: var(--app-text);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 
 .logistics-query-carrier span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-transform: uppercase;
 }
 
@@ -3771,13 +3946,13 @@ onBeforeUnmount(() => activeLoadController?.abort());
 
 .logistics-trace-list time {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
 }
 
 .logistics-trace-list p {
   margin: 3px 0 0;
   color: var(--app-text);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.55;
 }
 
@@ -3803,8 +3978,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .batch-payment-button :deep(span > span) {
   padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 12px;
+  border-radius: var(--app-radius-chip);
+  font-size: var(--app-text-xs);
   line-height: 18px;
 }
 :global(.el-popper.order-copy-popover) {
@@ -3812,7 +3987,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   overflow: hidden;
   padding: 0 !important;
   border: 1px solid color-mix(in srgb, var(--app-primary) 18%, var(--app-border)) !important;
-  border-radius: 18px !important;
+  border-radius: var(--app-radius-card) !important;
   background: color-mix(in srgb, var(--app-card-solid) 92%, transparent) !important;
   box-shadow: var(--app-shadow-lg) !important;
   backdrop-filter: blur(20px) saturate(130%);
@@ -3841,19 +4016,19 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .copy-content-heading strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .copy-content-heading span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .copy-content-heading b {
   min-width: 46px;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary-soft) 72%, var(--app-card-solid));
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   text-align: center;
 }
 .copy-content-tools {
@@ -3878,23 +4053,23 @@ onBeforeUnmount(() => activeLoadController?.abort());
   align-items: center;
   justify-content: space-between;
   padding: 7px 10px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   gap: 7px;
 }
 .copy-column-choice span {
   min-width: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .copy-column-choice small {
   flex: 0 0 auto;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-primary);
   background: color-mix(in srgb, var(--app-primary-soft) 72%, var(--app-card-solid));
-  font-size: 10px;
+  font-size: var(--app-text-micro);
 }
 .copy-column-choice.is-selected {
   color: var(--app-heading);
@@ -3904,7 +4079,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   padding-top: 9px;
   border-top: 1px solid var(--app-border);
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.55;
 }
 .copy-content-submit-row {
@@ -3920,18 +4095,18 @@ onBeforeUnmount(() => activeLoadController?.abort());
   margin-left: 0;
 }
 .copy-content-image-submit {
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-primary) 18%, transparent);
+  box-shadow: var(--app-shadow-md);
 }
 .copy-tracking-button {
-  border-color: color-mix(in srgb, #64748b 24%, var(--app-border));
-  color: color-mix(in srgb, var(--app-text) 78%, #64748b);
-  background: color-mix(in srgb, #64748b 6%, var(--app-card-solid));
+  border-color: color-mix(in srgb, var(--app-text-subtle) 24%, var(--app-border));
+  color: color-mix(in srgb, var(--app-text) 78%, var(--app-text-subtle));
+  background: color-mix(in srgb, var(--app-text-subtle) 6%, var(--app-card-solid));
 }
 .copy-tracking-button:hover,
 .copy-tracking-button:focus {
-  border-color: color-mix(in srgb, #64748b 50%, var(--app-border));
+  border-color: color-mix(in srgb, var(--app-text-subtle) 50%, var(--app-border));
   color: var(--app-heading);
-  background: color-mix(in srgb, #64748b 12%, var(--app-card-solid));
+  background: color-mix(in srgb, var(--app-text-subtle) 12%, var(--app-card-solid));
 }
 .copy-tracking-button :deep(span) {
   display: inline-flex;
@@ -3940,15 +4115,19 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .copy-dropdown-arrow {
   margin-left: 1px;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .customer-payment-button {
-  border-color: color-mix(in srgb, #10b981 26%, var(--app-border));
-  color: color-mix(in srgb, #059669 82%, var(--app-heading));
-  background: color-mix(in srgb, rgba(16, 185, 129, 0.1) 74%, var(--app-card-solid));
+  border-color: color-mix(in srgb, var(--app-success) 26%, var(--app-border));
+  color: color-mix(in srgb, var(--app-success) 82%, var(--app-heading));
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--app-success) 10%, transparent) 74%,
+    var(--app-card-solid)
+  );
 }
 .customer-payment-button :deep(span > span) {
-  background: rgba(16, 185, 129, 0.11);
+  background: color-mix(in srgb, var(--app-success) 11%, transparent);
 }
 .submitter-payment-button {
   border-color: color-mix(in srgb, var(--app-primary) 26%, var(--app-border));
@@ -3956,7 +4135,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   background: color-mix(in srgb, var(--app-primary-soft) 74%, var(--app-card-solid));
 }
 .submitter-payment-button :deep(span > span) {
-  background: rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
 }
 .order-workbar {
   min-width: 0;
@@ -3972,7 +4151,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   align-self: flex-start;
   padding: 4px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
   gap: 4px;
 }
@@ -3981,10 +4160,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
   min-height: 32px;
   padding: 6px 16px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--app-radius-card);
   color: var(--app-muted);
   background: transparent;
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 600;
   cursor: pointer;
 }
@@ -4000,7 +4179,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .archive-assign-empty {
   margin: 6px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .archive-breadcrumb {
   display: flex;
@@ -4017,15 +4196,15 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .archive-breadcrumb span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .archive-breadcrumb strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .archive-breadcrumb em {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-style: normal;
 }
 .view-tabs {
@@ -4033,28 +4212,52 @@ onBeforeUnmount(() => activeLoadController?.abort());
   align-items: center;
   flex-wrap: wrap;
   margin-bottom: 11px;
-  gap: 8px;
+  gap: 6px;
 }
 .view-tabs button {
   --view-tab-color: var(--app-primary);
   appearance: none;
-  min-height: 32px;
-  padding: 6px 13px;
-  border: 1px solid color-mix(in srgb, var(--view-tab-color) 24%, var(--app-border));
-  border-radius: 12px;
-  color: var(--view-tab-color);
-  background: color-mix(in srgb, var(--view-tab-color) 7%, var(--app-card-solid));
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 4px 11px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-control);
+  color: var(--app-text);
+  background: var(--app-surface-card);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--app-text-sm);
   font-weight: 400;
   line-height: 1;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 64%, transparent);
+  gap: 6px;
   cursor: pointer;
   transition:
     color 0.18s ease,
     border-color 0.18s ease,
     background 0.18s ease,
-    transform 0.18s ease;
+    box-shadow 0.18s ease;
+}
+.view-tabs button::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--view-tab-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--view-tab-color) 14%, transparent);
+  content: '';
+}
+.view-tab-count {
+  min-width: 18px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: var(--app-radius-chip);
+  color: var(--app-text);
+  background: var(--app-surface-muted);
+  font-size: var(--app-text-micro);
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .view-tabs button.view-tab--pending {
   --view-tab-color: #e4a13a;
@@ -4072,31 +4275,32 @@ onBeforeUnmount(() => activeLoadController?.abort());
   --view-tab-color: #ed7078;
 }
 .view-tabs button:hover {
-  border-color: color-mix(in srgb, var(--view-tab-color) 42%, var(--app-border));
-  color: var(--view-tab-color);
-  background: color-mix(in srgb, var(--view-tab-color) 12%, var(--app-card-solid));
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--app-primary) 34%, var(--app-border));
+  color: var(--app-heading);
+  background: var(--app-surface-sunken);
 }
 .view-tabs button.is-active {
-  border-color: color-mix(in srgb, var(--view-tab-color) 46%, var(--app-border));
-  color: var(--view-tab-color);
-  background: color-mix(in srgb, var(--view-tab-color) 17%, var(--app-card-solid));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 64%, transparent),
-    0 5px 13px color-mix(in srgb, var(--view-tab-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--view-tab-color) 46%, transparent);
+  color: var(--app-heading);
+  background: color-mix(in srgb, var(--view-tab-color) 7%, var(--app-surface-card));
+  box-shadow: var(--app-shadow-xs);
+  font-weight: 600;
+}
+.view-tabs button.is-active .view-tab-count {
+  color: color-mix(in srgb, var(--view-tab-color) 88%, #000);
+  background: color-mix(in srgb, var(--view-tab-color) 16%, var(--app-surface-card));
 }
 .filter-surface {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--app-card-solid) 91%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 70%, transparent);
+  border-radius: var(--app-radius-control);
+  background: color-mix(in srgb, var(--app-card-solid) 92%, transparent);
 }
 .filter-hint {
   margin: 9px 2px 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.5;
 }
 .primary-filters {
@@ -4113,7 +4317,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .filter-surface :deep(.el-select__wrapper),
 .filter-surface :deep(.el-date-editor.el-input__wrapper) {
   min-height: 34px;
-  border-radius: 12px !important;
+  border-radius: var(--app-radius-control) !important;
   background: color-mix(in srgb, var(--app-control) 90%, transparent);
   transition:
     box-shadow 0.18s ease,
@@ -4172,24 +4376,26 @@ onBeforeUnmount(() => activeLoadController?.abort());
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   color: var(--app-primary);
   background: var(--app-primary-soft);
-  font-size: 17px;
+  font-size: var(--app-text-md);
 }
 .table-title > div {
   display: flex;
   min-width: 0;
   align-items: baseline;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 .table-toolbar strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .table-toolbar span {
   margin-left: 9px;
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .order-summary-stack {
   display: flex;
@@ -4203,8 +4409,12 @@ onBeforeUnmount(() => activeLoadController?.abort());
   align-items: center;
   padding: 6px 10px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 16%, var(--app-border));
-  border-radius: 13px;
-  background: color-mix(in srgb, rgba(239, 68, 68, 0.07) 66%, var(--app-card-solid));
+  border-radius: var(--app-radius-card);
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--app-danger) 7%, transparent) 66%,
+    var(--app-card-solid)
+  );
   gap: 12px;
 }
 .table-toolbar .filtered-summary span {
@@ -4217,7 +4427,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .table-toolbar .filtered-summary strong {
   color: var(--app-danger);
-  font-size: 15px;
+  font-size: var(--app-text-base);
   font-variant-numeric: tabular-nums;
 }
 .batch-edit-form {
@@ -4232,10 +4442,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
   gap: 12px;
   padding: 10px 14px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-primary-soft) 40%, transparent);
   color: var(--app-text-secondary);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .text-color-filter {
   display: flex;
@@ -4255,11 +4465,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .text-color-picker-heading strong {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .text-color-picker-heading span {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-variant-numeric: tabular-nums;
 }
 .text-color-choice-grid {
@@ -4276,18 +4486,18 @@ onBeforeUnmount(() => activeLoadController?.abort());
   place-items: center;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--choice-color) 74%, var(--app-border));
-  border-radius: 7px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
   background: var(--choice-color);
   cursor: pointer;
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--app-card-solid) 24%, transparent);
 }
 .text-color-choice > span {
-  color: #fff;
-  font-size: 11px;
+  color: var(--app-surface-card);
+  font-size: var(--app-text-micro);
   font-weight: 800;
   opacity: 0;
-  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.46);
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--app-text-strong) 46%, transparent);
 }
 .text-color-choice:hover {
   transform: translateY(-1px);
@@ -4307,7 +4517,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   border-color: var(--app-border);
   color: var(--app-text);
   background: var(--app-control);
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 650;
 }
 .text-color-choice--half {
@@ -4333,9 +4543,9 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .batch-color-clear {
   min-height: 32px;
   padding: 4px 9px;
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .batch-color-clear.is-selected {
   color: var(--app-heading);
@@ -4345,7 +4555,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   height: 28px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
   background: var(--swatch-color);
   cursor: pointer;
   transition:
@@ -4385,7 +4595,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 
 .batch-edit-label {
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   color: var(--app-text-secondary);
 }
 
@@ -4395,7 +4605,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 
 .batch-edit-hint {
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   color: var(--app-primary);
 }
 
@@ -4403,7 +4613,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   grid-column: 1 / -1;
   margin: -2px 0 0;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.5;
 }
 
@@ -4433,14 +4643,13 @@ onBeforeUnmount(() => activeLoadController?.abort());
   background: color-mix(in srgb, var(--app-primary) 16%, var(--app-card-solid));
 }
 .order-table-shell {
+  position: relative;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: var(--app-radius-control);
   background: color-mix(in srgb, var(--app-card-solid) 94%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 68%, transparent),
-    0 8px 24px rgba(15, 23, 42, 0.035);
+  box-shadow: none;
 }
 .order-table {
   width: 100%;
@@ -4467,7 +4676,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .edit-reason-entry time {
   flex: 0 0 auto;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -4475,7 +4684,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .edit-reason-entry span {
   min-width: 0;
   color: var(--app-text);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   line-height: 1.45;
 }
 .table-card :deep(.el-pagination) {
@@ -4484,12 +4693,12 @@ onBeforeUnmount(() => activeLoadController?.abort());
   margin: 14px 0 0 auto;
   padding: 7px 9px;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 72%, transparent);
 }
 .table-card :deep(.el-pagination button),
 .table-card :deep(.el-pagination .el-pager li) {
-  border-radius: 9px;
+  border-radius: var(--app-radius-control);
 }
 .column-settings-header {
   display: flex;
@@ -4504,13 +4713,13 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .column-settings-header strong {
   color: var(--app-heading);
-  font-size: 15px;
+  font-size: var(--app-text-base);
 }
 .column-settings-header span,
 .column-settings-note {
   margin-top: 3px;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
 }
 .column-settings-options {
   display: flex;
@@ -4532,7 +4741,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   flex: 1;
   align-items: center;
   padding: 6px 9px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
 }
 .column-setting-choice.is-selected {
   color: var(--app-heading);
@@ -4544,16 +4753,16 @@ onBeforeUnmount(() => activeLoadController?.abort());
   align-items: center;
   overflow: hidden;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .column-setting-label small {
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-chip);
   color: var(--app-primary);
-  background: rgba(59, 130, 246, 0.1);
-  font-size: 10px;
+  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+  font-size: var(--app-text-micro);
   font-weight: 750;
 }
 .column-order-actions {
@@ -4573,18 +4782,24 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .order-table :deep(.vxe-header--column .vxe-cell) {
   color: var(--app-heading);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 650;
 }
 .order-table :deep(.vxe-table--header-wrapper),
 .order-table :deep(.vxe-table--header-wrapper .vxe-header--column),
 .order-table :deep(.vxe-table--fixed-right-wrapper .vxe-table--header-wrapper),
 .order-table :deep(.vxe-table--fixed-right-wrapper .vxe-header--column) {
-  background: color-mix(in srgb, var(--app-primary-soft) 22%, var(--app-control)) !important;
+  background: var(--app-surface-sunken) !important;
+}
+
+/* 表格软件质感：只保留订单之间的横线，去掉所有列竖线 */
+.order-table :deep(.vxe-header--column),
+.order-table :deep(.vxe-body--column) {
+  border-right: none !important;
 }
 .order-table :deep(.vxe-body--column .vxe-cell) {
   color: var(--order-row-color, var(--app-text));
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 600;
   line-height: 1.5;
   white-space: normal;
@@ -4613,7 +4828,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
   cursor: pointer;
 }
 .order-color-dot:not(.has-color) {
-  background: conic-gradient(#f97316, #eab308, #22c55e, #3b82f6, #a855f7, #f97316);
+  background: conic-gradient(
+    var(--app-warning),
+    var(--app-warning-border),
+    var(--app-success),
+    var(--app-primary),
+    var(--app-purple),
+    var(--app-warning)
+  );
 }
 .order-color-dot:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--app-primary) 62%, transparent);
@@ -4664,8 +4886,50 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .order-table :deep(.el-tag),
 .order-table :deep(.el-button) {
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 600;
+}
+/* 状态标签：小圆角 + 圆点 + 淡底色，一眼分辨流程节点 */
+.order-table :deep(.el-tag) {
+  height: 21px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-chip);
+  gap: 5px;
+  font-weight: 500;
+}
+.order-table :deep(.el-tag)::before {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}
+.order-table :deep(.status-tag--neutral) {
+  border-color: #e3e8ef;
+  color: #5b6b80;
+  background: var(--app-surface-subtle);
+}
+.order-table :deep(.status-tag--pending) {
+  border-color: #f5e3bd;
+  color: #a4690c;
+  background: #fdf4e3;
+}
+.order-table :deep(.status-tag--shipped) {
+  border-color: #d5e2fb;
+  color: #2255bd;
+  background: #ecf2fe;
+}
+.order-table :deep(.status-tag--done) {
+  border-color: #c9ebdc;
+  color: #0d7f52;
+  background: #e6f6ef;
+}
+.order-table :deep(.status-tag--exception) {
+  border-color: #f7d5d5;
+  color: #b62f2f;
+  background: #fdecec;
 }
 .order-table :deep(.vxe-table--body-wrapper .vxe-body--row > .vxe-body--column) {
   background: var(--app-card-solid) !important;
@@ -4694,14 +4958,15 @@ onBeforeUnmount(() => activeLoadController?.abort());
   z-index: 6;
   border-left: 1px solid var(--app-border);
   background: transparent;
-  box-shadow: -10px 0 22px rgba(15, 23, 42, 0.055);
+  /* 只在左边缘投影，提示右侧还有可横向滚动的列 */
+  box-shadow: -8px 0 12px -10px color-mix(in srgb, var(--app-text-strong) 42%, transparent);
 }
 .selection-checkbox :deep(.el-checkbox__inner) {
   width: 17px;
   height: 17px;
   border-width: 1.5px;
-  border-color: #94a3b8;
-  border-radius: 5px;
+  border-color: var(--app-text-placeholder);
+  border-radius: var(--app-radius-chip);
   background: var(--app-card-solid);
 }
 .selection-checkbox :deep(.el-checkbox__input.is-checked .el-checkbox__inner),
@@ -4722,25 +4987,25 @@ onBeforeUnmount(() => activeLoadController?.abort());
   gap: 2px;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-  border-radius: 11px;
+  border-radius: var(--app-radius-card);
   background: color-mix(in srgb, var(--app-control) 68%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--app-card-solid) 64%, transparent),
-    0 1px 3px rgba(15, 23, 42, 0.035);
+    0 1px 3px color-mix(in srgb, var(--app-text-strong) 4%, transparent);
 }
 .row-actions :deep(.el-button + .el-button) {
   margin-left: 0;
 }
 .order-action {
-  --order-action-accent: #94a3b8;
+  --order-action-accent: var(--app-text-placeholder);
   height: 26px;
   margin: 0;
   padding: 0 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--app-radius-control);
   color: color-mix(in srgb, var(--app-text) 82%, var(--app-muted));
   background: transparent;
-  font-size: 13px !important;
+  font-size: var(--app-text-sm) !important;
   font-weight: 650 !important;
   line-height: 24px;
   box-shadow: none;
@@ -4753,25 +5018,25 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .order-action:focus {
   color: var(--app-heading);
   background: color-mix(in srgb, var(--app-primary-soft) 24%, var(--app-card-solid));
-  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--app-shadow-sm);
 }
 .order-action:active {
   background: var(--app-hover);
 }
 .order-action--edit {
-  --order-action-accent: #94a3b8;
+  --order-action-accent: var(--app-text-placeholder);
 }
 .order-action--approve {
-  --order-action-accent: #22c55e;
+  --order-action-accent: var(--app-success);
 }
 .order-action--receipt {
-  --order-action-accent: #14b8a6;
+  --order-action-accent: var(--app-success);
 }
 .order-action--settlement {
-  --order-action-accent: #60a5fa;
+  --order-action-accent: var(--app-info);
 }
 .order-action--reject {
-  --order-action-accent: #f87171;
+  --order-action-accent: var(--app-danger);
 }
 .order-action-dot {
   display: inline-block;
@@ -4792,10 +5057,10 @@ onBeforeUnmount(() => activeLoadController?.abort());
   padding: 0 7px 0 9px;
   border: 0;
   border-left: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--app-radius-control) var(--app-radius-control) 0;
   color: var(--app-muted);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -4815,30 +5080,30 @@ onBeforeUnmount(() => activeLoadController?.abort());
   height: 6px;
   margin-right: 5px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--app-text-placeholder);
   content: '';
 }
 .order-review-state.is-approved {
   color: var(--app-muted);
 }
 .order-review-state.is-approved::before {
-  background: #22c55e;
+  background: var(--app-success);
 }
 .order-review-state.is-pending {
   color: var(--app-muted);
 }
 .order-review-state.is-pending::before {
-  background: #f59e0b;
+  background: var(--app-warning);
 }
 .order-review-state.is-rejected {
   color: var(--app-muted);
 }
 .order-review-state.is-rejected::before {
-  background: #ef4444;
+  background: var(--app-danger);
 }
 .muted {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 500;
 }
 .multiline-cell {
@@ -4862,19 +5127,19 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .rebate-stack span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 650;
 }
 .rebate-stack strong {
-  color: #059669;
-  font-size: 13px;
+  color: var(--app-success);
+  font-size: var(--app-text-sm);
 }
 .rebate-stack span {
   margin-top: 2px;
 }
 .rebate-stack small {
   min-width: 28px;
-  font-size: 11px;
+  font-size: var(--app-text-micro);
   font-weight: 700;
 }
 .rebate-stack.is-unscanned {
@@ -4895,8 +5160,8 @@ onBeforeUnmount(() => activeLoadController?.abort());
   font-variant-numeric: tabular-nums;
 }
 .profit-stack strong {
-  color: #16a34a;
-  font-size: 14px;
+  color: var(--app-success);
+  font-size: var(--app-text-base);
 }
 .profit-stack strong.is-unsettled {
   color: var(--app-text);
@@ -4904,13 +5169,13 @@ onBeforeUnmount(() => activeLoadController?.abort());
 .profit-stack strong span,
 .profit-stack small span {
   min-width: 42px;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
 }
 .profit-stack small {
   margin-top: 2px;
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
 }
 @media (max-width: 1440px) {
@@ -4948,7 +5213,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   }
   .filter-surface {
     padding: 10px;
-    border-radius: 14px;
+    border-radius: var(--app-radius-card);
   }
   .primary-filters,
   .advanced-filter-grid {
@@ -5001,7 +5266,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
     margin-left: 0;
   }
   .table-toolbar-actions > :deep(.el-button) {
-    border-radius: 999px;
+    border-radius: var(--app-radius-chip);
   }
   .order-summary-stack,
   .filtered-summary,
@@ -5055,7 +5320,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--app-border);
-    border-radius: 16px;
+    border-radius: var(--app-radius-card);
     background: color-mix(in srgb, var(--app-card-solid) 94%, transparent);
     box-shadow: var(--app-shadow-sm);
     transition:
@@ -5070,7 +5335,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
     bottom: 10px;
     left: 0;
     width: 3px;
-    border-radius: 0 3px 3px 0;
+    border-radius: 0 var(--app-radius-chip) var(--app-radius-chip) 0;
     background: var(--mobile-order-text-color);
     content: '';
     pointer-events: none;
@@ -5102,7 +5367,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
     align-items: center;
     margin-bottom: 4px;
     color: var(--app-muted);
-    font-size: 11px;
+    font-size: var(--app-text-micro);
     gap: 8px;
   }
   .mobile-order-meta span {
@@ -5111,14 +5376,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
   }
   .mobile-order-heading-copy > strong {
     color: var(--app-heading);
-    font-size: 14px;
+    font-size: var(--app-text-base);
     line-height: 1.45;
   }
   .mobile-order-heading-copy > small {
     margin-top: 4px;
     overflow: hidden;
     color: var(--app-muted);
-    font-size: 12px;
+    font-size: var(--app-text-xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -5140,11 +5405,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
   }
   .mobile-order-status-grid span {
     color: var(--app-muted);
-    font-size: 10px;
+    font-size: var(--app-text-micro);
   }
   .mobile-order-status-grid :deep(.el-tag) {
     max-width: 100%;
-    font-size: 11px;
+    font-size: var(--app-text-micro);
   }
   .mobile-order-money-grid {
     display: grid;
@@ -5160,16 +5425,16 @@ onBeforeUnmount(() => activeLoadController?.abort());
   .mobile-order-money-grid span,
   .mobile-order-money-grid small {
     color: var(--app-muted);
-    font-size: 10.5px;
+    font-size: var(--app-text-micro);
   }
   .mobile-order-money-grid strong {
     margin-top: 2px;
     color: var(--app-heading);
-    font-size: 14px;
+    font-size: var(--app-text-base);
     font-variant-numeric: tabular-nums;
   }
   .mobile-order-money-grid .mobile-rebate-amount {
-    color: #059669;
+    color: var(--app-success);
   }
   .mobile-order-money-grid .mobile-profit-amount {
     color: var(--app-primary);
@@ -5181,14 +5446,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
   .mobile-order-details {
     margin: 0 12px 11px;
     border: 1px solid var(--app-border);
-    border-radius: 12px;
+    border-radius: var(--app-radius-card);
     background: color-mix(in srgb, var(--app-control) 50%, transparent);
   }
   .mobile-order-details summary {
     padding: 9px 10px;
     color: var(--app-text);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--app-text-xs);
     font-weight: 600;
   }
   .mobile-order-details[open] summary {
@@ -5209,7 +5474,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   .mobile-order-details dt,
   .mobile-order-details dd {
     margin: 0;
-    font-size: 11.5px;
+    font-size: var(--app-text-micro);
     line-height: 1.5;
   }
   .mobile-order-details dt {
@@ -5228,7 +5493,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   }
   .mobile-edit-history > strong {
     color: var(--app-muted);
-    font-size: 11px;
+    font-size: var(--app-text-micro);
   }
   .mobile-order-actions {
     padding: 9px 10px 10px;
@@ -5281,7 +5546,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
   .view-tabs button {
     min-height: 30px;
     padding: 5px 6px;
-    font-size: 12px;
+    font-size: var(--app-text-xs);
   }
   .filter-actions {
     display: grid;

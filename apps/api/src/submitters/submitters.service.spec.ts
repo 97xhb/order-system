@@ -156,7 +156,7 @@ describe('SubmittersService payout registrations', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
-        qrCodeStorageKey: null,
+        qrCodeDataUrl: null,
         _count: { payouts: 0 },
       }),
     );
@@ -252,5 +252,121 @@ describe('SubmittersService payout registrations', () => {
     ).resolves.toEqual({
       accountValue: 'person@example.com',
     });
+  });
+
+  it('keeps the real name and QR code when saving an Alipay payout method', async () => {
+    const qrCodeDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+    const create = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'method-id',
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        _count: { payouts: 0 },
+      }),
+    );
+    const transaction = {
+      payoutMethod: { create, updateMany: jest.fn() },
+      auditLog: { create: jest.fn(async () => ({})) },
+    };
+    const prisma = {
+      submitter: { findUnique: jest.fn(async () => ({ id: 'submitter-id' })) },
+      $transaction: jest.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const service = new SubmittersService(prisma, config);
+
+    await service.createPayoutMethod(
+      'submitter-id',
+      {
+        type: PayoutMethodType.ALIPAY,
+        accountName: '张三',
+        accountValue: 'person@example.com',
+        qrCodeDataUrl,
+      },
+      admin,
+    );
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: PayoutMethodType.ALIPAY,
+          accountName: '张三',
+          qrCodeDataUrl,
+        }),
+      }),
+    );
+  });
+
+  it('rejects a QR code that is not a valid image data URL', async () => {
+    const prisma = {
+      submitter: { findUnique: jest.fn(async () => ({ id: 'submitter-id' })) },
+    } as unknown as PrismaService;
+    const service = new SubmittersService(prisma, config);
+
+    await expect(
+      service.createPayoutMethod(
+        'submitter-id',
+        {
+          type: PayoutMethodType.ALIPAY,
+          accountValue: 'person@example.com',
+          qrCodeDataUrl: 'javascript:alert(1)',
+        },
+        admin,
+      ),
+    ).rejects.toThrow('收款二维码图片格式不正确');
+  });
+
+  it('clears the QR code when an empty value is submitted', async () => {
+    const update = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'method-id',
+        type: PayoutMethodType.ALIPAY,
+        label: '支付宝',
+        accountName: '张三',
+        accountValueEncrypted: null,
+        bankName: null,
+        qrCodeDataUrl: null,
+        isDefault: false,
+        status: PayoutMethodStatus.ACTIVE,
+        ...data,
+      }),
+    );
+    const transaction = {
+      payoutMethod: { update, updateMany: jest.fn() },
+      auditLog: { create: jest.fn(async () => ({})) },
+    };
+    const prisma = {
+      payoutMethod: {
+        findUnique: jest.fn(async () => ({
+          id: 'method-id',
+          submitterId: 'submitter-id',
+          type: PayoutMethodType.ALIPAY,
+          accountName: '张三',
+          accountValueEncrypted: 'encrypted',
+          bankName: null,
+          qrCodeDataUrl: 'data:image/png;base64,AAAA',
+          isDefault: false,
+          status: PayoutMethodStatus.ACTIVE,
+          deletedAt: null,
+        })),
+      },
+      $transaction: jest.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const service = new SubmittersService(prisma, config);
+
+    await service.updatePayoutMethod('method-id', { qrCodeDataUrl: '' }, admin);
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ qrCodeDataUrl: null }),
+      }),
+    );
   });
 });

@@ -1,7 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import {
   DispatchStatus,
-  FundingType,
   OrderSource,
   OrderStatus,
   Prisma,
@@ -43,7 +42,7 @@ describe('PublicFormsService rejected order resubmission', () => {
     inboundTrackingNo: null,
     purchaseAddress: null,
     receiverName: null,
-    fundingType: FundingType.SELF_PAID,
+    fundingType: 'SELF_PAID',
     orderAmount: new Prisma.Decimal(100),
     paymentDiscountAmount: new Prisma.Decimal(0),
     rebateScanned: false,

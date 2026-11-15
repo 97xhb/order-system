@@ -37,8 +37,14 @@ onMounted(async () => {
   display: grid;
   min-height: 100vh;
   place-items: center;
-  color: #e2e8f0;
-  background: #0f172a;
+  color: var(--app-text-body);
+  background:
+    radial-gradient(
+      circle at 20% 12%,
+      color-mix(in srgb, var(--app-primary) 14%, transparent),
+      transparent 36%
+    ),
+    linear-gradient(180deg, var(--app-surface-sunken) 0, var(--app-background) 420px);
   text-align: center;
 }
 
@@ -50,21 +56,21 @@ onMounted(async () => {
 .root-redirect-page span {
   width: 34px;
   height: 34px;
-  border: 3px solid rgba(96, 165, 250, 0.24);
-  border-top-color: #60a5fa;
+  border: 3px solid color-mix(in srgb, var(--app-primary) 24%, transparent);
+  border-top-color: var(--app-info-border);
   border-radius: 50%;
   animation: rotate 0.75s linear infinite;
 }
 
 .root-redirect-page h1 {
   margin: 16px 0 4px;
-  font-size: 20px;
+  font-size: var(--app-text-xl);
 }
 
 .root-redirect-page p {
   margin: 0;
-  color: #94a3b8;
-  font-size: 14px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-base);
 }
 
 @keyframes rotate {
