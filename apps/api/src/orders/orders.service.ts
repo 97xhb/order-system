@@ -52,6 +52,19 @@ export class OrdersService {
     return normalized ? normalized : null;
   }
 
+  /**
+   * 把关键词按空白拆成多个检索词。
+   * 支持中文逗号、顿号和分号，方便从微信/表格里直接粘贴多个条件。
+   */
+  private keywordTerms(keyword: string | null) {
+    if (!keyword) return [];
+    return keyword
+      .split(/[\s,，、;；]+/)
+      .map((term) => term.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+  }
+
   private auditReason(value: Prisma.JsonValue | null) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return null;
@@ -1061,21 +1074,102 @@ export class OrdersService {
       baseFilters.push({ archiveGroupId: query.archiveGroupId });
     }
 
-    if (keyword) {
+    // 关键词按空白拆成多个词：每个词内部对可搜索字段取「任一匹配」，
+    // 词与词之间取「同时满足」。这样“订单号 商品 账号”可以组合检索，
+    // 而单个词仍然保持原来的一次输入搜全部字段的体验。
+    const keywordTerms = this.keywordTerms(keyword);
+    for (const term of keywordTerms) {
       baseFilters.push({
         OR: [
-          { productNameSnapshot: { contains: keyword, mode: 'insensitive' } },
-          { schemeNameSnapshot: { contains: keyword, mode: 'insensitive' } },
-          { platformOrderNo: { contains: keyword, mode: 'insensitive' } },
-          { inboundTrackingNo: { contains: keyword, mode: 'insensitive' } },
-          { purchaseAddress: { contains: keyword, mode: 'insensitive' } },
-          { receiverName: { contains: keyword, mode: 'insensitive' } },
-          { notes: { contains: keyword, mode: 'insensitive' } },
-          { submitter: { name: { contains: keyword, mode: 'insensitive' } } },
+          { productNameSnapshot: { contains: term, mode: 'insensitive' } },
+          { schemeNameSnapshot: { contains: term, mode: 'insensitive' } },
+          { platformOrderNo: { contains: term, mode: 'insensitive' } },
+          { inboundTrackingNo: { contains: term, mode: 'insensitive' } },
+          { purchaseAddress: { contains: term, mode: 'insensitive' } },
+          { receiverName: { contains: term, mode: 'insensitive' } },
+          { notes: { contains: term, mode: 'insensitive' } },
+          { submitter: { name: { contains: term, mode: 'insensitive' } } },
+          { submitter: { nickname: { contains: term, mode: 'insensitive' } } },
+          { submitter: { code: { contains: term, mode: 'insensitive' } } },
+          { customer: { name: { contains: term, mode: 'insensitive' } } },
+          { customer: { nickname: { contains: term, mode: 'insensitive' } } },
           {
             shipmentLink: {
               shipment: {
-                trackingNo: { contains: keyword, mode: 'insensitive' },
+                trackingNo: { contains: term, mode: 'insensitive' },
+              },
+            },
+          },
+        ],
+      });
+    }
+
+    // 按列精确筛选：每个条件单独成组，组间取「同时满足」。
+    const orderNo = this.clean(query.orderNo);
+    if (orderNo) {
+      baseFilters.push({
+        platformOrderNo: { contains: orderNo, mode: 'insensitive' },
+      });
+    }
+
+    const productKeyword = this.clean(query.productKeyword);
+    if (productKeyword) {
+      baseFilters.push({
+        OR: [
+          {
+            productNameSnapshot: {
+              contains: productKeyword,
+              mode: 'insensitive',
+            },
+          },
+          {
+            schemeNameSnapshot: {
+              contains: productKeyword,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      });
+    }
+
+    const accountKeyword = this.clean(query.accountKeyword);
+    if (accountKeyword) {
+      baseFilters.push({
+        OR: [
+          {
+            submitter: {
+              name: { contains: accountKeyword, mode: 'insensitive' },
+            },
+          },
+          {
+            submitter: {
+              nickname: { contains: accountKeyword, mode: 'insensitive' },
+            },
+          },
+          {
+            submitter: {
+              code: { contains: accountKeyword, mode: 'insensitive' },
+            },
+          },
+          {
+            submitterWechatNickname: {
+              contains: accountKeyword,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      });
+    }
+
+    const trackingNo = this.clean(query.trackingNo);
+    if (trackingNo) {
+      baseFilters.push({
+        OR: [
+          { inboundTrackingNo: { contains: trackingNo, mode: 'insensitive' } },
+          {
+            shipmentLink: {
+              shipment: {
+                trackingNo: { contains: trackingNo, mode: 'insensitive' },
               },
             },
           },

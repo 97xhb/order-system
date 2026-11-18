@@ -821,6 +821,181 @@ describe('OrdersService deletion and ordering', () => {
     expect(result.options).toBeNull();
   });
 
+  it('treats every space separated keyword as a condition that must all match', async () => {
+    const orderFindMany = jest.fn(async (_args: unknown) => []);
+    const prisma = {
+      order: {
+        findMany: orderFindMany,
+        count: jest.fn(async () => 0),
+        aggregate: jest.fn(async () => ({
+          _count: { _all: 0 },
+          _sum: {
+            submitterSettlementAmount: null,
+            settledProfit: null,
+            saleAmount: null,
+          },
+        })),
+      },
+      platform: { findMany: jest.fn(async () => []) },
+      category: { findMany: jest.fn(async () => []) },
+      orderScheme: { findMany: jest.fn(async () => []) },
+      submitter: { findMany: jest.fn(async () => []) },
+      fundingMethod: { findMany: jest.fn(async () => []) },
+      customFieldDefinition: { findMany: jest.fn(async () => []) },
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+
+    await service.list({ keyword: '2622200563620517 创维电视 设备7727' });
+
+    const where = (
+      orderFindMany.mock.calls[0][0] as {
+        where: {
+          AND: Array<Record<string, unknown>>;
+        };
+      }
+    ).where;
+    // 三个关键词各自成组，组间取 AND，表示同时满足
+    const keywordGroups = where.AND.filter((condition) => condition.OR);
+    expect(keywordGroups).toHaveLength(3);
+    expect(keywordGroups[0].OR).toEqual(
+      expect.arrayContaining([
+        {
+          platformOrderNo: {
+            contains: '2622200563620517',
+            mode: 'insensitive',
+          },
+        },
+      ]),
+    );
+    expect(keywordGroups[1].OR).toEqual(
+      expect.arrayContaining([
+        {
+          productNameSnapshot: {
+            contains: '创维电视',
+            mode: 'insensitive',
+          },
+        },
+      ]),
+    );
+    expect(keywordGroups[2].OR).toEqual(
+      expect.arrayContaining([
+        { submitter: { name: { contains: '设备7727', mode: 'insensitive' } } },
+      ]),
+    );
+  });
+
+  it('matches column filters and keyword terms together', async () => {
+    const orderFindMany = jest.fn(async (_args: unknown) => []);
+    const prisma = {
+      order: {
+        findMany: orderFindMany,
+        count: jest.fn(async () => 0),
+        aggregate: jest.fn(async () => ({
+          _count: { _all: 0 },
+          _sum: {
+            submitterSettlementAmount: null,
+            settledProfit: null,
+            saleAmount: null,
+          },
+        })),
+      },
+      platform: { findMany: jest.fn(async () => []) },
+      category: { findMany: jest.fn(async () => []) },
+      orderScheme: { findMany: jest.fn(async () => []) },
+      submitter: { findMany: jest.fn(async () => []) },
+      fundingMethod: { findMany: jest.fn(async () => []) },
+      customFieldDefinition: { findMany: jest.fn(async () => []) },
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+
+    await service.list({
+      keyword: '创维电视',
+      orderNo: '2622200563620517',
+      productKeyword: '65寸',
+      accountKeyword: '设备7727',
+      trackingNo: 'SF1868601506575',
+    });
+
+    const where = (
+      orderFindMany.mock.calls[0][0] as {
+        where: {
+          AND: Array<Record<string, unknown>>;
+        };
+      }
+    ).where;
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        {
+          platformOrderNo: {
+            contains: '2622200563620517',
+            mode: 'insensitive',
+          },
+        },
+        {
+          OR: [
+            {
+              productNameSnapshot: {
+                contains: '65寸',
+                mode: 'insensitive',
+              },
+            },
+            {
+              schemeNameSnapshot: {
+                contains: '65寸',
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+        {
+          OR: [
+            {
+              submitter: {
+                name: { contains: '设备7727', mode: 'insensitive' },
+              },
+            },
+            {
+              submitter: {
+                nickname: { contains: '设备7727', mode: 'insensitive' },
+              },
+            },
+            {
+              submitter: {
+                code: { contains: '设备7727', mode: 'insensitive' },
+              },
+            },
+            {
+              submitterWechatNickname: {
+                contains: '设备7727',
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+        {
+          OR: [
+            {
+              inboundTrackingNo: {
+                contains: 'SF1868601506575',
+                mode: 'insensitive',
+              },
+            },
+            {
+              shipmentLink: {
+                shipment: {
+                  trackingNo: {
+                    contains: 'SF1868601506575',
+                    mode: 'insensitive',
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
   it('returns all edit reasons with timestamps and order custom-field metadata', async () => {
     const decimal = (value: number) => new Prisma.Decimal(value);
     const order = {

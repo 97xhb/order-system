@@ -57,6 +57,30 @@ export class ListOrdersQueryDto {
   @MaxLength(200)
   keyword?: string;
 
+  @ApiPropertyOptional({ description: '平台订单号（模糊匹配）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  orderNo?: string;
+
+  @ApiPropertyOptional({ description: '商品名称或分享方案（模糊匹配）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  productKeyword?: string;
+
+  @ApiPropertyOptional({ description: '下单账号或账号编号（模糊匹配）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  accountKeyword?: string;
+
+  @ApiPropertyOptional({ description: '平台运单号或寄件运单号（模糊匹配）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  trackingNo?: string;
+
   @ApiPropertyOptional({ description: '多个 UUID 使用英文逗号分隔' })
   @IsOptional()
   @IsString()
