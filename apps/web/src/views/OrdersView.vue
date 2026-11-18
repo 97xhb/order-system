@@ -419,10 +419,6 @@ const serialSort = ref<SerialSort>(
 const submitterOrderCountSort = ref<SubmitterOrderCountSort | null>(null);
 const filters = reactive({
   keyword: '',
-  orderNo: '',
-  productKeyword: '',
-  accountKeyword: '',
-  trackingNo: '',
   dateRange: [] as string[],
   platformIds: [] as string[],
   submitterIds: [] as string[],
@@ -744,10 +740,6 @@ const orderQueryParams = (page: number, pageSize: number) => ({
   serialSort: serialSort.value,
   submitterOrderCountSort: submitterOrderCountSort.value ?? undefined,
   keyword: filters.keyword || undefined,
-  orderNo: filters.orderNo || undefined,
-  productKeyword: filters.productKeyword || undefined,
-  accountKeyword: filters.accountKeyword || undefined,
-  trackingNo: filters.trackingNo || undefined,
   orderedFrom: filters.dateRange[0],
   orderedTo: filters.dateRange[1],
   platformIds: filters.platformIds.join(',') || undefined,
@@ -846,10 +838,6 @@ const changeOrderSort = (command: OrderSortCommand) => {
 
 const resetFilters = () => {
   filters.keyword = '';
-  filters.orderNo = '';
-  filters.productKeyword = '';
-  filters.accountKeyword = '';
-  filters.trackingNo = '';
   filters.dateRange = [];
   filters.platformIds = [];
   filters.submitterIds = [];
@@ -2374,7 +2362,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
             class="keyword-filter"
             :prefix-icon="Search"
             clearable
-            placeholder="搜索订单号、商品、账号、运单号（空格分隔可同时满足）"
+            placeholder="搜索订单号、商品、账号、运单号（多个条件用逗号分隔）"
             @keyup.enter="query"
           />
           <el-select
@@ -2425,43 +2413,11 @@ onBeforeUnmount(() => activeLoadController?.abort());
           </div>
         </div>
         <p class="filter-hint">
-          不同筛选条件会同时满足；同一分类选择多个选项时，匹配其中任一选项。搜索框内用空格分隔多个关键词，可按订单号、商品、账号等组合检索。
+          不同筛选条件会同时满足；同一分类选择多个选项时，匹配其中任一选项。搜索框内用逗号分隔多个关键词，可按订单号、商品、账号等组合检索。
         </p>
 
         <el-collapse-transition>
           <el-form v-show="showAdvancedFilters" label-position="top" class="advanced-filter-grid">
-            <el-form-item label="平台订单号">
-              <el-input
-                v-model="filters.orderNo"
-                clearable
-                placeholder="如 2622200563620517"
-                @keyup.enter="query"
-              />
-            </el-form-item>
-            <el-form-item label="商品 / 方案">
-              <el-input
-                v-model="filters.productKeyword"
-                clearable
-                placeholder="如 创维电视65寸"
-                @keyup.enter="query"
-              />
-            </el-form-item>
-            <el-form-item label="下单账号">
-              <el-input
-                v-model="filters.accountKeyword"
-                clearable
-                placeholder="如 设备7727"
-                @keyup.enter="query"
-              />
-            </el-form-item>
-            <el-form-item label="运单号">
-              <el-input
-                v-model="filters.trackingNo"
-                clearable
-                placeholder="平台运单号或寄件运单号"
-                @keyup.enter="query"
-              />
-            </el-form-item>
             <el-form-item label="下单日期">
               <el-date-picker
                 v-model="filters.dateRange"

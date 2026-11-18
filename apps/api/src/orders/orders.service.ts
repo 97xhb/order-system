@@ -53,13 +53,14 @@ export class OrdersService {
   }
 
   /**
-   * 把关键词按空白拆成多个检索词。
-   * 支持中文逗号、顿号和分号，方便从微信/表格里直接粘贴多个条件。
+   * 把关键词按逗号拆成多个检索词，词与词之间取「同时满足」。
+   * 只用逗号分隔（半角/中文逗号、顿号、分号），不用空格：
+   * 商品名本身常带空格（如「海蓝之谜 精粹乳50ml」），按空格拆会搜不到。
    */
   private keywordTerms(keyword: string | null) {
     if (!keyword) return [];
     return keyword
-      .split(/[\s,，、;；]+/)
+      .split(/[,，、;；]+/)
       .map((term) => term.trim())
       .filter(Boolean)
       .slice(0, 8);
@@ -1097,79 +1098,6 @@ export class OrdersService {
             shipmentLink: {
               shipment: {
                 trackingNo: { contains: term, mode: 'insensitive' },
-              },
-            },
-          },
-        ],
-      });
-    }
-
-    // 按列精确筛选：每个条件单独成组，组间取「同时满足」。
-    const orderNo = this.clean(query.orderNo);
-    if (orderNo) {
-      baseFilters.push({
-        platformOrderNo: { contains: orderNo, mode: 'insensitive' },
-      });
-    }
-
-    const productKeyword = this.clean(query.productKeyword);
-    if (productKeyword) {
-      baseFilters.push({
-        OR: [
-          {
-            productNameSnapshot: {
-              contains: productKeyword,
-              mode: 'insensitive',
-            },
-          },
-          {
-            schemeNameSnapshot: {
-              contains: productKeyword,
-              mode: 'insensitive',
-            },
-          },
-        ],
-      });
-    }
-
-    const accountKeyword = this.clean(query.accountKeyword);
-    if (accountKeyword) {
-      baseFilters.push({
-        OR: [
-          {
-            submitter: {
-              name: { contains: accountKeyword, mode: 'insensitive' },
-            },
-          },
-          {
-            submitter: {
-              nickname: { contains: accountKeyword, mode: 'insensitive' },
-            },
-          },
-          {
-            submitter: {
-              code: { contains: accountKeyword, mode: 'insensitive' },
-            },
-          },
-          {
-            submitterWechatNickname: {
-              contains: accountKeyword,
-              mode: 'insensitive',
-            },
-          },
-        ],
-      });
-    }
-
-    const trackingNo = this.clean(query.trackingNo);
-    if (trackingNo) {
-      baseFilters.push({
-        OR: [
-          { inboundTrackingNo: { contains: trackingNo, mode: 'insensitive' } },
-          {
-            shipmentLink: {
-              shipment: {
-                trackingNo: { contains: trackingNo, mode: 'insensitive' },
               },
             },
           },

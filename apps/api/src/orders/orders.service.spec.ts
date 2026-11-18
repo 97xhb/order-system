@@ -821,7 +821,7 @@ describe('OrdersService deletion and ordering', () => {
     expect(result.options).toBeNull();
   });
 
-  it('treats every space separated keyword as a condition that must all match', async () => {
+  it('treats every comma separated keyword as a condition that must all match', async () => {
     const orderFindMany = jest.fn(async (_args: unknown) => []);
     const prisma = {
       order: {
@@ -845,7 +845,7 @@ describe('OrdersService deletion and ordering', () => {
     } as unknown as PrismaService;
     const service = new OrdersService(prisma);
 
-    await service.list({ keyword: '2622200563620517 创维电视 设备7727' });
+    await service.list({ keyword: '2622200563620517,创维电视,设备7727' });
 
     const where = (
       orderFindMany.mock.calls[0][0] as {
@@ -884,7 +884,54 @@ describe('OrdersService deletion and ordering', () => {
     );
   });
 
-  it('matches column filters and keyword terms together', async () => {
+  it('keeps spaces inside a keyword so product names with spaces still match', async () => {
+    const orderFindMany = jest.fn(async (_args: unknown) => []);
+    const prisma = {
+      order: {
+        findMany: orderFindMany,
+        count: jest.fn(async () => 0),
+        aggregate: jest.fn(async () => ({
+          _count: { _all: 0 },
+          _sum: {
+            submitterSettlementAmount: null,
+            settledProfit: null,
+            saleAmount: null,
+          },
+        })),
+      },
+      platform: { findMany: jest.fn(async () => []) },
+      category: { findMany: jest.fn(async () => []) },
+      orderScheme: { findMany: jest.fn(async () => []) },
+      submitter: { findMany: jest.fn(async () => []) },
+      fundingMethod: { findMany: jest.fn(async () => []) },
+      customFieldDefinition: { findMany: jest.fn(async () => []) },
+    } as unknown as PrismaService;
+    const service = new OrdersService(prisma);
+
+    await service.list({ keyword: '海蓝之谜 精粹乳50ml' });
+
+    const where = (
+      orderFindMany.mock.calls[0][0] as {
+        where: {
+          AND: Array<Record<string, unknown>>;
+        };
+      }
+    ).where;
+    const keywordGroups = where.AND.filter((condition) => condition.OR);
+    expect(keywordGroups).toHaveLength(1);
+    expect(keywordGroups[0].OR).toEqual(
+      expect.arrayContaining([
+        {
+          productNameSnapshot: {
+            contains: '海蓝之谜 精粹乳50ml',
+            mode: 'insensitive',
+          },
+        },
+      ]),
+    );
+  });
+
+  it('combines multi keyword terms with the other existing filters', async () => {
     const orderFindMany = jest.fn(async (_args: unknown) => []);
     const prisma = {
       order: {
@@ -909,11 +956,8 @@ describe('OrdersService deletion and ordering', () => {
     const service = new OrdersService(prisma);
 
     await service.list({
-      keyword: '创维电视',
-      orderNo: '2622200563620517',
-      productKeyword: '65寸',
-      accountKeyword: '设备7727',
-      trackingNo: 'SF1868601506575',
+      keyword: '创维电视,设备7727',
+      submitterIds: 'submitter-1',
     });
 
     const where = (
@@ -923,76 +967,12 @@ describe('OrdersService deletion and ordering', () => {
         };
       }
     ).where;
+    const keywordGroups = where.AND.filter((group) =>
+      Array.isArray((group as { OR?: unknown[] }).OR),
+    );
+    expect(keywordGroups).toHaveLength(2);
     expect(where.AND).toEqual(
-      expect.arrayContaining([
-        {
-          platformOrderNo: {
-            contains: '2622200563620517',
-            mode: 'insensitive',
-          },
-        },
-        {
-          OR: [
-            {
-              productNameSnapshot: {
-                contains: '65寸',
-                mode: 'insensitive',
-              },
-            },
-            {
-              schemeNameSnapshot: {
-                contains: '65寸',
-                mode: 'insensitive',
-              },
-            },
-          ],
-        },
-        {
-          OR: [
-            {
-              submitter: {
-                name: { contains: '设备7727', mode: 'insensitive' },
-              },
-            },
-            {
-              submitter: {
-                nickname: { contains: '设备7727', mode: 'insensitive' },
-              },
-            },
-            {
-              submitter: {
-                code: { contains: '设备7727', mode: 'insensitive' },
-              },
-            },
-            {
-              submitterWechatNickname: {
-                contains: '设备7727',
-                mode: 'insensitive',
-              },
-            },
-          ],
-        },
-        {
-          OR: [
-            {
-              inboundTrackingNo: {
-                contains: 'SF1868601506575',
-                mode: 'insensitive',
-              },
-            },
-            {
-              shipmentLink: {
-                shipment: {
-                  trackingNo: {
-                    contains: 'SF1868601506575',
-                    mode: 'insensitive',
-                  },
-                },
-              },
-            },
-          ],
-        },
-      ]),
+      expect.arrayContaining([{ submitterId: { in: ['submitter-1'] } }]),
     );
   });
 
