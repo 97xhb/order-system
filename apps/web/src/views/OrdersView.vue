@@ -17,6 +17,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { SheetData } from 'write-excel-file/browser';
+import { resolveThemeColor } from '../lib/theme-color';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
 import { http } from '../lib/http';
@@ -1334,7 +1335,7 @@ const createSelectedOrdersTableCanvas = () => {
   if (!context) throw new Error('CANVAS_UNAVAILABLE');
   context.scale(scale, scale);
   context.textBaseline = 'top';
-  context.fillStyle = 'var(--app-surface-card)';
+  context.fillStyle = resolveThemeColor('--app-surface-card', '#ffffff');
   context.fillRect(0, 0, logicalWidth, logicalHeight);
 
   const drawTextLines = (
@@ -1365,7 +1366,7 @@ const createSelectedOrdersTableCanvas = () => {
     context.strokeStyle = '#1f2937';
     context.lineWidth = 1;
     context.strokeRect(currentX + 0.5, headerTop + 0.5, width, headerHeight);
-    context.fillStyle = 'var(--app-text-strong)';
+    context.fillStyle = resolveThemeColor('--app-text-strong', '#1f2937');
     drawTextLines(
       headerLines[index],
       currentX,
@@ -1386,12 +1387,12 @@ const createSelectedOrdersTableCanvas = () => {
     row.forEach((lines, columnIndex) => {
       const column = columns[columnIndex];
       const width = columnWidths[columnIndex];
-      context.fillStyle = 'var(--app-surface-card)';
+      context.fillStyle = resolveThemeColor('--app-surface-card', '#ffffff');
       context.fillRect(currentX, currentY, width, rowHeight);
       context.strokeStyle = '#1f2937';
       context.lineWidth = 1;
       context.strokeRect(currentX + 0.5, currentY + 0.5, width, rowHeight);
-      context.fillStyle = 'var(--app-text-strong)';
+      context.fillStyle = resolveThemeColor('--app-text-strong', '#1f2937');
       const align: CanvasTextAlign = imageRightAlignedColumnKeys.has(column.key)
         ? 'right'
         : imageCenteredColumnKeys.has(column.key)
@@ -1632,18 +1633,21 @@ const exportOrdersAsSpreadsheet = async () => {
     }
 
     const { default: writeXlsxFile } = await import('write-excel-file/browser');
+    // xlsx 只接受 #RRGGBB 这样的固定色值，CSS 变量会让整次导出直接报错
+    const brandColor = resolveThemeColor('--app-primary', '#4f7ef0');
+    const headerTextColor = resolveThemeColor('--app-surface-card', '#ffffff');
     const headerRow: SheetData[number] = columns.map((column) => ({
       value: column.label,
       type: String,
       format: '@',
-      backgroundColor: 'var(--app-primary)',
-      textColor: 'var(--app-surface-card)',
+      backgroundColor: brandColor,
+      textColor: headerTextColor,
       fontWeight: 'bold',
       align: 'center',
       alignVertical: 'center',
       wrap: true,
       height: 25,
-      borderColor: 'var(--app-primary)',
+      borderColor: brandColor,
       borderStyle: 'thin',
     }));
     const dataRows: SheetData = exportRows.map((row) => {
@@ -1706,7 +1710,8 @@ const exportOrdersAsSpreadsheet = async () => {
     ).toFile(fileName);
     ElMessage.success(`已导出 ${exportRows.length} 笔订单（XLSX）`);
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '订单导出失败'));
+    const reason = error instanceof Error && error.message ? `：${error.message}` : '';
+    ElMessage.error(`${getApiErrorMessage(error, '订单导出失败')}${reason}`);
   } finally {
     exportSaving.value = false;
   }
