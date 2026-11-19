@@ -1016,6 +1016,9 @@ export class PublicFormsService {
       canEdit:
         order.reviewStatus === ReviewStatus.REJECTED ||
         (form.allowEditBeforeApproval &&
+          order.reviewStatus === ReviewStatus.PENDING) ||
+        // 管理员误点确认后退回待确认的订单，下单人可以再次修改
+        (order.revertedAt !== null &&
           order.reviewStatus === ReviewStatus.PENDING),
       canDelete:
         order.reviewStatus === ReviewStatus.REJECTED ||
@@ -1056,7 +1059,8 @@ export class PublicFormsService {
     }
     if (
       existing.reviewStatus === ReviewStatus.PENDING &&
-      !form.allowEditBeforeApproval
+      !form.allowEditBeforeApproval &&
+      !existing.revertedAt
     ) {
       throw new ForbiddenException('管理员未开放提交后的修改权限');
     }

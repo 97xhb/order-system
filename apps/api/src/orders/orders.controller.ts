@@ -16,6 +16,7 @@ import type { AuthenticatedAdmin } from '../auth/auth.types';
 import { CreateAdminOrderDto } from './dto/create-admin-order.dto';
 import { CreateAdminOrdersBatchDto } from './dto/create-admin-orders-batch.dto';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
+import { RevertOrderDto } from './dto/revert-order.dto';
 import { ReviewOrderDto } from './dto/review-order.dto';
 import { UpdateAdminOrderDto } from './dto/update-admin-order.dto';
 import { UpdateOrderProgressDto } from './dto/update-order-progress.dto';
@@ -85,6 +86,16 @@ export class OrdersController {
     @CurrentAdmin() admin: AuthenticatedAdmin,
   ) {
     return this.orders.review(id, dto, admin);
+  }
+
+  @Patch(':id/revert-to-pending')
+  @ApiOperation({ summary: '把已确认订单退回待确认，让下单人可以重新修改' })
+  revertToPending(
+    @Param('id') id: string,
+    @Body() dto: RevertOrderDto,
+    @CurrentAdmin() admin: AuthenticatedAdmin,
+  ) {
+    return this.orders.revertToPending(id, dto, admin);
   }
 
   @Patch(':id/progress')

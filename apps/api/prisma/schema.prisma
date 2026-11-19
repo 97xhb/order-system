@@ -452,6 +452,7 @@ model Order {
   customData   Json?     @map("custom_data")
   approvedAt   DateTime? @map("approved_at") @db.Timestamptz(3)
   approvedById String?   @map("approved_by_id") @db.Uuid
+  revertedAt   DateTime? @map("reverted_at") @db.Timestamptz(3)
   createdById  String?   @map("created_by_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)

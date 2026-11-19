@@ -2143,6 +2143,29 @@ const review = async (row: OrderRow, status: 'APPROVED' | 'REJECTED') => {
   }
 };
 
+const revertToPending = async (row: OrderRow) => {
+  try {
+    const result = await ElMessageBox.prompt(
+      '退回后订单会变成「待确认」，下单人可以重新修改。请填写退回说明（可不填）。',
+      '退回待确认',
+      {
+        inputPlaceholder: '例如：需要下单人补充收货地址',
+        inputValidator: () => true,
+        type: 'warning',
+        confirmButtonText: '确认退回',
+        cancelButtonText: '取消',
+      },
+    );
+    const reason = String(result.value ?? '').trim();
+    await http.patch(`/admin/orders/${row.id}/revert-to-pending`, { reason });
+    ElMessage.success('已退回待确认，下单人可以重新修改');
+    await load();
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(getApiErrorMessage(error, '退回失败'));
+  }
+};
+
 const quickMarkPaid = async (row: OrderRow, target: 'CUSTOMER' | 'SUBMITTER') => {
   const isCustomer = target === 'CUSTOMER';
   const title = isCustomer ? '标记收货佬已回款' : '标记给下单人已结算';
@@ -3031,7 +3054,7 @@ onBeforeUnmount(() => activeLoadController?.abort());
               </template>
             </template>
           </vxe-column>
-          <vxe-column title="操作 / 审核" width="296" fixed="right" align="center">
+          <vxe-column title="操作 / 审核" width="348" fixed="right" align="center">
             <template #default="{ row }">
               <div v-if="row.reviewStatus === 'PENDING'" class="row-actions">
                 <el-button
@@ -3078,6 +3101,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
                   @click="quickMarkPaid(row, 'SUBMITTER')"
                 >
                   <span class="order-action-dot" aria-hidden="true"></span>已结算
+                </el-button>
+                <el-button
+                  v-if="row.receivableStatus !== 'PAID' && row.submitterSettlementStatus !== 'PAID'"
+                  class="order-action order-action--revert"
+                  size="small"
+                  @click="revertToPending(row)"
+                >
+                  <span class="order-action-dot" aria-hidden="true"></span>退回
                 </el-button>
                 <span
                   v-if="row.receivableStatus === 'PAID' && row.submitterSettlementStatus === 'PAID'"
@@ -3333,6 +3364,14 @@ onBeforeUnmount(() => activeLoadController?.abort());
                 @click="quickMarkPaid(row, 'SUBMITTER')"
               >
                 <span class="order-action-dot" aria-hidden="true"></span>已结算
+              </el-button>
+              <el-button
+                v-if="row.receivableStatus !== 'PAID' && row.submitterSettlementStatus !== 'PAID'"
+                class="order-action order-action--revert"
+                size="small"
+                @click="revertToPending(row)"
+              >
+                <span class="order-action-dot" aria-hidden="true"></span>退回
               </el-button>
               <span
                 v-if="row.receivableStatus === 'PAID' && row.submitterSettlementStatus === 'PAID'"
@@ -5044,6 +5083,9 @@ onBeforeUnmount(() => activeLoadController?.abort());
 }
 .order-action--reject {
   --order-action-accent: var(--app-danger);
+}
+.order-action--revert {
+  --order-action-accent: var(--app-warning);
 }
 .order-action-dot {
   display: inline-block;

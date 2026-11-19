@@ -27,6 +27,7 @@ import {
 import { CreateAdminOrderDto } from './dto/create-admin-order.dto';
 import { CreateAdminOrdersBatchDto } from './dto/create-admin-orders-batch.dto';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
+import { RevertOrderDto } from './dto/revert-order.dto';
 import { ReviewOrderDto } from './dto/review-order.dto';
 import { UpdateAdminOrderDto } from './dto/update-admin-order.dto';
 import { UpdateOrderProgressDto } from './dto/update-order-progress.dto';
@@ -1558,6 +1559,8 @@ export class OrdersService {
           reviewStatus: dto.status,
           approvedAt: dto.status === ReviewStatus.APPROVED ? new Date() : null,
           approvedById: dto.status === ReviewStatus.APPROVED ? admin.id : null,
+          // 重新确认后清除「已退回」标记
+          revertedAt: null,
           profitRuleId: profit?.profitRuleId,
           profitRuleVersion: profit?.profitRuleVersion,
           profitRuleSnapshot: profit?.profitRuleSnapshot,
@@ -1587,6 +1590,76 @@ export class OrdersService {
             profitRuleId: order.profitRuleId,
             profitRuleVersion: order.profitRuleVersion,
             expectedProfit: order.expectedProfit.toString(),
+          },
+        },
+      });
+      return order;
+    });
+  }
+
+  /**
+   * 管理员误点「通过」后，把订单退回待确认，让下单人可以重新修改。
+   * 已经发生回款或结算的订单不能退回，否则账目与统计会对不上。
+   */
+  async revertToPending(
+    id: string,
+    dto: RevertOrderDto,
+    admin: AuthenticatedAdmin,
+  ) {
+    const existing = await this.prisma.order.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) throw new NotFoundException('订单不存在');
+    if (existing.reviewStatus !== ReviewStatus.APPROVED) {
+      throw new ConflictException('只有已确认的订单才能退回待确认');
+    }
+    if (
+      existing.receivableStatus === SettlementStatus.PAID ||
+      existing.submitterSettlementStatus === SettlementStatus.PAID
+    ) {
+      throw new ConflictException(
+        '订单已完成回款或结算，不能退回待确认，请先撤销相关回款与结算',
+      );
+    }
+
+    return this.prisma.$transaction(async (transaction) => {
+      const order = await transaction.order.update({
+        where: { id },
+        data: {
+          reviewStatus: ReviewStatus.PENDING,
+          approvedAt: null,
+          approvedById: null,
+          revertedAt: new Date(),
+          // 退回后利润按最新规则重新计算，先清空旧快照与统计值
+          profitRuleId: null,
+          profitRuleVersion: null,
+          profitRuleSnapshot: Prisma.DbNull,
+          expectedProfit: new Prisma.Decimal(0),
+          settledProfit: new Prisma.Decimal(0),
+          notes: dto.reason
+            ? [existing.notes, `退回说明：${dto.reason.trim()}`]
+                .filter(Boolean)
+                .join('\n')
+            : undefined,
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          actorAdminId: admin.id,
+          source: 'ADMIN_WEB',
+          action: 'ORDER_REVERTED_TO_PENDING',
+          entityType: 'Order',
+          entityId: id,
+          beforeData: {
+            reviewStatus: existing.reviewStatus,
+            approvedAt: existing.approvedAt?.toISOString() ?? null,
+            expectedProfit: existing.expectedProfit.toString(),
+            settledProfit: existing.settledProfit.toString(),
+          },
+          afterData: {
+            reviewStatus: order.reviewStatus,
+            revertedAt: order.revertedAt?.toISOString() ?? null,
+            reason: this.clean(dto.reason),
           },
         },
       });
