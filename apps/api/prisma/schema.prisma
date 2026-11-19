@@ -847,3 +847,57 @@ model AuditLog {
   @@index([actorAdminId, createdAt])
   @@map("audit_logs")
 }
+
+enum NotificationEvent {
+  ORDER_SUBMITTED
+  ORDER_BATCH_SUBMITTED
+  ORDER_UPDATED_BY_SUBMITTER
+  ORDER_DELETED_BY_SUBMITTER
+}
+
+enum NotificationChannelType {
+  DINGTALK
+  WECOM
+  PUSHPLUS
+  CUSTOM
+}
+
+model NotificationChannel {
+  id        String                   @id @default(uuid()) @db.Uuid
+  name      String                   @db.VarChar(60)
+  type      NotificationChannelType
+  endpoint  String                   @db.VarChar(512)
+  secret    String?                  @db.VarChar(255)
+  enabled   Boolean                  @default(true)
+  createdAt DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("notification_channels")
+}
+
+model NotificationRule {
+  id            String            @id @default(uuid()) @db.Uuid
+  event         NotificationEvent @unique
+  enabled       Boolean           @default(true)
+  titleTemplate String            @map("title_template") @db.VarChar(200)
+  bodyTemplate  String            @map("body_template") @db.Text
+  channelIds    String[]          @default([]) @map("channel_ids")
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("notification_rules")
+}
+
+model NotificationMessage {
+  id        String            @id @default(uuid()) @db.Uuid
+  event     NotificationEvent
+  title     String            @db.VarChar(200)
+  content   String            @db.Text
+  payload   Json?
+  readAt    DateTime?         @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([readAt, createdAt])
+  @@index([event, createdAt])
+  @@map("notification_messages")
+}

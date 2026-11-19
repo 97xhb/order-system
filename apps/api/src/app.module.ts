@@ -20,6 +20,7 @@ import {
 import { SubmittersModule } from './submitters/submitters.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { LogisticsModule } from './logistics/logistics.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { LogisticsModule } from './logistics/logistics.module';
     SubmittersModule,
     SystemSettingsModule,
     LogisticsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

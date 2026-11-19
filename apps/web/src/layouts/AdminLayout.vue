@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  Bell,
   DataAnalysis,
   Document,
   Expand,
@@ -17,6 +18,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { APP_BUILD_TIME, APP_VERSION } from '../lib/app-version';
 import { http } from '../lib/http';
+import AdminNotificationCenter from '../components/AdminNotificationCenter.vue';
 import { useAuthStore } from '../stores/auth';
 import { useSystemStore } from '../stores/system';
 
@@ -52,6 +54,7 @@ const navigationItems = [
   { path: '/admin/submitters', label: '回款登记', icon: Money },
   { path: '/admin/settings', label: '基础设置', icon: Setting },
   { path: '/admin/system-settings', label: '系统设置', icon: Tools },
+  { path: '/admin/notifications', label: '消息通知', icon: Bell },
 ];
 
 const handleMenuSelect = (path: string) => {
@@ -250,6 +253,8 @@ const changePassword = async () => {
         >
       </template>
     </el-dialog>
+
+    <AdminNotificationCenter />
   </div>
 </template>
 

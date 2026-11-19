@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { ShareFormStatus } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_SHARE_FORM_FIELD_CONFIG } from '../schemes/share-form-config';
+import { createNotificationsStub } from './notifications.stub';
 import { PublicFormsService } from './public-forms.service';
 
 const identity = {
@@ -62,6 +63,7 @@ const createService = (
   return new PublicFormsService(
     prisma as unknown as PrismaService,
     {} as ConfigService,
+    createNotificationsStub(),
   );
 };
 

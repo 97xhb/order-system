@@ -103,6 +103,11 @@ const router = createRouter({
           meta: { title: '系统设置' },
         },
         {
+          path: 'notifications',
+          component: () => import('../views/NotificationSettingsView.vue'),
+          meta: { title: '消息通知' },
+        },
+        {
           path: 'api-directory',
           component: () => import('../views/ApiDirectoryView.vue'),
           meta: { title: 'API 接口目录' },

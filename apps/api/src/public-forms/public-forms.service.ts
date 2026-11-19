@@ -22,6 +22,11 @@ import {
   SubmitterStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  buildOrderChangeSnapshot,
+  diffOrderChanges,
+} from '../notifications/notification-template';
 import { DEFAULT_FUNDING_METHOD_CODE } from '../catalog/funding-methods';
 import {
   assertNicknameCanBeClaimed,
@@ -79,6 +84,7 @@ export class PublicFormsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly appConfig: ConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private clean(value: string | undefined | null) {
@@ -523,8 +529,9 @@ export class PublicFormsService {
     const config = this.config(form.fieldConfig);
     const prepared = await this.prepareOrder(form, config, dto);
 
+    let created: { id: string; serialNo: number; reviewStatus: string; createdAt: Date };
     try {
-      return await this.prisma.$transaction(
+      created = await this.prisma.$transaction(
         async (transaction) => {
           await this.assertSubmissionLimit(transaction, form);
           const submitter = await this.resolveOrderSubmitter(
@@ -557,6 +564,10 @@ export class PublicFormsService {
     } catch (error) {
       throw this.mapOrderWriteError(error);
     }
+    await this.notifications.notifyOrderEvent('ORDER_SUBMITTED', [created.id], {
+      requestMetadata,
+    });
+    return created;
   }
 
   /**
@@ -823,6 +834,7 @@ export class PublicFormsService {
     }
 
     // 第三步：剩下的条目一次性写入。
+    const createdOrderIds: string[] = [];
     if (insertable.length) {
       try {
         const created = await this.prisma.$transaction(
@@ -856,6 +868,7 @@ export class PublicFormsService {
         );
 
         for (const [position, order] of created.entries()) {
+          createdOrderIds.push(order.id);
           results.push({
             index: insertable[position].index,
             success: true,
@@ -869,6 +882,14 @@ export class PublicFormsService {
           results.push({ index: item.index, success: false, message });
         }
       }
+    }
+
+    if (createdOrderIds.length) {
+      await this.notifications.notifyOrderEvent(
+        'ORDER_BATCH_SUBMITTED',
+        createdOrderIds,
+        { requestMetadata },
+      );
     }
 
     results.sort((left, right) => left.index - right.index);
@@ -1021,6 +1042,10 @@ export class PublicFormsService {
         ...ownershipWhere,
         deletedAt: null,
       },
+      include: {
+        platform: { select: { name: true } },
+        category: { select: { name: true } },
+      },
     });
     if (!existing) throw new NotFoundException('登记记录不存在');
     if (
@@ -1172,8 +1197,9 @@ export class PublicFormsService {
       throw new BadRequestException('选择的品类不可用');
     }
 
+    let updatedResult: { id: string; updatedAt: Date };
     try {
-      return await this.prisma.$transaction(async (transaction) => {
+      updatedResult = await this.prisma.$transaction(async (transaction) => {
         const submitter = await this.resolveOrderSubmitter(
           transaction,
           identity,
@@ -1248,6 +1274,33 @@ export class PublicFormsService {
       }
       throw error;
     }
+
+    const beforeSnapshot = buildOrderChangeSnapshot({
+      productNameSnapshot: existing.productNameSnapshot,
+      platformOrderNo: existing.platformOrderNo,
+      platformName: existing.platform?.name,
+      categoryName: existing.category?.name,
+      fundingType: existing.fundingType,
+      orderedAt: existing.orderedAt,
+      receiverName: existing.receiverName,
+      purchaseAddress: existing.purchaseAddress,
+      inboundTrackingNo: existing.inboundTrackingNo,
+      orderAmount: existing.orderAmount,
+      submitterSettlementAmount: existing.submitterSettlementAmount,
+      paymentDiscountAmount: existing.paymentDiscountAmount,
+      rebateScanned: existing.rebateScanned,
+      dispatchStatus: existing.dispatchStatus,
+      notes: existing.notes,
+    });
+    const afterSnapshot =
+      await this.notifications.buildOrderChangeSnapshot(updatedResult.id);
+    const changes = diffOrderChanges(beforeSnapshot, afterSnapshot);
+    await this.notifications.notifyOrderEvent(
+      'ORDER_UPDATED_BY_SUBMITTER',
+      [updatedResult.id],
+      { changes, requestMetadata },
+    );
+    return updatedResult;
   }
 
   async deleteMine(
@@ -1297,6 +1350,11 @@ export class PublicFormsService {
         },
       });
     });
+    await this.notifications.notifyOrderEvent(
+      'ORDER_DELETED_BY_SUBMITTER',
+      [existing.id],
+      { requestMetadata },
+    );
   }
 
   async createPayoutMethod(

@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_SHARE_FORM_FIELD_CONFIG } from '../schemes/share-form-config';
+import { createNotificationsStub } from './notifications.stub';
 import { PublicFormsService } from './public-forms.service';
 
 describe('PublicFormsService rejected order resubmission', () => {
@@ -110,6 +111,7 @@ describe('PublicFormsService rejected order resubmission', () => {
     const service = new PublicFormsService(
       prisma as unknown as PrismaService,
       {} as ConfigService,
+      createNotificationsStub(),
     );
     (
       service as unknown as {
@@ -189,6 +191,10 @@ describe('PublicFormsService rejected order resubmission', () => {
         shareFormId: form.id,
         submitterId: 'submitter-1',
         deletedAt: null,
+      },
+      include: {
+        platform: { select: { name: true } },
+        category: { select: { name: true } },
       },
     });
     expect(orderUpdate).toHaveBeenCalledWith(

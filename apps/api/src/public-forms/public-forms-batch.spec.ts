@@ -3,6 +3,7 @@ import { ConflictException, GoneException } from '@nestjs/common';
 import { ReviewStatus, ShareFormStatus } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_SHARE_FORM_FIELD_CONFIG } from '../schemes/share-form-config';
+import { createNotificationsStub } from './notifications.stub';
 import { PublicFormsService } from './public-forms.service';
 
 describe('PublicFormsService batch order submission', () => {
@@ -84,6 +85,7 @@ describe('PublicFormsService batch order submission', () => {
     const service = new PublicFormsService(
       prisma as unknown as PrismaService,
       {} as ConfigService,
+      createNotificationsStub(),
     );
     (
       service as unknown as {
