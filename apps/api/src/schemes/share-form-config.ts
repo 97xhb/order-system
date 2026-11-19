@@ -19,15 +19,37 @@ export const SHARE_FORM_FIELD_KEYS = [
 
 export type ShareFormFieldKey = (typeof SHARE_FORM_FIELD_KEYS)[number];
 export type SettlementAmountMode = 'FREE' | 'PRESET' | 'FIXED' | 'ADMIN_ONLY';
+/**
+ * 批量报单时的填写范围：
+ * - SHARED：整批只填一次，所有订单共用
+ * - ROW：每一行单独填写
+ */
+export type ShareFormBatchScope = 'SHARED' | 'ROW';
 
 export interface ShareFormFieldRule {
   visible: boolean;
   /** Whether the external submitter may provide or change this field. */
   editable: boolean;
   required: boolean;
+  /** 批量报单时的填写范围，只对可逐行填写的字段有意义。 */
+  batchScope: ShareFormBatchScope;
   note?: string;
   noteColor?: string;
 }
+
+/** 允许在批量报单中逐行填写的字段，其余字段只能整批统一填写。 */
+export const ROW_SCOPED_SHARE_FORM_FIELD_KEYS: ShareFormFieldKey[] = [
+  'platformOrderNo',
+  'purchaseAddress',
+  'receiverName',
+  'inboundTrackingNo',
+  'orderAmount',
+  'paymentDiscountAmount',
+  'notes',
+  'orderedAt',
+  'productName',
+  'submitterSettlementAmount',
+];
 
 export interface ShareFormFieldConfig {
   schemaVersion: 1;
@@ -42,26 +64,102 @@ export interface ShareFormFieldConfig {
 export const DEFAULT_SHARE_FORM_FIELD_CONFIG: ShareFormFieldConfig = {
   schemaVersion: 1,
   fields: {
-    wechatNickname: { visible: true, editable: true, required: true },
-    platformId: { visible: true, editable: true, required: true },
-    categoryId: { visible: true, editable: true, required: false },
-    productName: { visible: true, editable: true, required: false },
-    orderedAt: { visible: true, editable: true, required: true },
-    platformOrderNo: { visible: true, editable: true, required: true },
-    dispatchStatus: { visible: false, editable: false, required: false },
-    inboundTrackingNo: { visible: true, editable: true, required: false },
-    purchaseAddress: { visible: true, editable: true, required: false },
-    receiverName: { visible: false, editable: false, required: false },
-    fundingType: { visible: false, editable: false, required: false },
-    orderAmount: { visible: true, editable: true, required: true },
-    paymentDiscountAmount: { visible: false, editable: false, required: false },
-    rebateScanned: { visible: true, editable: true, required: false },
+    wechatNickname: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'SHARED',
+    },
+    platformId: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'SHARED',
+    },
+    categoryId: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    productName: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    orderedAt: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'SHARED',
+    },
+    platformOrderNo: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'ROW',
+    },
+    dispatchStatus: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    inboundTrackingNo: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'ROW',
+    },
+    purchaseAddress: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'ROW',
+    },
+    receiverName: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    fundingType: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    orderAmount: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'ROW',
+    },
+    paymentDiscountAmount: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'ROW',
+    },
+    rebateScanned: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'SHARED',
+    },
     submitterSettlementAmount: {
       visible: true,
       editable: true,
       required: false,
+      batchScope: 'ROW',
     },
-    notes: { visible: true, editable: true, required: false },
+    notes: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'ROW',
+    },
   },
   settlementAmount: {
     mode: 'FREE',
@@ -100,6 +198,7 @@ export function normalizeShareFormFieldConfig(
   }
 
   const sourceFields = candidate.fields as Record<string, unknown>;
+  const explicitlyScoped = new Set<ShareFormFieldKey>();
   const fields = Object.fromEntries(
     SHARE_FORM_FIELD_KEYS.map((key) => {
       const source = sourceFields[key];
@@ -130,6 +229,25 @@ export function normalizeShareFormFieldConfig(
       if (!editable && rule.required) {
         throw new Error(`只读字段 ${key} 不能设置为必填`);
       }
+      let batchScope: ShareFormBatchScope =
+        rule.batchScope === 'ROW'
+          ? 'ROW'
+          : rule.batchScope === 'SHARED'
+            ? 'SHARED'
+            : fallback.batchScope;
+      // 隐藏字段不参与逐行填写，统一按整批公共值处理。
+      if (!rule.visible) {
+        batchScope = 'SHARED';
+      }
+      if (rule.batchScope === 'ROW' || rule.batchScope === 'SHARED') {
+        explicitlyScoped.add(key);
+      }
+      if (
+        batchScope === 'ROW' &&
+        !ROW_SCOPED_SHARE_FORM_FIELD_KEYS.includes(key)
+      ) {
+        throw new Error(`字段 ${key} 不支持逐行填写`);
+      }
       if (rule.note !== undefined && typeof rule.note !== 'string') {
         throw new Error(`字段 ${key} 的填写提示格式不正确`);
       }
@@ -154,6 +272,7 @@ export function normalizeShareFormFieldConfig(
           visible: rule.visible,
           editable,
           required: rule.required,
+          batchScope,
           ...(note ? { note } : {}),
           ...(noteColor ? { noteColor } : {}),
         },
@@ -204,9 +323,18 @@ export function normalizeShareFormFieldConfig(
       visible: false,
       editable: false,
       required: false,
+      batchScope: 'SHARED',
     };
   } else {
     fields.submitterSettlementAmount.visible = true;
+    // 自由填写模式下结算金额天然是逐单金额，未显式配置时按逐行处理。
+    if (mode === 'FREE' && !explicitlyScoped.has('submitterSettlementAmount')) {
+      fields.submitterSettlementAmount.batchScope = 'ROW';
+    }
+    // 预设/固定金额模式下整批只有一个取值，不允许逐行填写。
+    if (mode !== 'FREE') {
+      fields.submitterSettlementAmount.batchScope = 'SHARED';
+    }
   }
 
   return {

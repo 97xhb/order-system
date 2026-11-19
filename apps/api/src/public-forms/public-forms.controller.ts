@@ -15,6 +15,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { RATE_LIMIT_WINDOW_MS } from '../security/rate-limit.constants';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
+import { CreatePublicOrdersBatchDto } from './dto/create-public-orders-batch.dto';
 import { CreatePublicPayoutMethodDto } from './dto/create-public-payout-method.dto';
 import { LinkPublicIdentityDto } from './dto/link-public-identity.dto';
 import { UpdatePublicOrderDto } from './dto/update-public-order.dto';
@@ -80,6 +81,20 @@ export class PublicFormsController {
     await this.forms.ensureForm(token, true);
     const identity = await this.identities.resolve(request, response);
     return this.forms.createOrder(token, identity, dto, this.metadata(request));
+  }
+
+  @Post(':token/orders/batch')
+  @Throttle({ default: { limit: 10, ttl: RATE_LIMIT_WINDOW_MS } })
+  @ApiOperation({ summary: '通过方案分享链接批量提交待确认订单' })
+  async createOrdersBatch(
+    @Param('token') token: string,
+    @Body() dto: CreatePublicOrdersBatchDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.forms.ensureForm(token, true);
+    const identity = await this.identities.resolve(request, response);
+    return this.forms.createBatch(token, identity, dto, this.metadata(request));
   }
 
   @Get(':token/orders/mine')

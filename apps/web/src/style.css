@@ -267,6 +267,72 @@ a {
   opacity: 0.58;
 }
 
+/* 分段式选择卡片：支付方式、扫码返利等二选一/多选控件的统一外观。 */
+.funding-options {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 5px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-subtle) 86%, transparent);
+  gap: 5px;
+}
+
+.scan-choice-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.funding-option {
+  min-height: 58px;
+  align-items: center;
+  padding: 8px 10px;
+  border-color: transparent;
+  border-radius: var(--app-radius-card);
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+  transition: 0.18s ease;
+}
+
+.funding-option:hover:not(:disabled) {
+  border-color: var(--app-info-border);
+  background: color-mix(in srgb, var(--app-surface-card) 88%, transparent);
+  transform: translateY(-1px);
+}
+
+.funding-option.is-selected {
+  border-color: var(--app-info-border);
+  color: var(--app-primary);
+  background: var(--app-surface-card);
+  box-shadow: var(--app-shadow-md);
+}
+
+.funding-option > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.funding-option strong {
+  overflow: hidden;
+  color: var(--app-heading);
+  font-size: var(--app-text-md);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.funding-option small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: var(--app-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -724,6 +790,36 @@ a {
   margin-bottom: 12px;
 }
 
+/* 必填标识统一：全系统使用同一枚小徽标，替代 Element Plus 原生裸星号 */
+.el-form-item.is-required:not(.is-no-asterisk).asterisk-left
+  > .el-form-item__label::before,
+.el-form-item.is-required:not(.is-no-asterisk).asterisk-left
+  > .el-form-item__label-wrap
+  > .el-form-item__label::before {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--app-danger-border);
+  border-radius: var(--app-radius-chip);
+  background: var(--app-danger-soft);
+  color: var(--app-danger);
+  content: '必填';
+  font-size: var(--app-text-micro);
+  font-weight: 600;
+  line-height: 15px;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+
+/* 已由 OrderFieldLabel 自绘徽标的表单项，隐藏原生标记避免重复 */
+.el-form-item.is-required:not(.is-no-asterisk).asterisk-left
+  > .el-form-item__label:has(.order-field-label)::before,
+.el-form-item.is-required:not(.is-no-asterisk).asterisk-left
+  > .el-form-item__label-wrap
+  > .el-form-item__label:has(.order-field-label)::before {
+  content: none;
+}
+
 /* 数字输入框 */
 .el-input-number .el-input__wrapper {
   padding-right: 10px;
@@ -953,6 +1049,30 @@ body.is-marquee-dragging {
 
   .page-heading h1 {
     font-size: var(--app-text-xl);
+  }
+
+  .funding-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .scan-choice-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .funding-option {
+    min-height: 50px;
+    padding: 7px 4px;
+  }
+
+  .funding-option strong {
+    font-size: var(--app-text-md);
+  }
+
+  .funding-option small {
+    font-size: var(--app-text-sm);
+    line-height: 1.25;
+    white-space: normal;
   }
 }
 

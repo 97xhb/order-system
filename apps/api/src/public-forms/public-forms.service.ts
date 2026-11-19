@@ -3,11 +3,14 @@ import {
   ConflictException,
   ForbiddenException,
   GoneException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import {
   ExternalIdentityStatus,
   DispatchStatus,
@@ -40,6 +43,7 @@ import {
   normalizeAmountFormulas,
 } from '../orders/amount-formulas';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
+import { CreatePublicOrdersBatchDto } from './dto/create-public-orders-batch.dto';
 import { CreatePublicPayoutMethodDto } from './dto/create-public-payout-method.dto';
 import { UpdatePublicOrderDto } from './dto/update-public-order.dto';
 import type { ResolvedPublicIdentity } from './public-identity.service';
@@ -50,6 +54,25 @@ const PUBLIC_AMOUNT_FORMULA_KEYS = [
   'paymentDiscountAmount',
   'submitterSettlementAmount',
 ] as const;
+
+const PUBLIC_ORDER_FIELD_LABELS: Record<string, string> = {
+  platformId: '下单平台',
+  wechatNickname: '下单人微信昵称',
+  categoryId: '品类',
+  productName: '商品/方案*数量',
+  orderedAt: '下单日期',
+  platformOrderNo: '平台订单号',
+  dispatchStatus: '发货状态',
+  inboundTrackingNo: '平台运单号',
+  purchaseAddress: '下单地址',
+  receiverName: '收货佬',
+  fundingType: '支付方式',
+  orderAmount: '下单金额',
+  paymentDiscountAmount: '支付优惠',
+  rebateScanned: '扫码返利',
+  submitterSettlementAmount: '结算金额',
+  notes: '备注',
+};
 
 @Injectable()
 export class PublicFormsService {
@@ -176,6 +199,51 @@ export class PublicFormsService {
 
   private isProvided(value: unknown) {
     return value !== undefined && value !== null && value !== '';
+  }
+
+  /**
+   * 批量模式下的单条校验：只做 DTO 级别的类型/长度/取值校验，
+   * 保证某一行填错时只影响这一行，不会让整批请求直接失败。
+   */
+  private async validateBatchItem(
+    raw: Record<string, unknown>,
+  ): Promise<CreatePublicOrderDto> {
+    const instance = plainToInstance(CreatePublicOrderDto, raw, {
+      enableImplicitConversion: false,
+    });
+    const errors = await validate(instance, {
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      forbidUnknownValues: false,
+    });
+    if (!errors.length) {
+      return Object.assign(
+        new CreatePublicOrderDto(),
+        instance,
+      ) as CreatePublicOrderDto;
+    }
+    const messages: string[] = [];
+    const visit = (error: {
+      property: string;
+      constraints?: Record<string, string> | null;
+      children?: Array<unknown>;
+    }) => {
+      const label = PUBLIC_ORDER_FIELD_LABELS[error.property] ?? error.property;
+      const constraintKeys = Object.keys(error.constraints ?? {});
+      if (constraintKeys.length) {
+        if (
+          constraintKeys.some((key) =>
+            ['isDefined', 'isNotEmpty'].includes(key),
+          )
+        ) {
+          messages.push(`${label}为必填项`);
+        } else {
+          messages.push(`${label}填写格式或内容不正确`);
+        }
+      }
+    };
+    errors.forEach(visit);
+    throw new BadRequestException(messages.join('；') || '填写内容不正确');
   }
 
   private assertRequiredFields(
@@ -453,6 +521,61 @@ export class PublicFormsService {
       throw new GoneException('该方案当前已停用，暂不能提交新报单');
     }
     const config = this.config(form.fieldConfig);
+    const prepared = await this.prepareOrder(form, config, dto);
+
+    try {
+      return await this.prisma.$transaction(
+        async (transaction) => {
+          await this.assertSubmissionLimit(transaction, form);
+          const submitter = await this.resolveOrderSubmitter(
+            transaction,
+            identity,
+            prepared.nickname,
+          );
+          const order = await transaction.order.create({
+            data: {
+              ...prepared.data,
+              externalIdentityId: identity.id,
+              submitterId: submitter.id,
+            },
+          });
+          await this.writeSubmissionAuditLog(
+            transaction,
+            order,
+            identity,
+            requestMetadata,
+          );
+          return {
+            id: order.id,
+            serialNo: order.serialNo,
+            reviewStatus: order.reviewStatus,
+            createdAt: order.createdAt,
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      throw this.mapOrderWriteError(error);
+    }
+  }
+
+  /**
+   * 预校验并组装一条订单的入库数据。只做字段权限过滤与业务校验，不写库，
+   * 供单笔提交与批量提交共用，保证两条路径的规则完全一致。
+   */
+  private async prepareOrder(
+    form: {
+      id: string;
+      fieldConfig: Prisma.JsonValue;
+      scheme: {
+        name?: string | null;
+        productName?: string | null;
+        defaultValues?: Prisma.JsonValue | null;
+      };
+    },
+    config: ShareFormFieldConfig,
+    dto: CreatePublicOrderDto,
+  ) {
     this.assertRequiredFields(config, dto);
     const defaults =
       form.scheme.defaultValues && typeof form.scheme.defaultValues === 'object'
@@ -513,146 +636,313 @@ export class PublicFormsService {
       this.visibleValue(config, 'receiverName', dto.receiverName, ''),
     );
     const amountFormulas = this.amountFormulas(config, dto.amountFormulas);
+    const fundingType = this.visibleValue(
+      config,
+      'fundingType',
+      dto.fundingType,
+      DEFAULT_FUNDING_METHOD_CODE,
+    );
+    const fundingMethod = await this.prisma.fundingMethod.findFirst({
+      where: { code: fundingType, enabled: true },
+      select: { code: true },
+    });
+    const safeFundingType = fundingMethod?.code ?? DEFAULT_FUNDING_METHOD_CODE;
 
-    try {
-      return await this.prisma.$transaction(
-        async (transaction) => {
-          if (form.submissionLimit !== null) {
-            const count = await transaction.order.count({
-              where: { shareFormId: form.id, deletedAt: null },
-            });
-            if (count >= form.submissionLimit) {
-              throw new GoneException('该登记链接已达到提交上限');
+    return {
+      nickname,
+      data: {
+        source: OrderSource.SHARE,
+        reviewStatus: ReviewStatus.PENDING,
+        shareFormId: form.id,
+        platformId: dto.platformId,
+        categoryId,
+        orderedAt: this.orderedAt(
+          this.visibleValue(config, 'orderedAt', dto.orderedAt, undefined),
+        ),
+        productNameSnapshot: productName,
+        schemeNameSnapshot: null,
+        submitterWechatNickname: nickname,
+        rebateScanned: this.visibleValue(
+          config,
+          'rebateScanned',
+          dto.rebateScanned,
+          undefined,
+        ),
+        platformOrderNo: this.clean(
+          this.visibleValue(config, 'platformOrderNo', dto.platformOrderNo, ''),
+        ),
+        dispatchStatus,
+        inboundTrackingNo,
+        purchaseAddress: this.clean(
+          this.visibleValue(config, 'purchaseAddress', dto.purchaseAddress, ''),
+        ),
+        receiverName,
+        fundingType: safeFundingType,
+        orderAmount: this.visibleValue(
+          config,
+          'orderAmount',
+          dto.orderAmount,
+          Number(defaults.orderAmount ?? 0),
+        ),
+        paymentDiscountAmount: this.visibleValue(
+          config,
+          'paymentDiscountAmount',
+          dto.paymentDiscountAmount,
+          Number(defaults.paymentDiscountAmount ?? 0),
+        ),
+        submitterSettlementAmount: settlementAmount,
+        customData:
+          amountFormulas && Object.keys(amountFormulas).length
+            ? ({ amountFormulas } as Prisma.InputJsonValue)
+            : undefined,
+        notes: this.clean(this.visibleValue(config, 'notes', dto.notes, '')),
+      },
+    };
+  }
+
+  private async assertSubmissionLimit(
+    transaction: Prisma.TransactionClient,
+    form: { id: string; submissionLimit: number | null },
+  ) {
+    if (form.submissionLimit === null) return;
+    const count = await transaction.order.count({
+      where: { shareFormId: form.id, deletedAt: null },
+    });
+    if (count >= form.submissionLimit) {
+      throw new GoneException('该登记链接已达到提交上限');
+    }
+  }
+
+  private async writeSubmissionAuditLog(
+    transaction: Prisma.TransactionClient,
+    order: {
+      id: string;
+      serialNo: number;
+      reviewStatus: ReviewStatus;
+      platformId: string;
+      platformOrderNo: string | null;
+    },
+    identity: ResolvedPublicIdentity,
+    requestMetadata: { ipAddress?: string; userAgent?: string },
+  ) {
+    await transaction.auditLog.create({
+      data: {
+        source: 'PUBLIC_FORM',
+        action: 'ORDER_SUBMITTED',
+        entityType: 'Order',
+        entityId: order.id,
+        ipAddress: requestMetadata.ipAddress,
+        userAgent: requestMetadata.userAgent,
+        afterData: {
+          serialNo: order.serialNo,
+          externalIdentityId: identity.id,
+          platformId: order.platformId,
+          platformOrderNo: order.platformOrderNo,
+          reviewStatus: order.reviewStatus,
+        },
+      },
+    });
+  }
+
+  private mapOrderWriteError(error: unknown) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return new ConflictException('平台订单号已经登记');
+    }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2034'
+    ) {
+      return new ConflictException('同时提交人数较多，请重新提交');
+    }
+    return error;
+  }
+
+  /**
+   * 批量报单：逐条复用单笔提交的完整校验逻辑（字段权限、必填、重复订单号、提交上限等），
+   * 允许部分成功，失败行返回原因并保留在预览区供修正后单独重提。
+   */
+  async createBatch(
+    publicToken: string,
+    identity: ResolvedPublicIdentity,
+    dto: CreatePublicOrdersBatchDto,
+    requestMetadata: { ipAddress?: string; userAgent?: string },
+  ) {
+    const form = await this.getForm(publicToken, true);
+    if (!form.scheme.enabled) {
+      throw new GoneException('该方案当前已停用，暂不能提交新报单');
+    }
+
+    const config = this.config(form.fieldConfig);
+
+    const results: Array<
+      | { index: number; success: true; id: string; serialNo: number }
+      | { index: number; success: false; message: string }
+    > = [];
+
+    // 第一步：逐条预校验，校验失败的行直接标记原因，不进入写库阶段。
+    const preparedItems: Array<{
+      index: number;
+      nickname: string | null;
+      data: Awaited<ReturnType<PublicFormsService['prepareOrder']>>['data'];
+    }> = [];
+
+    for (const [index, item] of dto.items.entries()) {
+      try {
+        const validated = await this.validateBatchItem(item);
+        const prepared = await this.prepareOrder(form, config, validated);
+        preparedItems.push({
+          index,
+          nickname: prepared.nickname,
+          data: prepared.data,
+        });
+      } catch (error) {
+        results.push({
+          index,
+          success: false,
+          message: this.batchErrorMessage(error),
+        });
+      }
+    }
+
+    // 第二步：查重。本批内部重复、或库里已经登记的，先标记出来。
+    const duplicateIndexes =
+      await this.findDuplicateOrderIndexes(preparedItems);
+    const insertable = preparedItems.filter(
+      (item) => !duplicateIndexes.has(item.index),
+    );
+    for (const item of preparedItems) {
+      if (!duplicateIndexes.has(item.index)) continue;
+      results.push({
+        index: item.index,
+        success: false,
+        message: '平台订单号已经登记',
+      });
+    }
+
+    // 第三步：剩下的条目一次性写入。
+    if (insertable.length) {
+      try {
+        const created = await this.prisma.$transaction(
+          async (transaction) => {
+            await this.assertSubmissionLimit(transaction, form);
+            const submitter = await this.resolveOrderSubmitter(
+              transaction,
+              identity,
+              insertable[0].nickname,
+            );
+            const orders = [];
+            for (const item of insertable) {
+              const order = await transaction.order.create({
+                data: {
+                  ...item.data,
+                  externalIdentityId: identity.id,
+                  submitterId: submitter.id,
+                },
+              });
+              await this.writeSubmissionAuditLog(
+                transaction,
+                order,
+                identity,
+                requestMetadata,
+              );
+              orders.push(order);
             }
-          }
+            return orders;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
 
-          const submitter = await this.resolveOrderSubmitter(
-            transaction,
-            identity,
-            nickname,
-          );
-          const fundingType = this.visibleValue(
-            config,
-            'fundingType',
-            dto.fundingType,
-            DEFAULT_FUNDING_METHOD_CODE,
-          );
-          const fundingMethod = await transaction.fundingMethod.findFirst({
-            where: { code: fundingType, enabled: true },
-            select: { code: true },
-          });
-          const safeFundingType =
-            fundingMethod?.code ?? DEFAULT_FUNDING_METHOD_CODE;
-          const order = await transaction.order.create({
-            data: {
-              source: OrderSource.SHARE,
-              reviewStatus: ReviewStatus.PENDING,
-              shareFormId: form.id,
-              externalIdentityId: identity.id,
-              submitterId: submitter.id,
-              platformId: dto.platformId,
-              categoryId,
-              orderedAt: this.orderedAt(
-                this.visibleValue(
-                  config,
-                  'orderedAt',
-                  dto.orderedAt,
-                  undefined,
-                ),
-              ),
-              productNameSnapshot: productName,
-              schemeNameSnapshot: null,
-              submitterWechatNickname: nickname,
-              rebateScanned: this.visibleValue(
-                config,
-                'rebateScanned',
-                dto.rebateScanned,
-                undefined,
-              ),
-              platformOrderNo: this.clean(
-                this.visibleValue(
-                  config,
-                  'platformOrderNo',
-                  dto.platformOrderNo,
-                  '',
-                ),
-              ),
-              dispatchStatus,
-              inboundTrackingNo,
-              purchaseAddress: this.clean(
-                this.visibleValue(
-                  config,
-                  'purchaseAddress',
-                  dto.purchaseAddress,
-                  '',
-                ),
-              ),
-              receiverName,
-              fundingType: safeFundingType,
-              orderAmount: this.visibleValue(
-                config,
-                'orderAmount',
-                dto.orderAmount,
-                Number(defaults.orderAmount ?? 0),
-              ),
-              paymentDiscountAmount: this.visibleValue(
-                config,
-                'paymentDiscountAmount',
-                dto.paymentDiscountAmount,
-                Number(defaults.paymentDiscountAmount ?? 0),
-              ),
-              submitterSettlementAmount: settlementAmount,
-              customData:
-                amountFormulas && Object.keys(amountFormulas).length
-                  ? ({ amountFormulas } as Prisma.InputJsonValue)
-                  : undefined,
-              notes: this.clean(
-                this.visibleValue(config, 'notes', dto.notes, ''),
-              ),
-            },
-          });
-          await transaction.auditLog.create({
-            data: {
-              source: 'PUBLIC_FORM',
-              action: 'ORDER_SUBMITTED',
-              entityType: 'Order',
-              entityId: order.id,
-              ipAddress: requestMetadata.ipAddress,
-              userAgent: requestMetadata.userAgent,
-              afterData: {
-                serialNo: order.serialNo,
-                shareFormId: form.id,
-                externalIdentityId: identity.id,
-                platformId: order.platformId,
-                platformOrderNo: order.platformOrderNo,
-                reviewStatus: order.reviewStatus,
-              },
-            },
-          });
-          return {
+        for (const [position, order] of created.entries()) {
+          results.push({
+            index: insertable[position].index,
+            success: true,
             id: order.id,
             serialNo: order.serialNo,
-            reviewStatus: order.reviewStatus,
-            createdAt: order.createdAt,
-          };
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException('平台订单号已经登记');
+          });
+        }
+      } catch (error) {
+        const message = this.batchErrorMessage(this.mapOrderWriteError(error));
+        for (const item of insertable) {
+          results.push({ index: item.index, success: false, message });
+        }
       }
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2034'
-      ) {
-        throw new ConflictException('同时提交人数较多，请重新提交');
-      }
-      throw error;
     }
+
+    results.sort((left, right) => left.index - right.index);
+    const successCount = results.filter((item) => item.success).length;
+    return {
+      total: dto.items.length,
+      successCount,
+      failureCount: dto.items.length - successCount,
+      results,
+    };
+  }
+
+  /**
+   * 找出本批次中平台订单号重复的行：既包含本次提交内部重复，也包含库里已经登记的。
+   */
+  private async findDuplicateOrderIndexes(
+    preparedItems: Array<{
+      index: number;
+      data: { platformId: string; platformOrderNo: string | null };
+    }>,
+  ) {
+    const duplicates = new Set<number>();
+    const seen = new Set<string>();
+    const platformIds = new Set<string>();
+    const orderNos = new Set<string>();
+
+    for (const item of preparedItems) {
+      const orderNo = item.data.platformOrderNo;
+      if (!orderNo) continue;
+      const key = `${item.data.platformId}::${orderNo}`;
+      if (seen.has(key)) {
+        duplicates.add(item.index);
+        continue;
+      }
+      seen.add(key);
+      platformIds.add(item.data.platformId);
+      orderNos.add(orderNo);
+    }
+
+    if (!orderNos.size) return duplicates;
+
+    const existing = await this.prisma.order.findMany({
+      where: {
+        platformId: { in: [...platformIds] },
+        platformOrderNo: { in: [...orderNos] },
+        deletedAt: null,
+      },
+      select: { platformId: true, platformOrderNo: true },
+    });
+    const existingKeys = new Set(
+      existing.map((row) => `${row.platformId}::${row.platformOrderNo ?? ''}`),
+    );
+    for (const item of preparedItems) {
+      const orderNo = item.data.platformOrderNo;
+      if (!orderNo) continue;
+      if (existingKeys.has(`${item.data.platformId}::${orderNo}`)) {
+        duplicates.add(item.index);
+      }
+    }
+    return duplicates;
+  }
+
+  private batchErrorMessage(error: unknown) {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      if (typeof response === 'string') return response;
+      const payload = response as { message?: unknown };
+      if (Array.isArray(payload.message)) {
+        return payload.message.join('；');
+      }
+      if (typeof payload.message === 'string') return payload.message;
+      return error.message;
+    }
+    return '提交失败，请稍后重试';
   }
 
   async listMine(publicToken: string, identity: ResolvedPublicIdentity) {

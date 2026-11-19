@@ -4,29 +4,36 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { formatBusinessDate } from '../lib/business-date';
+import {
+  normalizeDateText,
+  normalizeHeaderLabel,
+  normalizeNumberText,
+  parseClipboardTable,
+} from '../lib/clipboard-table';
 import { http } from '../lib/http';
-import { extractProductQuantity, MONEY_FORMULA_VARIABLE_LABELS } from '../lib/money-formula';
+import {
+  extractProductQuantity,
+  MONEY_FORMULA_VARIABLE_LABELS,
+  parseMoneyInput,
+} from '../lib/money-formula';
+import {
+  allHeaderAliasMap,
+  batchFieldColumns,
+  batchHeaderAliasMap,
+  rowBatchFields,
+  sharedBatchFields,
+} from '../lib/batch-order-fields';
+import {
+  SHARE_FORM_FIELD_META,
+  type ShareFormFieldKey,
+  type ShareFormFieldKind,
+} from '../lib/share-form-fields';
 import MoneyFormulaInput from '../components/MoneyFormulaInput.vue';
+import BatchSharedField from '../components/BatchSharedField.vue';
 import OrderFieldLabel from '../components/OrderFieldLabel.vue';
 import { useSystemStore } from '../stores/system';
 
-type FieldKey =
-  | 'wechatNickname'
-  | 'platformId'
-  | 'categoryId'
-  | 'productName'
-  | 'orderedAt'
-  | 'platformOrderNo'
-  | 'dispatchStatus'
-  | 'inboundTrackingNo'
-  | 'purchaseAddress'
-  | 'receiverName'
-  | 'fundingType'
-  | 'orderAmount'
-  | 'paymentDiscountAmount'
-  | 'rebateScanned'
-  | 'submitterSettlementAmount'
-  | 'notes';
+type FieldKey = ShareFormFieldKey;
 type DispatchStatus = 'NOT_SHIPPED' | 'SHIPPED' | 'PARTIALLY_SHIPPED' | 'DELIVERED' | 'CANCELLED';
 
 const system = useSystemStore();
@@ -38,6 +45,7 @@ interface FieldConfig {
       visible: boolean;
       editable: boolean;
       required: boolean;
+      batchScope: 'SHARED' | 'ROW';
       note?: string;
       noteColor?: string;
     }
@@ -182,7 +190,12 @@ const hasConfirmedPayoutMethod = computed(
     false,
 );
 const field = (key: FieldKey) =>
-  fieldConfig.value?.fields[key] ?? { visible: false, editable: false, required: false };
+  fieldConfig.value?.fields[key] ?? {
+    visible: false,
+    editable: false,
+    required: false,
+    batchScope: 'SHARED',
+  };
 const canEditField = (key: FieldKey) => field(key).editable;
 const fundingTypeOptions = computed(() => {
   const methods = data.value?.options?.fundingMethods ?? [];
@@ -199,6 +212,12 @@ const fundingTypeOptions = computed(() => {
     hint: method.code === 'OTHER' ? '由管理员补充说明' : '',
   }));
 });
+const fundingMethodOptions = computed(() =>
+  fundingTypeOptions.value.map((option) => ({
+    code: option.value,
+    name: option.label,
+  })),
+);
 const requiredFieldLabels: Partial<Record<FieldKey, string>> = {
   wechatNickname: '下单人微信昵称',
   platformId: '下单平台',
@@ -412,6 +431,409 @@ const submit = async () => {
   }
 };
 
+type SubmitMode = 'single' | 'batch';
+
+interface BatchRow {
+  key: string;
+  /** 逐行字段的原始值，键为字段 key。 */
+  values: Record<string, string>;
+  /** 逐行金额字段的公式表达式。 */
+  formulas: Record<string, string>;
+  error: string;
+  status: 'pending' | 'success' | 'failed';
+  serialNo?: number;
+}
+
+interface BatchColumnDef {
+  key: FieldKey;
+  label: string;
+  fieldKey: FieldKey;
+  kind: ShareFormFieldKind;
+  required: boolean;
+  width: number;
+  minWidth: number;
+}
+
+const BATCH_MAX_ROWS = 50;
+const submitMode = ref<SubmitMode>('single');
+const batchRows = ref<BatchRow[]>([]);
+const batchPasteText = ref('');
+const batchSubmitting = ref(false);
+const batchParsing = ref(false);
+
+const settlementMode = computed(() => fieldConfig.value?.settlementAmount.mode ?? 'ADMIN_ONLY');
+const isFreeSettlement = computed(() => settlementMode.value === 'FREE');
+
+/** 批量报单的公共字段与逐行字段，完全由当前方案的自定义字段配置决定。 */
+const batchSharedFieldKeys = computed(() => sharedBatchFields(fieldConfig.value));
+const batchRowFieldKeys = computed(() => rowBatchFields(fieldConfig.value));
+const batchColumns = computed<BatchColumnDef[]>(() =>
+  batchFieldColumns(fieldConfig.value).map((column) => ({
+    key: column.key,
+    label: column.label,
+    fieldKey: column.key,
+    kind: column.kind,
+    required: column.required,
+    width: column.minWidth,
+    minWidth: column.minWidth,
+  })),
+);
+
+const batchFieldEditable = (key: FieldKey) => field(key).editable;
+
+/** 单元格内容变化后重新校验该行，及时更新错误提示。 */
+const revalidateBatchRow = (row: BatchRow) => {
+  const errors: string[] = [];
+  for (const key of batchRowFieldKeys.value) {
+    const rule = field(key);
+    const label = SHARE_FORM_FIELD_META[key].label;
+    const raw = (row.values[key] ?? '').trim();
+    if (rule.required && !raw) {
+      errors.push(`缺少${label}`);
+      continue;
+    }
+    if (!raw) continue;
+    const kind = SHARE_FORM_FIELD_META[key].kind;
+    if (kind === 'money' && !Number.isFinite(Number(normalizeNumberText(raw)))) {
+      errors.push(`${label}不是数字`);
+    }
+    if (kind === 'date' && !normalizeDateText(raw)) {
+      errors.push(`${label}格式不正确`);
+    }
+  }
+  row.error = errors.join('；');
+  if (row.status !== 'success') row.status = 'pending';
+};
+
+/** 金额单元格内容不是合法数字时，用普通输入框回显原文，方便用户看清并修正。 */
+const batchAmountInvalid = (row: BatchRow, key: FieldKey) => {
+  const raw = (row.values[key] ?? '').trim();
+  if (!raw) return false;
+  return !Number.isFinite(Number(normalizeNumberText(raw)));
+};
+
+const createBatchRow = (): BatchRow => {
+  const values: Record<string, string> = {};
+  for (const key of batchRowFieldKeys.value) values[key] = '';
+  return {
+    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    values,
+    formulas: {},
+    error: '',
+    status: 'pending',
+  };
+};
+
+const batchTableMinWidth = computed(() => {
+  const columns = batchColumns.value;
+  return 46 + 70 + 170 + columns.reduce((total, column) => total + column.minWidth, 0);
+});
+
+const batchRowFormulaVariables = (row: BatchRow) => ({
+  下单金额: Number(row.values.orderAmount) || 0,
+  支付优惠: Number(row.values.paymentDiscountAmount) || 0,
+  结算金额: Number(row.values.submitterSettlementAmount) || 0,
+  数量: extractProductQuantity(row.values.productName || form.productName),
+});
+
+const batchAmountValue = (value: string) => {
+  const normalized = normalizeNumberText(value);
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const setBatchAmount = (row: BatchRow, key: FieldKey, value: number | null) => {
+  row.values[key] = value === null ? '' : String(value);
+};
+
+const setBatchFormula = (row: BatchRow, key: FieldKey, formula: string) => {
+  row.formulas[key] = formula;
+};
+
+const looksLikeBatchHeader = (cells: string[]) => {
+  const aliases = allHeaderAliasMap();
+  const recognized = cells.filter((cell) => aliases.has(normalizeHeaderLabel(cell)));
+  return recognized.length >= 2;
+};
+
+const resetBatchRows = () => {
+  batchRows.value = [];
+  batchPasteText.value = '';
+};
+
+const parseBatchPaste = () => {
+  const parsed = parseClipboardTable(batchPasteText.value);
+  if (!parsed.length) {
+    ElMessage.warning('请先粘贴 WPS 或 Excel 表格数据');
+    return;
+  }
+  const firstRow = parsed[0] ?? [];
+  const hasHeader = looksLikeBatchHeader(firstRow);
+  const dataRows = hasHeader ? parsed.slice(1) : parsed;
+  if (!dataRows.length) {
+    ElMessage.warning('没有识别到可导入的数据行');
+    return;
+  }
+
+  const columnIndexes = new Map<string, number>();
+  const ignoredColumns: string[] = [];
+  if (hasHeader) {
+    firstRow.forEach((header, index) => {
+      const normalized = normalizeHeaderLabel(header);
+      const rowAlias = batchHeaderAliasMap(fieldConfig.value).get(normalized);
+      if (rowAlias && !columnIndexes.has(rowAlias)) {
+        columnIndexes.set(rowAlias, index);
+        return;
+      }
+      // 表头能识别，但不是当前方案的逐行字段：属于公共字段或已隐藏字段。
+      if (normalized && allHeaderAliasMap().has(normalized)) {
+        ignoredColumns.push(header.trim());
+      }
+    });
+  } else {
+    // 没有表头时，若方案有逐行的平台订单号就按每行一条处理，否则提示补表头。
+    if (batchRowFieldKeys.value.includes('platformOrderNo')) {
+      columnIndexes.set('platformOrderNo', 0);
+    } else {
+      ElMessage.warning('当前方案没有可逐行填写的平台订单号，请粘贴带表头的表格');
+      return;
+    }
+  }
+
+  const cellValue = (cells: string[], key: string) => {
+    const index = columnIndexes.get(key);
+    return index === undefined ? '' : (cells[index] ?? '').trim();
+  };
+
+  const rows = dataRows
+    .filter((cells) => cells.some((cell) => cell.trim()))
+    .slice(0, BATCH_MAX_ROWS)
+    .map((cells) => {
+      const row = createBatchRow();
+      for (const key of batchRowFieldKeys.value) {
+        const kind = SHARE_FORM_FIELD_META[key].kind;
+        const raw = cellValue(cells, key);
+        if (kind === 'money') {
+          if (raw.startsWith('=')) {
+            row.formulas[key] = raw;
+            const calculated = parseMoneyInput(raw, batchRowFormulaVariables(row));
+            row.values[key] = calculated === null ? '' : String(calculated);
+          } else if (raw && !Number.isFinite(Number(normalizeNumberText(raw)))) {
+            // 保留原文，交给行校验提示「不是数字」，避免用户看不到到底填错了什么。
+            row.values[key] = raw;
+          } else {
+            row.values[key] = normalizeNumberText(raw);
+          }
+          continue;
+        }
+        if (kind === 'date') {
+          row.values[key] = normalizeDateText(raw);
+          continue;
+        }
+        row.values[key] = raw;
+      }
+      return row;
+    });
+
+  if (!rows.length) {
+    ElMessage.warning('没有识别到有效数据行');
+    return;
+  }
+  batchRows.value = rows;
+  batchParsing.value = false;
+  // 解析后立即按当前方案配置做一次校验，有问题的行直接标红提示。
+  const firstError = validateBatchRows();
+  if (firstError) {
+    ElMessage.warning(firstError);
+  }
+  if (ignoredColumns.length) {
+    ElMessage.warning(
+      `以下列在当前方案为公共填写或已隐藏，不会随订单提交：${ignoredColumns.join('、')}`,
+    );
+  }
+  if (dataRows.length > BATCH_MAX_ROWS) {
+    ElMessage.warning(`单次最多 ${BATCH_MAX_ROWS} 条，已截取前 ${BATCH_MAX_ROWS} 条`);
+  } else {
+    ElMessage.success(`已识别 ${rows.length} 条订单，可直接修改后提交`);
+  }
+};
+
+const addBatchRow = () => {
+  if (batchRows.value.length >= BATCH_MAX_ROWS) {
+    ElMessage.warning(`单次最多 ${BATCH_MAX_ROWS} 条`);
+    return;
+  }
+  batchRows.value.push(createBatchRow());
+};
+
+const removeBatchRow = (index: number) => {
+  batchRows.value.splice(index, 1);
+};
+
+const validateBatchRows = () => {
+  let firstError = '';
+  batchRows.value = batchRows.value.map((row) => {
+    const errors: string[] = [];
+    for (const key of batchRowFieldKeys.value) {
+      const rule = field(key);
+      const label = SHARE_FORM_FIELD_META[key].label;
+      const raw = (row.values[key] ?? '').trim();
+      if (rule.required && !raw) {
+        errors.push(`缺少${label}`);
+        continue;
+      }
+      if (!raw) continue;
+      const kind = SHARE_FORM_FIELD_META[key].kind;
+      if (kind === 'money' && !Number.isFinite(Number(normalizeNumberText(raw)))) {
+        errors.push(`${label}不是数字`);
+      }
+      if (kind === 'date' && !normalizeDateText(raw)) {
+        errors.push(`${label}格式不正确`);
+      }
+    }
+    const message = errors.join('；');
+    if (message && !firstError) firstError = message;
+    return { ...row, error: message, status: 'pending' as const };
+  });
+  return firstError;
+};
+
+const batchSharedRequiredMissing = () => {
+  for (const key of batchSharedFieldKeys.value) {
+    const rule = field(key);
+    if (!rule.visible || !rule.required) continue;
+    const value = batchSharedValue(key);
+    const missing =
+      value === undefined || value === null || (typeof value === 'string' && !value.trim());
+    if (missing) return requiredFieldLabels[key] ?? '必填项';
+  }
+  return '';
+};
+
+const batchSharedValue = (key: FieldKey) => (form as unknown as Record<string, unknown>)[key];
+
+const setBatchSharedValue = (key: FieldKey, value: unknown) => {
+  (form as unknown as Record<string, unknown>)[key] = value;
+};
+
+const batchSharedFormula = (key: FieldKey) => form.amountFormulas[key] ?? '';
+
+const setBatchSharedFormula = (key: FieldKey, formula: string) => {
+  form.amountFormulas[key] = formula;
+};
+
+const batchSharedKind = (key: FieldKey) => SHARE_FORM_FIELD_META[key].kind;
+
+const batchPastePlaceholder = computed(() => {
+  const columns = batchColumns.value.map((column) => column.label);
+  if (!columns.length) {
+    return '当前方案的字段配置里没有设置为「逐行填写」的字段，请先到后台方案配置中调整。';
+  }
+  const tail = batchRowFieldKeys.value.includes('platformOrderNo')
+    ? '没有表头时按每行一个平台订单号处理。'
+    : '当前方案的平台订单号为公共填写或已隐藏，粘贴时请带表头。';
+  return `在这里粘贴表格数据，每行一条订单。带表头会按“${columns.join(' / ')}”自动分列；${tail}`;
+});
+
+const submitBatch = async () => {
+  if (!batchRows.value.length) {
+    ElMessage.warning('请先粘贴或添加需要报单的订单');
+    return;
+  }
+  const sharedMissing = batchSharedRequiredMissing();
+  if (sharedMissing) {
+    ElMessage.warning(`请先填写${sharedMissing}`);
+    return;
+  }
+  const firstError = validateBatchRows();
+  if (firstError) {
+    ElMessage.warning(firstError);
+    return;
+  }
+
+  batchSubmitting.value = true;
+  try {
+    const items = batchRows.value.map((row) => {
+      // 公共字段整批一份，逐行字段每行一份，最终合并成一条完整的订单数据。
+      const payload: Record<string, unknown> = {};
+      for (const key of batchSharedFieldKeys.value) {
+        const kind = batchSharedKind(key);
+        const value = batchSharedValue(key);
+        if (value === undefined || value === null || value === '') continue;
+        if (kind === 'money') {
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed)) continue;
+          payload[key] = parsed;
+          continue;
+        }
+        payload[key] = value;
+      }
+      for (const key of batchRowFieldKeys.value) {
+        const kind = batchSharedKind(key);
+        const raw = (row.values[key] ?? '').trim();
+        if (!raw) continue;
+        if (kind === 'money') {
+          const parsed = Number(normalizeNumberText(raw));
+          if (!Number.isFinite(parsed)) continue;
+          payload[key] = parsed;
+          continue;
+        }
+        payload[key] = raw;
+      }
+      const formulas = { ...row.formulas };
+      // 公共金额字段的公式对整批生效，逐行公式只影响当前行。
+      for (const key of batchSharedFieldKeys.value) {
+        if (batchSharedKind(key) !== 'money') continue;
+        const formula = batchSharedFormula(key);
+        if (formula) formulas[key] = formula;
+      }
+      if (Object.keys(formulas).length) {
+        payload.amountFormulas = formulas;
+      }
+      return payload;
+    });
+
+    const response = await http.post<{
+      total: number;
+      successCount: number;
+      failureCount: number;
+      results: Array<
+        | { index: number; success: true; id: string; serialNo: number }
+        | { index: number; success: false; message: string }
+      >;
+    }>(`/public/forms/${token.value}/orders/batch`, { items });
+
+    const results = response.data.results ?? [];
+    batchRows.value = batchRows.value.map((row, index) => {
+      const result = results.find((item) => item.index === index);
+      if (!result) return { ...row, error: '未返回处理结果', status: 'failed' as const };
+      if (result.success) {
+        return {
+          ...row,
+          error: '',
+          status: 'success' as const,
+          serialNo: result.serialNo,
+        };
+      }
+      return { ...row, error: result.message, status: 'failed' as const };
+    });
+
+    const { successCount, failureCount } = response.data;
+    if (failureCount === 0) {
+      ElMessage.success(`批量提交成功，共登记 ${successCount} 条`);
+      resetBatchRows();
+    } else {
+      ElMessage.warning(`成功 ${successCount} 条，失败 ${failureCount} 条，失败行已标出原因`);
+    }
+    await load();
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '批量提交失败'));
+  } finally {
+    batchSubmitting.value = false;
+  }
+};
+
 const openPayout = () => {
   Object.assign(payoutForm, {
     type: 'WECHAT',
@@ -515,7 +937,11 @@ onMounted(() => void load());
       <span class="public-header-pill">在线报单</span>
     </header>
 
-    <main v-loading="loading" class="form-card">
+    <main
+      v-loading="loading"
+      class="form-card"
+      :class="{ 'is-batch-mode': submitMode === 'batch' }"
+    >
       <el-result v-if="loadError" icon="error" title="暂时不能填写" :sub-title="loadError"
         ><template #extra
           ><el-button type="primary" @click="load">重新加载</el-button></template
@@ -608,7 +1034,26 @@ onMounted(() => void load());
             <div class="form-description" v-html="data.form.scheme.description" />
           </div>
         </section>
-        <el-form :model="form" label-position="top" class="public-form" @submit.prevent="submit">
+        <section class="submit-mode-switch">
+          <div class="submit-mode-copy">
+            <strong>报单方式</strong>
+            <small>默认单笔；需要一次登记多条时切换到批量报单</small>
+          </div>
+          <el-segmented
+            v-model="submitMode"
+            :options="[
+              { label: '单笔报单', value: 'single' },
+              { label: '批量报单', value: 'batch' },
+            ]"
+          />
+        </section>
+        <el-form
+          v-show="submitMode === 'single'"
+          :model="form"
+          label-position="top"
+          class="public-form"
+          @submit.prevent="submit"
+        >
           <section class="form-section">
             <div class="form-section-heading">
               <span class="form-section-step">01</span>
@@ -627,6 +1072,7 @@ onMounted(() => void load());
                     label="下单人（微信昵称）"
                     :hint="field('wechatNickname').note"
                     :color="field('wechatNickname').noteColor"
+                    :required="field('wechatNickname').required"
                   />
                 </template>
                 <el-input
@@ -645,6 +1091,7 @@ onMounted(() => void load());
                     label="平台"
                     :hint="field('platformId').note"
                     :color="field('platformId').noteColor"
+                    :required="field('platformId').required"
                   />
                 </template>
                 <el-select
@@ -667,6 +1114,7 @@ onMounted(() => void load());
                     label="品类"
                     :hint="field('categoryId').note"
                     :color="field('categoryId').noteColor"
+                    :required="field('categoryId').required"
                   />
                 </template>
                 <el-select
@@ -693,6 +1141,7 @@ onMounted(() => void load());
                     label="商品/方案*数量"
                     :hint="field('productName').note"
                     :color="field('productName').noteColor"
+                    :required="field('productName').required"
                   />
                 </template>
                 <el-input
@@ -714,6 +1163,7 @@ onMounted(() => void load());
                     label="下单日期"
                     :hint="field('orderedAt').note"
                     :color="field('orderedAt').noteColor"
+                    :required="field('orderedAt').required"
                   />
                 </template>
                 <el-date-picker
@@ -732,6 +1182,7 @@ onMounted(() => void load());
                     label="平台订单号"
                     :hint="field('platformOrderNo').note"
                     :color="field('platformOrderNo').noteColor"
+                    :required="field('platformOrderNo').required"
                   />
                 </template>
                 <el-input
@@ -753,6 +1204,7 @@ onMounted(() => void load());
                     label="发货状态"
                     :hint="field('dispatchStatus').note"
                     :color="field('dispatchStatus').noteColor"
+                    :required="field('dispatchStatus').required"
                   />
                 </template>
                 <div
@@ -787,6 +1239,7 @@ onMounted(() => void load());
                     label="平台运单号"
                     :hint="field('inboundTrackingNo').note"
                     :color="field('inboundTrackingNo').noteColor"
+                    :required="field('inboundTrackingNo').required"
                   />
                 </template>
                 <el-input
@@ -806,6 +1259,7 @@ onMounted(() => void load());
                     label="下单地址"
                     :hint="field('purchaseAddress').note"
                     :color="field('purchaseAddress').noteColor"
+                    :required="field('purchaseAddress').required"
                   />
                 </template>
                 <el-input
@@ -824,6 +1278,7 @@ onMounted(() => void load());
                     label="收货佬"
                     :hint="field('receiverName').note"
                     :color="field('receiverName').noteColor"
+                    :required="field('receiverName').required"
                   />
                 </template>
                 <el-input
@@ -854,6 +1309,7 @@ onMounted(() => void load());
                     label="支付方式"
                     :hint="field('fundingType').note"
                     :color="field('fundingType').noteColor"
+                    :required="field('fundingType').required"
                   />
                 </template>
                 <div class="funding-options" role="radiogroup" aria-label="支付方式">
@@ -884,6 +1340,7 @@ onMounted(() => void load());
                     label="下单金额"
                     :hint="field('orderAmount').note"
                     :color="field('orderAmount').noteColor"
+                    :required="field('orderAmount').required"
                   />
                 </template>
                 <MoneyFormulaInput
@@ -905,6 +1362,7 @@ onMounted(() => void load());
                     label="支付优惠"
                     :hint="field('paymentDiscountAmount').note"
                     :color="field('paymentDiscountAmount').noteColor"
+                    :required="field('paymentDiscountAmount').required"
                   />
                 </template>
                 <MoneyFormulaInput
@@ -927,6 +1385,7 @@ onMounted(() => void load());
                     label="扫码返利"
                     :hint="field('rebateScanned').note"
                     :color="field('rebateScanned').noteColor"
+                    :required="field('rebateScanned').required"
                   />
                 </template>
                 <div
@@ -959,7 +1418,7 @@ onMounted(() => void load());
                 </div>
               </el-form-item>
               <el-form-item
-                v-if="field('submitterSettlementAmount').visible"
+                v-if="field('submitterSettlementAmount').visible && !isFreeSettlement"
                 :required="field('submitterSettlementAmount').required"
               >
                 <template #label>
@@ -967,20 +1426,11 @@ onMounted(() => void load());
                     label="结算金额"
                     :hint="field('submitterSettlementAmount').note"
                     :color="field('submitterSettlementAmount').noteColor"
+                    :required="field('submitterSettlementAmount').required"
                   />
                 </template>
-                <MoneyFormulaInput
-                  v-if="fieldConfig?.settlementAmount.mode === 'FREE'"
-                  v-model="form.submitterSettlementAmount"
-                  v-model:formula="form.amountFormulas.submitterSettlementAmount"
-                  :disabled="!canEditField('submitterSettlementAmount')"
-                  :variables="formulaVariables"
-                  :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
-                  variable-key="结算金额"
-                  placeholder="数字或 ={下单金额}+20*{数量}"
-                />
                 <el-radio-group
-                  v-else-if="fieldConfig?.settlementAmount.mode === 'PRESET'"
+                  v-if="fieldConfig?.settlementAmount.mode === 'PRESET'"
                   v-model="form.submitterSettlementAmount"
                   :disabled="!canEditField('submitterSettlementAmount')"
                   class="amount-options"
@@ -1021,6 +1471,7 @@ onMounted(() => void load());
                     label="备注"
                     :hint="field('notes').note"
                     :color="field('notes').noteColor"
+                    :required="field('notes').required"
                   />
                 </template>
                 <el-input
@@ -1052,6 +1503,166 @@ onMounted(() => void load());
             </div>
           </section>
         </el-form>
+
+        <div v-show="submitMode === 'batch'" class="batch-submit-panel public-form">
+          <section class="form-section">
+            <div class="form-section-heading">
+              <span class="form-section-step">01</span>
+              <div>
+                <strong>整批公共信息</strong>
+                <small>这些内容本批次所有订单共用，填写一次即可</small>
+              </div>
+            </div>
+            <div class="form-section-grid">
+              <BatchSharedField
+                v-for="key in batchSharedFieldKeys"
+                :key="key"
+                :kind="batchSharedKind(key)"
+                :label="SHARE_FORM_FIELD_META[key].label"
+                :required="field(key).required"
+                :hint="field(key).note"
+                :note-color="field(key).noteColor"
+                :model-value="batchSharedValue(key)"
+                :formula="batchSharedFormula(key)"
+                :platforms="data.options.platforms"
+                :categories="data.options.categories"
+                :funding-methods="fundingMethodOptions"
+                :dispatch-options="dispatchStatusOptions"
+                :settlement-mode="settlementMode"
+                :settlement-options="fieldConfig?.settlementAmount.options ?? []"
+                :is-settlement="key === 'submitterSettlementAmount'"
+                :variables="formulaVariables"
+                :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                @update:model-value="setBatchSharedValue(key, $event)"
+                @update:formula="setBatchSharedFormula(key, $event)"
+              />
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-heading">
+              <span class="form-section-step is-money">02</span>
+              <div>
+                <strong>粘贴订单数据</strong>
+                <small>从 WPS 或 Excel 复制表格直接粘贴，识别表头后自动分列</small>
+              </div>
+            </div>
+            <el-input
+              v-model="batchPasteText"
+              type="textarea"
+              :rows="6"
+              class="batch-paste-input"
+              :placeholder="batchPastePlaceholder"
+            />
+            <div class="batch-toolbar">
+              <el-button type="primary" plain :loading="batchParsing" @click="parseBatchPaste">
+                解析预览
+              </el-button>
+              <el-button @click="addBatchRow">手动添加一行</el-button>
+              <el-button v-if="batchRows.length" text @click="resetBatchRows"> 清空 </el-button>
+              <span class="batch-toolbar-hint">
+                单次最多 {{ BATCH_MAX_ROWS }} 条，当前 {{ batchRows.length }} 条
+              </span>
+            </div>
+          </section>
+
+          <section v-if="batchRows.length" class="form-section">
+            <div class="form-section-heading">
+              <span class="form-section-step is-submit">03</span>
+              <div>
+                <strong>逐条确认后提交</strong>
+                <small>有问题的行会标红并说明原因，改好后可再次提交</small>
+              </div>
+            </div>
+            <div class="batch-table-wrap">
+              <table class="batch-table" :style="{ minWidth: `${batchTableMinWidth}px` }">
+                <thead>
+                  <tr>
+                    <th class="batch-col-index">#</th>
+                    <th
+                      v-for="column in batchColumns"
+                      :key="column.key"
+                      :style="{ minWidth: `${column.minWidth}px` }"
+                    >
+                      {{ column.label }}
+                      <span v-if="column.required" class="batch-col-required">*</span>
+                    </th>
+                    <th class="batch-col-status">状态</th>
+                    <th class="batch-col-action">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(row, index) in batchRows"
+                    :key="row.key"
+                    :class="{ 'is-error': row.error, 'is-success': row.status === 'success' }"
+                  >
+                    <td class="batch-col-index">{{ index + 1 }}</td>
+                    <td v-for="column in batchColumns" :key="column.key">
+                      <el-input
+                        v-if="column.kind !== 'money'"
+                        v-model="row.values[column.key]"
+                        :disabled="!batchFieldEditable(column.fieldKey) || row.status === 'success'"
+                        size="small"
+                        :placeholder="column.label"
+                        @input="revalidateBatchRow(row)"
+                      />
+                      <el-input
+                        v-else-if="batchAmountInvalid(row, column.key)"
+                        v-model="row.values[column.key]"
+                        :disabled="!batchFieldEditable(column.fieldKey) || row.status === 'success'"
+                        size="small"
+                        :placeholder="column.label"
+                        @input="revalidateBatchRow(row)"
+                      />
+                      <MoneyFormulaInput
+                        v-else
+                        :model-value="batchAmountValue(row.values[column.key])"
+                        :formula="row.formulas[column.key]"
+                        :disabled="!batchFieldEditable(column.fieldKey) || row.status === 'success'"
+                        :variables="batchRowFormulaVariables(row)"
+                        :variable-labels="MONEY_FORMULA_VARIABLE_LABELS"
+                        :variable-key="column.label"
+                        placeholder="数字或公式"
+                        @update:model-value="setBatchAmount(row, column.key, $event)"
+                        @update:formula="setBatchFormula(row, column.key, $event)"
+                        @blur="revalidateBatchRow(row)"
+                      />
+                    </td>
+                    <td class="batch-col-status">
+                      <span v-if="row.status === 'success'" class="batch-status-success">
+                        已登记 #{{ row.serialNo }}
+                      </span>
+                      <span v-else-if="row.error" class="batch-status-error">{{ row.error }}</span>
+                      <span v-else class="batch-status-pending">待提交</span>
+                    </td>
+                    <td class="batch-col-action">
+                      <el-button
+                        link
+                        type="danger"
+                        :disabled="row.status === 'success'"
+                        @click="removeBatchRow(index)"
+                      >
+                        删除
+                      </el-button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="submit-area batch-submit-area">
+              <el-button
+                type="primary"
+                size="large"
+                :loading="batchSubmitting"
+                :disabled="!canSubmitNew"
+                @click="submitBatch"
+              >
+                {{ canSubmitNew ? `批量提交 ${batchRows.length} 条` : '方案已停用，暂不能提交' }}
+              </el-button>
+            </div>
+          </section>
+        </div>
       </template>
     </main>
 
@@ -1270,6 +1881,9 @@ footer {
   width: min(820px, 100%);
   margin-right: auto;
   margin-left: auto;
+}
+.form-card.is-batch-mode {
+  width: min(1280px, 100%);
 }
 .public-header {
   display: flex;
@@ -1740,60 +2354,10 @@ footer {
 .public-form :deep(.el-input-number) {
   width: 100%;
 }
-.funding-options {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 5px;
-  border: 1px solid var(--app-border-soft);
-  border-radius: var(--app-radius-card);
-  background: color-mix(in srgb, var(--app-surface-subtle) 86%, transparent);
-  gap: 5px;
-}
-.scan-choice-options {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 .dispatch-status-options {
   width: 100%;
   margin-bottom: 0;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-.funding-option {
-  min-height: 58px;
-  align-items: center;
-  padding: 8px 10px;
-  border-color: transparent;
-  border-radius: var(--app-radius-card);
-  background: transparent;
-  transition: 0.18s ease;
-}
-.funding-option:hover:not(:disabled) {
-  border-color: var(--app-info-border);
-  background: color-mix(in srgb, var(--app-surface-card) 88%, transparent);
-  transform: translateY(-1px);
-}
-.funding-option.is-selected {
-  border-color: var(--app-info-border);
-  color: var(--app-primary);
-  background: var(--app-surface-card);
-  box-shadow: var(--app-shadow-md);
-}
-.funding-option > span {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-.funding-option strong {
-  color: var(--app-heading);
-  font-size: var(--app-text-md);
-}
-.funding-option small {
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--app-muted);
-  font-size: var(--app-text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .span-two {
   grid-column: 1 / -1;
@@ -1833,6 +2397,139 @@ footer {
 }
 .submit-area :deep(.el-button:last-child) {
   min-width: 160px;
+  border: 0;
+  background: linear-gradient(135deg, var(--app-primary), var(--app-primary));
+  box-shadow: var(--app-shadow-md);
+}
+.submit-mode-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-card);
+  background: color-mix(in srgb, var(--app-surface-card) 84%, transparent);
+  box-shadow: var(--app-shadow-lg);
+  gap: 12px;
+}
+.submit-mode-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.submit-mode-copy strong {
+  color: var(--app-heading);
+  font-size: var(--app-text-md);
+}
+.submit-mode-copy small {
+  margin-top: 2px;
+  color: var(--app-muted);
+  font-size: var(--app-text-sm);
+}
+.submit-mode-switch :deep(.el-segmented) {
+  --el-segmented-item-selected-color: var(--app-primary);
+  --el-segmented-item-selected-bg-color: var(--app-surface-card);
+  flex: 0 0 auto;
+  border-radius: var(--app-radius-control);
+}
+.batch-submit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.batch-submit-panel .form-section {
+  margin-top: 0;
+}
+.batch-paste-input :deep(.el-textarea__inner) {
+  font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--app-text-base);
+  line-height: 1.7;
+}
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  gap: 9px;
+}
+.batch-toolbar-hint {
+  margin-left: auto;
+  color: var(--app-muted);
+  font-size: var(--app-text-sm);
+}
+.batch-table-wrap {
+  overflow-x: auto;
+  padding-bottom: 16px;
+}
+.batch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--app-text-base);
+}
+.batch-table th,
+.batch-table td {
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--app-border-soft);
+  text-align: left;
+  vertical-align: middle;
+}
+.batch-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--app-muted);
+  background: color-mix(in srgb, var(--app-surface-card) 96%, transparent);
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.batch-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--app-primary) 4%, transparent);
+}
+.batch-table tbody tr.is-error td {
+  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
+}
+.batch-table tbody tr.is-success td {
+  background: color-mix(in srgb, var(--app-success) 8%, transparent);
+}
+.batch-col-index {
+  width: 46px;
+  color: var(--app-muted);
+  text-align: center;
+}
+.batch-table td .el-input__wrapper,
+.batch-table td .money-formula-input .el-input__wrapper {
+  padding-right: 6px;
+  padding-left: 6px;
+}
+.batch-table td .el-input__inner {
+  font-size: var(--app-text-base);
+}
+.batch-col-status {
+  width: 170px;
+}
+.batch-col-action {
+  width: 70px;
+}
+.batch-status-success {
+  color: var(--app-success);
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+}
+.batch-status-error {
+  color: var(--app-danger);
+  font-size: var(--app-text-sm);
+}
+.batch-status-pending {
+  color: var(--app-muted);
+  font-size: var(--app-text-sm);
+}
+.batch-submit-area {
+  padding-bottom: 4px;
+}
+.batch-submit-area :deep(.el-button) {
+  min-width: 200px;
   border: 0;
   background: linear-gradient(135deg, var(--app-primary), var(--app-primary));
   box-shadow: var(--app-shadow-md);
@@ -2080,27 +2777,8 @@ footer {
   .form-section-heading {
     align-items: flex-start;
   }
-  .funding-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 3px;
-  }
-  .scan-choice-options {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .dispatch-status-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .funding-option {
-    min-height: 50px;
-    padding: 7px 4px;
-  }
-  .funding-option strong {
-    font-size: var(--app-text-md);
-  }
-  .funding-option small {
-    font-size: var(--app-text-sm);
-    line-height: 1.25;
-    white-space: normal;
   }
   .history-title {
     align-items: flex-start;

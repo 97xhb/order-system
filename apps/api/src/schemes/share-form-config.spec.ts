@@ -59,7 +59,7 @@ describe('share form field config', () => {
     expect(
       normalizeShareFormFieldConfig(DEFAULT_SHARE_FORM_FIELD_CONFIG).fields
         .notes,
-    ).toEqual({ visible: true, editable: true, required: false });
+    ).toMatchObject({ visible: true, editable: true, required: false });
   });
 
   it('rejects invalid per-field hint colors', () => {
@@ -88,7 +88,7 @@ describe('share form field config', () => {
       },
     });
 
-    expect(config.fields.purchaseAddress).toEqual({
+    expect(config.fields.purchaseAddress).toMatchObject({
       visible: true,
       editable: false,
       required: false,
@@ -102,5 +102,63 @@ describe('share form field config', () => {
         },
       }),
     ).toThrow('只读字段 notes 不能设置为必填');
+  });
+
+  it('keeps the configured batch scope and rejects unsupported row fields', () => {
+    const config = normalizeShareFormFieldConfig({
+      ...DEFAULT_SHARE_FORM_FIELD_CONFIG,
+      fields: {
+        ...DEFAULT_SHARE_FORM_FIELD_CONFIG.fields,
+        platformOrderNo: {
+          visible: true,
+          editable: true,
+          required: true,
+          batchScope: 'ROW',
+        },
+        wechatNickname: {
+          visible: true,
+          editable: true,
+          required: true,
+          batchScope: 'SHARED',
+        },
+      },
+    });
+
+    expect(config.fields.platformOrderNo.batchScope).toBe('ROW');
+    expect(config.fields.wechatNickname.batchScope).toBe('SHARED');
+
+    expect(() =>
+      normalizeShareFormFieldConfig({
+        ...DEFAULT_SHARE_FORM_FIELD_CONFIG,
+        fields: {
+          ...DEFAULT_SHARE_FORM_FIELD_CONFIG.fields,
+          wechatNickname: {
+            visible: true,
+            editable: true,
+            required: true,
+            batchScope: 'ROW',
+          },
+        },
+      }),
+    ).toThrow('字段 wechatNickname 不支持逐行填写');
+  });
+
+  it('forces hidden fields back to shared scope and defaults settlement to row in free mode', () => {
+    const config = normalizeShareFormFieldConfig({
+      ...DEFAULT_SHARE_FORM_FIELD_CONFIG,
+      settlementAmount: { mode: 'FREE', options: [] },
+      fields: {
+        ...DEFAULT_SHARE_FORM_FIELD_CONFIG.fields,
+        platformOrderNo: {
+          visible: false,
+          editable: false,
+          required: false,
+          batchScope: 'ROW',
+        },
+      },
+    });
+
+    expect(config.fields.platformOrderNo.batchScope).toBe('SHARED');
+    expect(config.fields.submitterSettlementAmount.batchScope).toBe('ROW');
   });
 });

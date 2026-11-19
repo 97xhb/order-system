@@ -6,6 +6,7 @@ import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getApiErrorMessage } from '../lib/api-error';
 import { http } from '../lib/http';
+import { isRowCapableField } from '../lib/share-form-fields';
 import { resolveThemeColor } from '../lib/theme-color';
 import FieldNoteColorPopover from '../components/FieldNoteColorPopover.vue';
 import RichTextEditor from '../components/RichTextEditor.vue';
@@ -36,6 +37,7 @@ interface FieldConfig {
       visible: boolean;
       editable: boolean;
       required: boolean;
+      batchScope: 'SHARED' | 'ROW';
       note?: string;
       noteColor?: string;
     }
@@ -120,8 +122,15 @@ const fieldModes: Array<{ value: FieldMode; label: string }> = [
   { value: 'READ_ONLY', label: '只读' },
   { value: 'EDITABLE', label: '可填写' },
 ];
-const DEFAULT_FIELD_NOTE_COLOR = 'var(--app-text-subtle)';
+// 提示颜色必须是后端认可的 #RRGGBB 格式，不能用 CSS 变量。
+const DEFAULT_FIELD_NOTE_COLOR = '#667085';
+const isValidNoteColor = (value: unknown): value is string =>
+  typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 const fixedRequiredFields = new Set<FieldKey>(['wechatNickname', 'platformId']);
+const fieldBatchScopeOptions: Array<{ value: 'SHARED' | 'ROW'; label: string }> = [
+  { value: 'SHARED', label: '整批统一' },
+  { value: 'ROW', label: '逐行填写' },
+];
 
 const fieldMode = (key: FieldKey): FieldMode => {
   const rule = shareForm.fieldConfig.fields[key];
@@ -156,25 +165,116 @@ const toggleFieldRequired = (key: FieldKey) => {
   rule.required = !rule.required;
 };
 
+const setFieldBatchScope = (key: FieldKey, scope: 'SHARED' | 'ROW') => {
+  const rule = shareForm.fieldConfig.fields[key];
+  if (scope === 'ROW' && !isRowCapableField(key)) return;
+  rule.batchScope = scope;
+};
+
+const fieldBatchScopeText = (key: FieldKey) => {
+  if (!isRowCapableField(key)) return '整批统一填写';
+  return shareForm.fieldConfig.fields[key].batchScope === 'ROW' ? '逐行填写' : '整批统一填写';
+};
+
 const defaultFieldConfig: FieldConfig = {
   schemaVersion: 1,
   fields: {
-    wechatNickname: { visible: true, editable: true, required: true },
-    platformId: { visible: true, editable: true, required: true },
-    categoryId: { visible: true, editable: true, required: false },
-    productName: { visible: true, editable: true, required: false },
-    orderedAt: { visible: true, editable: true, required: true },
-    platformOrderNo: { visible: true, editable: true, required: true },
-    dispatchStatus: { visible: false, editable: false, required: false },
-    inboundTrackingNo: { visible: true, editable: true, required: false },
-    purchaseAddress: { visible: true, editable: true, required: false },
-    receiverName: { visible: false, editable: false, required: false },
-    fundingType: { visible: false, editable: false, required: false },
-    orderAmount: { visible: true, editable: true, required: true },
-    paymentDiscountAmount: { visible: false, editable: false, required: false },
-    rebateScanned: { visible: true, editable: true, required: false },
-    submitterSettlementAmount: { visible: true, editable: true, required: false },
-    notes: { visible: true, editable: true, required: false },
+    wechatNickname: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'SHARED',
+    },
+    platformId: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'SHARED',
+    },
+    categoryId: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    productName: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    orderedAt: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'SHARED',
+    },
+    platformOrderNo: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'ROW',
+    },
+    dispatchStatus: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    inboundTrackingNo: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'ROW',
+    },
+    purchaseAddress: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'ROW',
+    },
+    receiverName: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    fundingType: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    orderAmount: {
+      visible: true,
+      editable: true,
+      required: true,
+      batchScope: 'ROW',
+    },
+    paymentDiscountAmount: {
+      visible: false,
+      editable: false,
+      required: false,
+      batchScope: 'ROW',
+    },
+    rebateScanned: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'SHARED',
+    },
+    submitterSettlementAmount: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'ROW',
+    },
+    notes: {
+      visible: true,
+      editable: true,
+      required: false,
+      batchScope: 'ROW',
+    },
   },
   settlementAmount: { mode: 'FREE', options: [] },
 };
@@ -190,11 +290,16 @@ const normalizeFieldConfig = (value: FieldConfig | null | undefined): FieldConfi
         visible: rule.visible,
         editable: typeof rule.editable === 'boolean' ? rule.editable : rule.visible,
         required: rule.required,
+        batchScope:
+          rule.batchScope === 'ROW' && isRowCapableField(key)
+            ? 'ROW'
+            : rule.batchScope === 'SHARED'
+              ? 'SHARED'
+              : normalized.fields[key].batchScope,
         note: typeof rule.note === 'string' ? rule.note : '',
-        noteColor:
-          typeof rule.noteColor === 'string' && rule.noteColor
-            ? rule.noteColor
-            : DEFAULT_FIELD_NOTE_COLOR,
+        noteColor: isValidNoteColor(rule.noteColor)
+          ? rule.noteColor.toUpperCase()
+          : DEFAULT_FIELD_NOTE_COLOR,
       };
     }
   });
@@ -206,6 +311,10 @@ const normalizeFieldConfig = (value: FieldConfig | null | undefined): FieldConfi
         ? [...source.settlementAmount.options]
         : [],
     };
+  }
+  // 预设/固定金额模式下整批只有一个结算金额，不允许逐行填写。
+  if (normalized.settlementAmount.mode !== 'FREE') {
+    normalized.fields.submitterSettlementAmount.batchScope = 'SHARED';
   }
   return normalized;
 };
@@ -422,6 +531,12 @@ const saveShare = async () => {
       rule.required = false;
     } else if (!rule.editable) {
       rule.required = false;
+    }
+    // 提示颜色只接受 #RRGGBB，非法值统一回落到默认色，避免保存被后端拒绝。
+    if (!isValidNoteColor(rule.noteColor)) {
+      rule.noteColor = DEFAULT_FIELD_NOTE_COLOR;
+    } else {
+      rule.noteColor = rule.noteColor.toUpperCase();
     }
   });
   const mode = shareForm.fieldConfig.settlementAmount.mode;
@@ -995,6 +1110,34 @@ onBeforeUnmount(() => {
             >
               {{ shareForm.fieldConfig.fields[key].required ? '必填' : '选填' }}
             </button>
+            <div
+              v-if="isRowCapableField(key)"
+              class="field-batch-scope-options"
+              role="radiogroup"
+              :aria-label="`${label}批量填写范围`"
+            >
+              <button
+                v-for="option in fieldBatchScopeOptions"
+                :key="option.value"
+                type="button"
+                class="field-batch-scope-choice"
+                :class="{
+                  'is-selected': shareForm.fieldConfig.fields[key].batchScope === option.value,
+                }"
+                :disabled="
+                  !shareForm.fieldConfig.fields[key].visible ||
+                  !shareForm.fieldConfig.fields[key].editable
+                "
+                :aria-checked="shareForm.fieldConfig.fields[key].batchScope === option.value"
+                role="radio"
+                @click="setFieldBatchScope(key, option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <div v-else class="field-batch-scope-hint">
+              批量报单时{{ fieldBatchScopeText(key) }}
+            </div>
             <div v-if="shareForm.fieldConfig.fields[key].visible" class="field-note-editor">
               <span>项下提示</span>
               <el-input
@@ -1455,6 +1598,46 @@ onBeforeUnmount(() => {
   border-radius: var(--app-radius-card);
   background: var(--app-hover);
   gap: 3px;
+}
+
+.field-batch-scope-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 6px;
+  padding: 3px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-card);
+  background: var(--app-hover);
+  gap: 3px;
+}
+.field-batch-scope-choice {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: calc(var(--app-radius-card) - 3px);
+  color: var(--app-muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--app-text-micro);
+  padding: 4px 6px;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+.field-batch-scope-choice.is-selected {
+  border-color: var(--app-primary-soft);
+  color: var(--app-primary);
+  background: var(--app-surface);
+  font-weight: 600;
+}
+.field-batch-scope-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.field-batch-scope-hint {
+  margin-top: 6px;
+  color: var(--app-text-subtle);
+  font-size: var(--app-text-micro);
 }
 .field-mode-choice,
 .field-required-toggle {

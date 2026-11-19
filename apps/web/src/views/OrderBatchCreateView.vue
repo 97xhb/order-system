@@ -3,6 +3,7 @@ import { Check, Delete, DocumentCopy, Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { getApiErrorMessage } from '../lib/api-error';
+import { normalizeHeaderLabel, parseClipboardTable } from '../lib/clipboard-table';
 import { http } from '../lib/http';
 import {
   extractProductQuantity,
@@ -471,9 +472,6 @@ const dispatchStatusByText = (value: string): DispatchStatus => {
   return 'NOT_SHIPPED';
 };
 
-const normalizeHeaderLabel = (value: string) =>
-  value.trim().toLocaleLowerCase().replace(/[＊*]/g, '').replace(/\s+/g, '');
-
 const batchHeaderAliases: Record<BatchColumnKey, string[]> = {
   orderedAt: ['下单日期', '下单时间', '日期'],
   platform: ['平台', '下单平台'],
@@ -527,50 +525,6 @@ const looksLikeHeader = (cells: string[]) => {
   return (
     recognized.length >= 2 || recognized.some((cell) => normalizeHeaderLabel(cell) === '下单日期')
   );
-};
-
-const parseClipboardTable = (value: string) => {
-  const result: string[][] = [];
-  let row: string[] = [];
-  let cell = '';
-  let quoted = false;
-
-  const finishCell = () => {
-    row.push(cell);
-    cell = '';
-  };
-  const finishRow = () => {
-    finishCell();
-    if (row.some((item) => item.trim())) result.push(row);
-    row = [];
-  };
-
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (character === '"') {
-      if (quoted && value[index + 1] === '"') {
-        cell += '"';
-        index += 1;
-      } else if (quoted || !cell) {
-        quoted = !quoted;
-      } else {
-        cell += character;
-      }
-      continue;
-    }
-    if (!quoted && character === '\t') {
-      finishCell();
-      continue;
-    }
-    if (!quoted && (character === '\n' || character === '\r')) {
-      if (character === '\r' && value[index + 1] === '\n') index += 1;
-      finishRow();
-      continue;
-    }
-    cell += character;
-  }
-  if (cell || row.length) finishRow();
-  return result;
 };
 
 const scanAmountFromText = (value: string) => {

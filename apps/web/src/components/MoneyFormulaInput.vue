@@ -30,6 +30,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:modelValue': [value: number | null];
   'update:formula': [value: string];
+  blur: [];
 }>();
 
 const text = ref('');
@@ -128,6 +129,7 @@ const commit = () => {
   invalid.value = false;
   emit('update:modelValue', value);
   emit('update:formula', formula);
+  emit('blur');
 };
 
 const focus = () => {

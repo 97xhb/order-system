@@ -1186,68 +1186,6 @@ onMounted(async () => {
   width: 100%;
   gap: 10px;
 }
-.funding-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 4px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-card);
-  background: var(--app-hover);
-  gap: 4px;
-}
-.funding-option {
-  appearance: none;
-  display: flex;
-  min-width: 0;
-  min-height: 56px;
-  align-items: center;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-card);
-  color: var(--app-text);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  gap: 8px;
-  transition:
-    color 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
-}
-.funding-option:hover {
-  border-color: color-mix(in srgb, var(--app-primary) 24%, transparent);
-  background: var(--app-control);
-  transform: translateY(-1px);
-}
-.funding-option.is-selected {
-  border-color: color-mix(in srgb, var(--app-primary) 42%, transparent);
-  color: var(--app-primary);
-  background: var(--app-card-solid);
-  box-shadow: var(--app-shadow-md);
-}
-.funding-option > span:last-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-.funding-option strong {
-  overflow: hidden;
-  font-size: var(--app-text-base);
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.funding-option small {
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--app-muted);
-  font-size: var(--app-text-micro);
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .funding-other-input {
   max-width: 430px;
 }
